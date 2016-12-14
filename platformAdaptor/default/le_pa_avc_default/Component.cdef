@@ -1,0 +1,17 @@
+requires:
+{
+    api:
+    {
+        airVantage/le_avc.api  [types-only]
+    }
+}
+
+sources:
+{
+    pa_avc_default.c
+}
+
+cflags:
+{
+    -I../../inc
+}

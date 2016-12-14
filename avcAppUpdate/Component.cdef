@@ -1,0 +1,37 @@
+requires:
+{
+    api:
+    {
+        airVantage/le_avc.api [types-only]
+        le_update.api
+        le_instStat.api
+        le_appRemove.api
+        supervisor/le_sup_ctrl.api
+        supervisor/le_appInfo.api
+
+        le_cfg.api
+    }
+
+    component:
+    {
+        ../avcDaemon
+        $LEGATO_ROOT/framework/c/src/appCfg
+        $LEGATO_AVC_PA
+    }
+}
+
+cflags:
+{
+    -std=c99
+    -I../avcDaemon
+    -I$CURDIR/../platformAdaptor/inc
+    -I${LEGATO_ROOT}/framework/c/src    // TODO: Remove this encapsulation breakage.
+    -I${LEGATO_ROOT}/framework/c/src/appCfg    // TODO: Remove this encapsulation breakage.
+}
+
+sources:
+{
+    avcAppUpdate.c
+    avcFrameworkUpdate.c
+    avcUpdateShared.c
+}
