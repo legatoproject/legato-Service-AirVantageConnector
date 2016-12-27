@@ -16,7 +16,7 @@ $(TARGETS): ${TINYDTLS_H_GENERATED} ${DTLS_CONFIG_H_GENERATED}
 
 ${DTLS_CONFIG_H_GENERATED}: ${TINYDTLS_H_GENERATED}
 	cd ${TINYDTLS_DIR};    \
-	./configure; \
+	ac_cv_func_malloc_0_nonnull=yes ./configure --host="$(shell uname -m)-linux"; \
 	cd -;
 
 ${TINYDTLS_H_GENERATED}:
