@@ -1372,7 +1372,7 @@ static void StartApp
     }
 
     LE_DEBUG("Send start request.");
-    le_sup_ctrl_StartApp(appName);
+    le_appCtrl_Start(appName);
 }
 
 
@@ -1399,7 +1399,7 @@ static void StopApp
     }
 
     LE_DEBUG("Send stop request.");
-    le_sup_ctrl_StopApp(appName);
+    le_appCtrl_Stop(appName);
 }
 
 

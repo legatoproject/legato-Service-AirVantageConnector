@@ -107,7 +107,7 @@ requires:
         modemServices/le_rtc.api
         modemServices/le_sim.api
         positioning/le_pos.api
-        supervisor/le_appInfo.api
+        le_appInfo.api
     }
 
     component:

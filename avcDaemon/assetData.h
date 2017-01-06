@@ -133,7 +133,7 @@ typedef void (*assetData_AssetActionHandlerFunc_t)
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED le_result_t FormatString
+le_result_t FormatString
 (
     char* strBufPtr,
     size_t strBufSize,
@@ -895,7 +895,7 @@ le_result_t assetData_WriteFieldListToTLV
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED le_result_t assetData_WriteObjectToTLV
+le_result_t assetData_WriteObjectToTLV
 (
     assetData_AssetDataRef_t assetRef,          ///< [IN] Asset to use
     int fieldId,                                ///< [IN] Field to write, or -1 for all fields
@@ -915,7 +915,7 @@ LE_SHARED le_result_t assetData_WriteObjectToTLV
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED le_result_t assetData_ReadFieldListFromTLV
+le_result_t assetData_ReadFieldListFromTLV
 (
     uint8_t* bufPtr,                            ///< [IN] Buffer for reading the TLV list
     size_t bufNumBytes,                         ///< [IN] # bytes in the buffer
@@ -954,7 +954,7 @@ LE_SHARED le_result_t assetData_GetAssetList
  *      - LE_NOT_FOUND if the object instance is not available
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED le_result_t assetData_SetObserve
+le_result_t assetData_SetObserve
 (
     assetData_InstanceDataRef_t instanceRef,    ///< [IN] Asset instance to use
     bool isObserve,                             ///< [IN] Start or stop observing?
@@ -972,7 +972,7 @@ LE_SHARED le_result_t assetData_SetObserve
  *      - LE_FAULT on error
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED le_result_t assetData_SetObserveAllInstances
+le_result_t assetData_SetObserveAllInstances
 (
     assetData_AssetDataRef_t assetRef,          ///< [IN] Asset to use
     bool isObserve,                             ///< [IN] true = Observe; false = Cancel Observe
@@ -989,7 +989,7 @@ LE_SHARED le_result_t assetData_SetObserveAllInstances
  *      - false if not able to read the flags or if the flags are not set
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED bool assetData_IsObject9Observed
+bool assetData_IsObject9Observed
 (
     assetData_InstanceDataRef_t obj9InstRef
 );
@@ -1000,7 +1000,7 @@ LE_SHARED bool assetData_IsObject9Observed
  * Cancels observe on entire asset map.
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED void assetData_CancelAllObserve
+void assetData_CancelAllObserve
 (
     void
 );
