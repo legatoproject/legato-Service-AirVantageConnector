@@ -668,11 +668,11 @@ LE_SHARED le_result_t pa_avc_GetSfsSizeForAvms
  * This function erases all DM credentials from NV storage
  *
  * @return
- *      - true if the treament succeeds
- *      - false if the treatment fails
+ *      - LE_OK if the treament succeeds
+ *      - LE_FAULT if the treatment fails
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED bool pa_avc_CredentialDmErase
+LE_SHARED le_result_t pa_avc_CredentialDmErase
 (
     void
 );
@@ -682,11 +682,11 @@ LE_SHARED bool pa_avc_CredentialDmErase
  * This function is used to retreive a credential length
  *
  * @return
- *      - true if the treament succeeds
- *      - false if the treatment fails
+ *      - LE_OK if the treament succeeds
+ *      - LE_FAULT if the treatment fails
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED bool pa_avc_GetCredentialLength
+LE_SHARED le_result_t pa_avc_GetCredentialLength
 (
     uint8_t credId,                   /// [IN] Credential Id
     size_t *lengthPtr                 /// [INOUT] Credential length
@@ -697,11 +697,11 @@ LE_SHARED bool pa_avc_GetCredentialLength
  * Function to read one LWM2M credential in platform storage
  *
  * @return
- *      - true if the treament succeeds
- *      - false if the treatment fails
+ *      - LE_OK if the treament succeeds
+ *      - LE_FAULT if the treatment fails
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED bool pa_avc_GetCredential
+LE_SHARED le_result_t pa_avc_GetCredential
 (
     uint8_t credId,                     /// [IN] Credential Id
     char *dataPtr,                      /// [INOUT] buffer to retrieve the credential
@@ -713,11 +713,11 @@ LE_SHARED bool pa_avc_GetCredential
  * Function to write one LWM2M credential in platform storage
  *
  * @return
- *      - true if the treament succeeds
- *      - false if the treatment fails
+ *      - LE_OK if the treament succeeds
+ *      - LE_FAULT if the treatment fails
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED bool pa_avc_SetCredential
+LE_SHARED le_result_t pa_avc_SetCredential
 (
     uint8_t credId,                     /// [IN] Credential Id
     char *dataPtr,                       /// [IN] credential data to be written

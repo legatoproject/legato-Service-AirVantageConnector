@@ -9,10 +9,8 @@
 
 #include "legato.h"
 #include "interfaces.h"
-#include "internals.h"
 #include "lwm2mcorePortSecurity.h"
 #include "pa_avc.h"
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -52,19 +50,18 @@ lwm2mcore_sid_t os_portSecurityGetCredential
     }
     else
     {
-        bool paResult = false;
-        paResult = pa_avc_GetCredential (credId, bufferPtr, lenPtr);
-        if (paResult == true)
+        le_result_t paResult = pa_avc_GetCredential(credId, bufferPtr, lenPtr);
+        if (LE_OK == paResult)
         {
             result = LWM2MCORE_ERR_COMPLETED_OK;
-            LE_INFO ("os_portSecurityGetCredential bufferPtr %d lenPtr %d", bufferPtr, *lenPtr);
+            LE_INFO("os_portSecurityGetCredential bufferPtr %d lenPtr %d", bufferPtr, *lenPtr);
         }
         else
         {
             result = LWM2MCORE_ERR_GENERAL_ERROR;
         }
     }
-    LE_INFO ("os_portSecurityGetCredential credId %d result %d", credId, result);
+    LE_INFO("os_portSecurityGetCredential credId %d result %d", credId, result);
     return result;
 }
 
@@ -99,9 +96,8 @@ lwm2mcore_sid_t os_portSecuritySetCredential
     }
     else
     {
-        bool paResult = false;
-        paResult = pa_avc_SetCredential (credId, bufferPtr, len);
-        if (paResult == true)
+        le_result_t paResult = pa_avc_SetCredential(credId, bufferPtr, len);
+        if (LE_OK == paResult)
         {
             result = LWM2MCORE_ERR_COMPLETED_OK;
         }
@@ -130,17 +126,17 @@ static bool CredentialCheckPresence
 )
 {
     bool result = false;
-    bool paResult = false;
+    le_result_t paResult;
     size_t size = 0;
 
-    paResult = pa_avc_GetCredentialLength ((uint8_t)credId, &size);
+    paResult = pa_avc_GetCredentialLength((uint8_t)credId, &size);
 
-    if ((paResult == true) && size)
+    if ((LE_OK == paResult) && size)
     {
         result = true;
     }
 
-    LOG_ARG ("Credential presence: credId %d result %d", credId, result);
+    LE_INFO("Credential presence: credId %d result %d", credId, result);
     return result;
 }
 
@@ -165,13 +161,13 @@ bool os_portSecurityCheckDmCredentialsPresence
     /* Check if credentials linked to DM server are present:
      * PSK Id, PSK secret, server URL
      */
-    if (CredentialCheckPresence (LWM2MCORE_CREDENTIAL_DM_PUBLIC_KEY)
-     && CredentialCheckPresence (LWM2MCORE_CREDENTIAL_DM_SECRET_KEY)
-     && CredentialCheckPresence (LWM2MCORE_CREDENTIAL_DM_ADDRESS))
+    if (CredentialCheckPresence(LWM2MCORE_CREDENTIAL_DM_PUBLIC_KEY)
+     && CredentialCheckPresence(LWM2MCORE_CREDENTIAL_DM_SECRET_KEY)
+     && CredentialCheckPresence(LWM2MCORE_CREDENTIAL_DM_ADDRESS))
     {
         result = true;
     }
-    LOG_ARG ("os_portSecurityDmServerPresence result %d", result);
+    LE_INFO("os_portSecurityDmServerPresence result %d", result);
     return result;
 }
 
