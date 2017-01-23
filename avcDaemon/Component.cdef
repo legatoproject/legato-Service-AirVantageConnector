@@ -18,6 +18,7 @@ sources:
     ../avcClient/avc_client.c
     ../avcClient/avc_portSecurity.c
     ../avcClient/avc_portDevice.c
+    ../avcClient/os_portUpdate.c
 
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/dtlsconnection.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/lwm2mcoreSession.c
