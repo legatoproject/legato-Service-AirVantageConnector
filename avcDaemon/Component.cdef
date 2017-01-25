@@ -1,4 +1,3 @@
-
 provides:
 {
     api:
@@ -19,6 +18,8 @@ sources:
     ../avcClient/osPortSecurity.c
     ../avcClient/osPortDevice.c
     ../avcClient/osPortUpdate.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloaderCallbacks.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloader.c
 
     // LWM2MCore
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/dtlsConnection.c
@@ -26,6 +27,8 @@ sources:
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/objects.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/objectsTable.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/handlers.c
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader/lwm2mcorePackageDownloader.c
+
 
     // LWM2MCore: Adaptation layer
     ../avcClient/os/legato/osDebug.c
@@ -75,11 +78,12 @@ cflags:
     -I$CURDIR/../avcDaemon
     -I$CURDIR/../avcAppUpdate
     -I$CURDIR/../avcClient
-    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/inc
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/os
-    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/er-coap-13
@@ -96,6 +100,12 @@ cflags:
     -DWITH_SHA256
 }
 
+ldflags:
+{
+    -lcurl
+    -lz
+}
+
 requires:
 {
     api:
@@ -107,6 +117,8 @@ requires:
         modemServices/le_sim.api
         positioning/le_pos.api
         le_appInfo.api
+        le_fwupdate.api
+        le_update.api
     }
 
     component:

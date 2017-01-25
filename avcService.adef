@@ -26,6 +26,7 @@ processes:
     }
 
     faultAction: restart
+    maxFileBytes: 71680K
 }
 
 extern:
@@ -57,4 +58,6 @@ bindings:
     avcDaemon.avcDaemon.le_sim -> <root>.le_sim
     avcDaemon.avcDaemon.le_pos -> <root>.le_pos
     avcDaemon.avcDaemon.le_rtc -> <root>.le_rtc
+    avcDaemon.avcDaemon.le_fwupdate -> <root>.le_fwupdate
+    avcDaemon.avcDaemon.le_update -> <root>.le_update
 }
