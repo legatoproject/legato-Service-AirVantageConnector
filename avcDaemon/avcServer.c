@@ -313,7 +313,7 @@ static void StopUninstallDeferTimer
  * Handler to receive update status notifications from PA
  */
 //--------------------------------------------------------------------------------------------------
-static void UpdateHandler
+void avcServer_UpdateHandler
 (
     le_avc_Status_t updateStatus,
     le_avc_UpdateType_t updateType,
@@ -893,7 +893,7 @@ le_avc_StatusEventHandlerRef_t le_avc_AddStatusEventHandler
         // specified handler.  If there is no installed control app at the time this daemon starts,
         // then this registration happens in the COMPONENT_INIT. If a control app is later installed,
         // and registers a handler, there is no harm with re-registering with the PA.
-        pa_avc_SetAVMSMessageHandler(UpdateHandler);
+        pa_avc_SetAVMSMessageHandler(avcServer_UpdateHandler);
 
         // We only check at startup if the control app is installed, so this flag could be false
         // if the control app is installed later.  Obviously control app is installed now, so set
@@ -1780,7 +1780,7 @@ COMPONENT_INIT
     // app, the registration with the PA will happen when the control app registers a handler.
     if ( ! IsControlAppInstalled )
     {
-        pa_avc_SetAVMSMessageHandler(UpdateHandler);
+        pa_avc_SetAVMSMessageHandler(avcServer_UpdateHandler);
     }
 }
 

@@ -138,70 +138,153 @@ static void ConnectionStateHandler
 //--------------------------------------------------------------------------------------------------
 static int EventHandler
 (
-    lwm2mcore_status_t eventStatus              ///< [IN] event status
+    lwm2mcore_Status_t status              ///< [IN] event status
 )
 {
-    int result = -1;
+    int result = 0;
 
-    switch (eventStatus.event)
+    switch (status.event)
     {
-        case LWM2MCORE_EVENT_INITIALIZED:
-        {
-            LE_INFO ("LWM2MCORE_EVENT_INITIALIZED");
-        }
-        break;
-
-        case LWM2MCORE_EVENT_AUTHENTICATION_STARTED:
-        {
-        }
-        break;
-
-        case LWM2MCORE_EVENT_AUTHENTICATION_FAILED:
-        {
-        }
-        break;
-
         case LWM2MCORE_EVENT_SESSION_STARTED:
-        {
-        }
+            LE_DEBUG("Session start");
+            avcServer_UpdateHandler(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
+                                    0, 0, LE_AVC_ERR_NONE);
         break;
 
         case LWM2MCORE_EVENT_SESSION_FAILED:
         {
-            /* TODO: check if current session is DM one */
             bool dmSession = false;
-            if (lwm2mcore_connectionGetType (context, &dmSession) && dmSession)
+            LE_ERROR("Session failure");
+            /* Check if the failed connection was on DM server
+             * In this case, delete stored DM credentials in order to force a connection to the
+             * bootstrap server
+             */
+            if (lwm2mcore_connectionGetType(context, &dmSession) && dmSession)
             {
                 /* Erase DM credentials to force a bootstrap session */
                 pa_avc_CredentialDmErase();
             }
+            avcServer_UpdateHandler(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
+                                    0, 0, LE_AVC_ERR_NONE);
         }
         break;
 
         case LWM2MCORE_EVENT_SESSION_FINISHED:
-        {
-        }
-        break;
+            LE_DEBUG("Session finished");
+            avcServer_UpdateHandler(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
+                                    0, 0, LE_AVC_ERR_NONE);
+            break;
 
         case LWM2MCORE_EVENT_LWM2M_SESSION_TYPE_START:
-        {
-            LE_INFO ("LWM2MCORE_EVENT_LWM2M_SESSION_TYPE_START");
-            if (eventStatus.u.sessionType == LWM2MCORE_SESSION_BOOTSTRAP)
+            if (status.u.session.type == LWM2MCORE_SESSION_BOOTSTRAP)
             {
-                LE_INFO ("BOOTSTRAP");
+                LE_DEBUG("Connected to bootstrap");
             }
             else
             {
-                LE_INFO ("DEVICE MANAGEMENT");
+                LE_DEBUG("Connected to DM");
             }
-        }
-        break;
+            break;
+
+        case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_DETAILS:
+            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_PENDING, LE_AVC_FIRMWARE_UPDATE,
+                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                        status.u.pkgStatus.errorCode);
+            }
+            else
+            {
+                LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
+            }
+            break;
+
+        case LWM2MCORE_EVENT_DOWNLOAD_PROGRESS:
+            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
+                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                        status.u.pkgStatus.errorCode);
+            }
+            else
+            {
+                LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
+            }
+            break;
+
+        case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FINISHED:
+            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
+                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                        status.u.pkgStatus.errorCode);
+            }
+            else
+            {
+                LE_ERROR("Not yet supported package download type %d",
+                         status.u.pkgStatus.pkgType);
+            }
+            break;
+
+        case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FAILED:
+            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_FAILED, LE_AVC_FIRMWARE_UPDATE,
+                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                        status.u.pkgStatus.errorCode);
+            }
+            else
+            {
+                LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
+            }
+            break;
+
+        case LWM2MCORE_EVENT_UPDATE_STARTED:
+            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
+                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                        status.u.pkgStatus.errorCode);
+            }
+            else
+            {
+                LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
+            }
+            break;
+
+        case LWM2MCORE_EVENT_UPDATE_FINISHED:
+            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
+                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                        status.u.pkgStatus.errorCode);
+            }
+            else
+            {
+                LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
+            }
+            break;
+
+        case LWM2MCORE_EVENT_UPDATE_FAILED:
+            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateHandler(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
+                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                        status.u.pkgStatus.errorCode);
+            }
+            else
+            {
+                LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
+            }
+            break;
 
         default:
-        {
-            LE_ERROR ("bad event %d", eventStatus.event);
-        }
-        break;
+            if (LWM2MCORE_EVENT_LAST <= status.event)
+            {
+                LE_ERROR("unsupported event %d", status.event);
+                result = -1;
+            }
+            break;
     }
 
     return result;
