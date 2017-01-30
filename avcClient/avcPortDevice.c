@@ -1,9 +1,9 @@
 /**
- * @file avc_portDevice.c
+ * @file avcPortDevice.c
  *
  * Porting layer for device parameters
  *
- * Copyright (C) Sierra Wireless Inc. Use of this work is subject to license.
+ * Copyright (C) Sierra Wireless Inc.
  *
  */
 
@@ -15,6 +15,13 @@
 #include "../avcDaemon/assetData.h"
 #include "../avcAppUpdate/avcUpdateShared.h"
 #include <sys/utsname.h>
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Define for LK version length
+ */
+//--------------------------------------------------------------------------------------------------
+#define LK_VERSION_LENGTH 10
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -44,7 +51,7 @@ lwm2mcore_sid_t os_portDeviceManufacturer
                                             ///< returned data
 )
 {
-    lwm2mcore_sid_t result = LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+    lwm2mcore_sid_t result;
 
     if ((bufferPtr == NULL) || (lenPtr == NULL))
     {
@@ -56,32 +63,21 @@ lwm2mcore_sid_t os_portDeviceManufacturer
 
         switch (leresult)
         {
+            case LE_OK:
+                result = LWM2MCORE_ERR_COMPLETED_OK;
+                break;
+
             case LE_OVERFLOW:
-            {
                 result = LWM2MCORE_ERR_OVERFLOW;
-            }
-            break;
+                break;
 
             case LE_FAULT:
-            {
-                result = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            break;
-
-            case LE_OK:
-            {
-                result = LWM2MCORE_ERR_COMPLETED_OK;
-            }
-            break;
-
             default:
-            {
                 result = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            break;
+                break;
         }
     }
-    LE_INFO ("os_portDeviceManufacturer result %d", result);
+    LE_INFO("os_portDeviceManufacturer result %d", result);
     return result;
 }
 
@@ -107,7 +103,7 @@ lwm2mcore_sid_t os_portDeviceModelNumber
                                             ///< returned data
 )
 {
-    lwm2mcore_sid_t result = LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+    lwm2mcore_sid_t result;
 
     if ((bufferPtr == NULL) || (lenPtr == NULL))
     {
@@ -120,28 +116,17 @@ lwm2mcore_sid_t os_portDeviceModelNumber
         switch (leresult)
         {
             case LE_OVERFLOW:
-            {
                 result = LWM2MCORE_ERR_OVERFLOW;
-            }
-            break;
-
-            case LE_FAULT:
-            {
-                result = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            break;
+                break;
 
             case LE_OK:
-            {
                 result = LWM2MCORE_ERR_COMPLETED_OK;
-            }
-            break;
+                break;
 
+            case LE_FAULT:
             default:
-            {
                 result = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            break;
+                break;
         }
     }
     return result;
@@ -169,7 +154,7 @@ lwm2mcore_sid_t os_portDeviceSerialNumber
                                             ///< returned data
 )
 {
-    lwm2mcore_sid_t result = LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+    lwm2mcore_sid_t result;
 
     if ((bufferPtr == NULL) || (lenPtr == NULL))
     {
@@ -183,28 +168,17 @@ lwm2mcore_sid_t os_portDeviceSerialNumber
         switch (leresult)
         {
             case LE_OVERFLOW:
-            {
                 result = LWM2MCORE_ERR_OVERFLOW;
-            }
-            break;
-
-            case LE_FAULT:
-            {
-                result = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            break;
+                break;
 
             case LE_OK:
-            {
                 result = LWM2MCORE_ERR_COMPLETED_OK;
-            }
-            break;
+                break;
 
+            case LE_FAULT:
             default:
-            {
                 result = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            break;
+                break;
         }
     }
     return result;
@@ -226,49 +200,49 @@ lwm2mcore_sid_t os_portDeviceSerialNumber
 //--------------------------------------------------------------------------------------------------
 static void GetLegatoVersion
 (
-    char *versionBuffer         ///< [INOUT] Buffer to hold the string.
+    char* versionBufferPtr          ///< [INOUT] Buffer to hold the string.
 )
 {
-    FILE* versionFile = NULL;
-    LE_INFO ("Read the Legato version string.");
+    FILE* versionFilePtr = NULL;
+    LE_INFO("Read the Legato version string.");
 
     do
     {
-        versionFile = fopen(LEGATO_VERSION_FILE, "r");
+        versionFilePtr = fopen(LEGATO_VERSION_FILE, "r");
     }
-    while (   (versionFile != NULL)
-           && (errno == EINTR));
+    while (   (NULL != versionFilePtr)
+           && (EINTR == errno));
 
-    if (versionFile == NULL)
+    if (versionFilePtr == NULL)
     {
-        LE_INFO ("Could not open Legato version file.");
+        LE_INFO("Could not open Legato version file.");
         return;
     }
 
-    if (fgets(versionBuffer, MAX_VERSION_STR_BYTES, versionFile) != NULL)
+    if (fgets(versionBufferPtr, MAX_VERSION_STR_BYTES, versionFilePtr) != NULL)
     {
-        char* newLine = strchr(versionBuffer, '\n');
+        char* newLine = strchr(versionBufferPtr, '\n');
 
         if (newLine != NULL)
         {
-            *newLine = 0;
+            *newLine = '\0';
         }
 
-        LE_INFO ("The current Legato framework version is, '%s'.", versionBuffer);
+        LE_INFO("The current Legato framework version is, '%s'.", versionBufferPtr);
     }
     else
     {
-        LE_INFO ("Could not read Legato version.");
+        LE_INFO("Could not read Legato version.");
     }
 
-    int retVal = -1;
+    int retVal;
 
     do
     {
-        retVal = fclose(versionFile);
+        retVal = fclose(versionFilePtr);
     }
-    while (   (retVal == -1)
-           && (errno == EINTR));
+    while (   (-1 == retVal)
+           && (EINTR == errno));
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -288,12 +262,12 @@ static void GetLegatoVersion
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_sid_t os_portDeviceFirmwareVersion
 (
-    char *bufferPtr,                        ///< [INOUT] data buffer
-    size_t *lenPtr                          ///< [INOUT] length of input buffer and length of the
+    char* bufferPtr,                        ///< [INOUT] data buffer
+    size_t* lenPtr                          ///< [INOUT] length of input buffer and length of the
                                             ///< returned data
 )
 {
-    lwm2mcore_sid_t result = LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+    lwm2mcore_sid_t result;
 
     if ((bufferPtr == NULL) || (lenPtr == NULL))
     {
@@ -301,119 +275,96 @@ lwm2mcore_sid_t os_portDeviceFirmwareVersion
     }
     else
     {
-#if 0
-        le_result_t leresult = le_info_GetFirmwareVersion ((char*)bufferPtr, (uint32_t) *lenPtr);
-
-        switch (leresult)
-        {
-            case LE_OVERFLOW:
-            {
-                result = LWM2MCORE_ERR_OVERFLOW;
-            }
-            break;
-
-            case LE_FAULT:
-            {
-                result = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            break;
-
-            case LE_OK:
-            {
-                result = LWM2MCORE_ERR_COMPLETED_OK;
-            }
-            break;
-
-            default:
-            {
-                result = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            break;
-        }
-#endif
-
-        char* token;
-        char* tmp_buffer_ptr;
+        char* tokenPtr;
+        char* tmpBufferPtr;
         uint32_t length;
         struct utsname linuxInfo;
         size_t read;
-        FILE* fp;
+        char* save1Ptr;
+        char* save2Ptr;
+        FILE* fpPtr;
         le_result_t leresult;
 
-        char tmp_buffer[512];
+        char tmpFwBufferPtr[512];
 
-        strcpy (bufferPtr, "MDM_");
+        strncpy(bufferPtr, "MDM_", strlen ("MDM_"));
 
-        leresult = le_info_GetFirmwareVersion (tmp_buffer, sizeof(tmp_buffer));
+        leresult = le_info_GetFirmwareVersion(tmpFwBufferPtr, sizeof(tmpFwBufferPtr));
         if (leresult == LE_OK)
         {
-            tmp_buffer_ptr = strtok(tmp_buffer, " ");
-            strcat(bufferPtr, tmp_buffer_ptr);
+            tmpBufferPtr = strtok_r(tmpFwBufferPtr, " ", &save1Ptr);
+            strncat(bufferPtr, tmpBufferPtr, strlen(tmpBufferPtr));
 
-            LE_INFO ("bufferPtr: %s", bufferPtr);
+            LE_INFO("bufferPtr: %s", bufferPtr);
 
-            fp = fopen("/proc/cmdline", "r");
-            if (fp == NULL)
+            fpPtr = fopen("/proc/cmdline", "r");
+            if (fpPtr == NULL)
+            {
                 LE_ERROR("Can't read LK version");
-            read = getline(&tmp_buffer_ptr, &length, fp);
+            }
+            read = getline(&tmpBufferPtr, &length, fpPtr);
             if (read == -1)
+            {
                 LE_ERROR("Can't read LK version");
+            }
 
-            LE_INFO ("/proc/cmdline: %s", tmp_buffer_ptr);
+            LE_INFO("/proc/cmdline: %s", tmpBufferPtr);
 
-            token = strtok(tmp_buffer_ptr, " ");
+            tokenPtr = strtok_r(tmpBufferPtr, " ", &save2Ptr);
 
             /* walk through other tokens */
-            while( token != NULL )
+            while( tokenPtr != NULL )
             {
-               LE_INFO ("token=  %s", token );
-               token = strtok(NULL, " ");
+               LE_INFO("tokenPtr=  %s", tokenPtr );
+               tokenPtr = strtok_r(NULL, " ", &save2Ptr);
 
-               if (strncmp(token, "lkversion=", 10) == 0)
+               if (0 == strncmp(tokenPtr, "lkversion=", LK_VERSION_LENGTH))
                {
-                   token += 10;
+                   tokenPtr += LK_VERSION_LENGTH;
                    break;
                }
             }
 
-            fclose(fp);
+            fclose(fpPtr);
 
-            if (token == NULL)
-                LE_ERROR("Can't read LK version");
-
-            strcat(bufferPtr, "_LK_");
-            strcat(bufferPtr, token);
-            LE_INFO ("bufferPtr = %s", bufferPtr);
-
-            if ( uname(&linuxInfo) == 0 )
+            if (tokenPtr == NULL)
             {
-                LE_INFO ("Linux Version: %s", linuxInfo.release);
+                LE_ERROR("Can't read LK version");
             }
 
-            strcat(bufferPtr, "_OS_");
-            strcat(bufferPtr, linuxInfo.release);
+            strncat(bufferPtr, "_LK_", strlen("_LK_"));
+            strncat(bufferPtr, tokenPtr, strlen(tokenPtr));
+            LE_INFO("bufferPtr = %s", bufferPtr);
 
-            LE_INFO ("bufferPtr = %s", bufferPtr);
+            if (0 ==  uname(&linuxInfo))
+            {
+                LE_INFO("Linux Version: %s", linuxInfo.release);
+            }
 
-            strcat(bufferPtr, "_RFS_");
-            strcat(bufferPtr, "unknown");
+            strncat(bufferPtr, "_OS_", strlen("_OS_"));
+            strncat(bufferPtr, linuxInfo.release, strlen(linuxInfo.release));
 
-            strcat(bufferPtr, "_UFS_");
-            strcat(bufferPtr, "unknown");
+            LE_INFO("bufferPtr = %s", bufferPtr);
 
-            LE_INFO ("bufferPtr = %s", bufferPtr);
+            strncat(bufferPtr, "_RFS_", strlen("_RFS_"));
+            strncat(bufferPtr, "unknown", strlen("unknown"));
 
-            strcat(bufferPtr, "_LE_");
+            strncat(bufferPtr, "_UFS_", strlen("_UFS_"));
+            strncat(bufferPtr, "unknown", strlen("unknown"));
 
-            GetLegatoVersion (tmp_buffer);
-            LE_INFO ("Legato version = %s", tmp_buffer);
-            LE_INFO ("fw version = %s", bufferPtr);
-            strcat(bufferPtr, tmp_buffer);
+            LE_INFO("bufferPtr = %s", bufferPtr);
 
-            LE_INFO ("bufferPtr = %s", bufferPtr);
+            strncat(bufferPtr, "_LE_", strlen("_LE_"));
+
+            GetLegatoVersion(tmpFwBufferPtr);
+            LE_INFO("Legato version = %s", tmpFwBufferPtr);
+            LE_INFO("fw version = %s", bufferPtr);
+            strncat(bufferPtr, tmpFwBufferPtr, strlen(tmpFwBufferPtr));
+
+            LE_INFO("bufferPtr = %s", bufferPtr);
 
 
-            strcat(bufferPtr, "_PRI_");
+            strncat(bufferPtr, "_PRI_", strlen("_PRI_"));
 
             char priIdPn[LE_INFO_MAX_PRIID_PN_BYTES];
             char priIdRev[LE_INFO_MAX_PRIID_REV_BYTES];
@@ -424,15 +375,15 @@ lwm2mcore_sid_t os_portDeviceFirmwareVersion
                                          LE_INFO_MAX_PRIID_REV_BYTES);
             if (leresult == LE_OK)
             {
-                LE_INFO ("le_info_GetPriId get priIdPn => %s", priIdPn);
-                LE_INFO ("le_info_GetPriId get priIdRev => %s", priIdRev);
+                LE_INFO("le_info_GetPriId get priIdPn => %s", priIdPn);
+                LE_INFO("le_info_GetPriId get priIdRev => %s", priIdRev);
             }
 
-            strcat(bufferPtr, priIdPn);
-            strcat(bufferPtr, "-");
-            strcat(bufferPtr, priIdRev);
+            strncat(bufferPtr, priIdPn, strlen(priIdPn));
+            strncat(bufferPtr, "-", strlen("-"));
+            strncat(bufferPtr, priIdRev, strlen(priIdRev));
 
-            *lenPtr = strlen (bufferPtr);
+            *lenPtr = strlen(bufferPtr);
             result = LWM2MCORE_ERR_COMPLETED_OK;
         }
         else
@@ -463,7 +414,7 @@ lwm2mcore_sid_t os_portDeviceCurrentTime
     uint64_t* valuePtr                      ///< [INOUT] data buffer
 )
 {
-    lwm2mcore_sid_t result = LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+    lwm2mcore_sid_t result;
 
     if (valuePtr == NULL)
     {
@@ -471,16 +422,16 @@ lwm2mcore_sid_t os_portDeviceCurrentTime
     }
     else
     {
-        le_clk_Time_t time = le_clk_GetAbsoluteTime();
+        le_clk_Time_t t = le_clk_GetAbsoluteTime();
         *valuePtr = 0;
-        LE_INFO ("time %d", time.sec);
-        if (time.sec == 0)
+        LE_INFO("time %d", t.sec);
+        if (0 == t.sec)
         {
             result = LWM2MCORE_ERR_GENERAL_ERROR;
         }
         else
         {
-            *valuePtr = time.sec;
+            *valuePtr = t.sec;
             result = LWM2MCORE_ERR_COMPLETED_OK;
         }
     }

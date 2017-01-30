@@ -233,12 +233,12 @@ static bool IsAvcBound
                 char strBuffer[LE_CFG_STR_LEN_BYTES] = "";
 
                 le_cfg_GetString(iterRef, "./interface", strBuffer, sizeof(strBuffer), "");
-                if (strcmp(strBuffer, "le_avc") == 0)
+                if (0 == strcmp(strBuffer, "le_avc"))
                 {
                     // The app can be bound to the AVC app directly, or through the root user.
                     // so check for both.
                     le_cfg_GetString(iterRef, "./app", strBuffer, sizeof(strBuffer), "");
-                    if (strcmp(strBuffer, "avcService") == 0)
+                    if (0 == strcmp(strBuffer, "avcService"))
                     {
                         // Success.
                         le_cfg_CancelTxn(iterRef);
@@ -246,7 +246,7 @@ static bool IsAvcBound
                     }
 
                     le_cfg_GetString(iterRef, "./user", strBuffer, sizeof(strBuffer), "");
-                    if (strcmp(strBuffer, "root") == 0)
+                    if (0 == strcmp(strBuffer, "root"))
                     {
                         // Success.
                         le_cfg_CancelTxn(iterRef);
@@ -389,6 +389,10 @@ void avcServer_UpdateHandler
         case LE_AVC_SESSION_STOPPED:
             // Retain CurrentState when session stops.
             break;
+
+        default:
+            LE_DEBUG("Unsupported updateStatus %d", updateStatus);
+            break;
     }
 
     if ( StatusHandlerRef != NULL )
@@ -470,7 +474,7 @@ void avcServer_UpdateHandler
         // if there are no blocking apps, otherwise, defer the install.
         else if ( updateStatus == LE_AVC_INSTALL_PENDING )
         {
-            if ( BlockRefCount == 0 )
+            if ( 0 == BlockRefCount )
             {
                 LE_INFO("Automatically accepting install");
                 pa_avc_SendSelection(PA_AVC_ACCEPT, 0);
@@ -541,14 +545,16 @@ static bool IsValidControlAppClient
     void
 )
 {
-    if ( RegisteredControlAppRef == NULL ||
-         RegisteredControlAppRef != le_avc_GetClientSessionRef() )
+    if ( (RegisteredControlAppRef == NULL) ||
+         (RegisteredControlAppRef != le_avc_GetClientSessionRef()) )
     {
         LE_KILL_CLIENT("Client is not registered as control app");
         return false;
     }
     else
+    {
         return true;
+    }
 }
 
 
@@ -596,7 +602,7 @@ static le_result_t QueryInstall
     {
         // There is no control app; automatically accept any pending installs,
         // if there are no blocking apps, otherwise, defer the install.
-        if ( BlockRefCount == 0 )
+        if ( 0 == BlockRefCount )
         {
             LE_INFO("Automatically accepting install");
             StopInstallDeferTimer();
@@ -662,7 +668,7 @@ static le_result_t QueryUninstall
     {
         // There is no control app; automatically accept any pending uninstalls,
         // if there are no blocking apps, otherwise, defer the uninstall.
-        if ( BlockRefCount == 0 )
+        if ( 0 == BlockRefCount )
         {
             LE_INFO("Automatically accepting uninstall");
             StopUninstallDeferTimer();
@@ -891,8 +897,8 @@ le_avc_StatusEventHandlerRef_t le_avc_AddStatusEventHandler
 
         // Register our local handler with the PA, and this handler will in turn call the user
         // specified handler.  If there is no installed control app at the time this daemon starts,
-        // then this registration happens in the COMPONENT_INIT. If a control app is later installed,
-        // and registers a handler, there is no harm with re-registering with the PA.
+        // then this registration happens in the COMPONENT_INIT. If a control app is later
+        // installed, and registers a handler, there is no harm with re-registering with the PA.
         pa_avc_SetAVMSMessageHandler(avcServer_UpdateHandler);
 
         // We only check at startup if the control app is installed, so this flag could be false
@@ -971,15 +977,12 @@ le_result_t le_avc_StartSession
 )
 {
     if ( ! IsValidControlAppClient() )
-        return LE_FAULT;
-
-#ifdef LEGATO_LWM2M_CLIENT
-    if( lwm2m_connect() != true )
     {
         return LE_FAULT;
     }
-    return LE_OK;
 
+#ifdef LEGATO_LWM2M_CLIENT
+    return avcClient_Connect();
 #else
     return pa_avc_StartSession();
 #endif
@@ -1001,19 +1004,46 @@ le_result_t le_avc_StopSession
 )
 {
     if ( ! IsValidControlAppClient() )
-        return LE_FAULT;
-
-#ifdef LEGATO_LWM2M_CLIENT
-    if( lwm2m_disconnect() != true )
     {
         return LE_FAULT;
     }
-    return LE_OK;
+
+#ifdef LEGATO_LWM2M_CLIENT
+    return avcClient_Disconnect();
 #else
     return pa_avc_StopSession();
 #endif
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Send a specific message to the server to be sure that the route between the device and the server
+ * is available.
+ * This API needs to be called when any package download is over (successfully or not) and before
+ * sending any notification on asset data to the server.
+ *
+ * @return
+ *      - LE_OK when the treatment is launched
+ *      - LE_FAULT on failure
+ *      - LE_UNSUPPORTED when this API is not supported
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avc_CheckRoute
+(
+    void
+)
+{
+    if ( ! IsValidControlAppClient() )
+    {
+        return LE_FAULT;
+    }
+
+#ifdef LEGATO_LWM2M_CLIENT
+    return avcClient_Update();
+#else
+    return LE_UNSUPPORTED;
+#endif
+}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1030,7 +1060,9 @@ le_result_t le_avc_AcceptDownload
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_FAULT;
+    }
 
     if ( CurrentState != AVC_DOWNLOAD_PENDING )
     {
@@ -1072,7 +1104,9 @@ le_result_t le_avc_DeferDownload
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_FAULT;
+    }
 
     if ( CurrentState != AVC_DOWNLOAD_PENDING )
     {
@@ -1387,7 +1421,9 @@ le_avc_ErrorCode_t le_avc_GetErrorCode
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_FAULT;
+    }
 
     return AvcErrorCode;
 }
@@ -1409,7 +1445,9 @@ le_result_t le_avc_GetUpdateType
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_FAULT;
+    }
 
     if ( CurrentState == AVC_IDLE )
     {
@@ -1456,7 +1494,9 @@ le_result_t le_avc_GetAppUpdateName
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_FAULT;
+    }
 
     return LE_FAULT;
 }
@@ -1502,7 +1542,9 @@ uint16_t le_avc_GetHttpStatus
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_AVC_HTTP_STATUS_INVALID;
+    }
 
     return pa_avc_GetHttpStatus();
 }
@@ -1524,7 +1566,9 @@ le_avc_SessionType_t le_avc_GetSessionType
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_AVC_SESSION_INVALID;
+    }
 
     return pa_avc_GetSessionType();
 }
@@ -1547,7 +1591,9 @@ le_result_t le_avc_GetRetryTimers
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_FAULT;
+    }
 
     return pa_avc_GetRetryTimers(timerValuePtr, numTimers);
 }
@@ -1574,7 +1620,9 @@ le_result_t le_avc_GetApnConfig
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_FAULT;
+    }
 
     return pa_avc_GetApnConfig(apnName, apnNameNumElements,
                                userName, uNameNumElements,
@@ -1601,7 +1649,9 @@ le_result_t le_avc_SetApnConfig
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_FAULT;
+    }
 
     return pa_avc_SetApnConfig(apnName, userName, userPwd);
 }
@@ -1624,7 +1674,9 @@ le_result_t le_avc_SetRetryTimers
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_FAULT;
+    }
 
     return pa_avc_SetRetryTimers(timerValuePtr, numTimers);
 }
@@ -1645,7 +1697,9 @@ le_result_t le_avc_GetPollingTimer
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_FAULT;
+    }
 
     return pa_avc_GetPollingTimer(pollingTimerPtr);
 }
@@ -1666,7 +1720,9 @@ le_result_t le_avc_SetPollingTimer
 )
 {
     if ( ! IsValidControlAppClient() )
+    {
         return LE_FAULT;
+    }
 
     return pa_avc_SetPollingTimer(pollingTimer);
 }

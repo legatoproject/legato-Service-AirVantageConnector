@@ -1,9 +1,9 @@
 /**
- * @file avc_portSecurity.c
+ * @file avcPortSecurity.c
  *
  * Porting layer for credential management
  *
- * Copyright (C) Sierra Wireless Inc. Use of this work is subject to license.
+ * Copyright (C) Sierra Wireless Inc.
  *
  */
 
@@ -42,7 +42,7 @@ lwm2mcore_sid_t os_portSecurityGetCredential
                                             ///< returned data
 )
 {
-    lwm2mcore_sid_t result = LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+    lwm2mcore_sid_t result;
 
     if ((bufferPtr == NULL) || (lenPtr == NULL) || (credId >= LWM2MCORE_CREDENTIAL_MAX))
     {
@@ -88,7 +88,7 @@ lwm2mcore_sid_t os_portSecuritySetCredential
                                             ///< returned data
 )
 {
-    lwm2mcore_sid_t result = LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+    lwm2mcore_sid_t result;
 
     if ((bufferPtr == NULL) || (!len) || (credId >= LWM2MCORE_CREDENTIAL_MAX))
     {
