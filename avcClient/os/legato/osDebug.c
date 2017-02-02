@@ -5,7 +5,7 @@
  *
  * <hr>
  *
- * Copyright (C) Sierra Wireless Inc. Use of this work is subject to license.
+ * Copyright (C) Sierra Wireless Inc.
  *
  */
 
@@ -19,9 +19,9 @@
 //--------------------------------------------------------------------------------------------------
 void os_assert
 (
-    bool condition,         /// [IN] Condition to be checked
-    char* functionPtr,      /// [IN] Function name which calls the assert function
-    uint32_t line           /// [IN] Function line which calls the assert function
+    bool condition,             /// [IN] Condition to be checked
+    const char* functionPtr,    /// [IN] Function name which calls the assert function
+    uint32_t line               /// [IN] Function line which calls the assert function
 )
 {
     if (!(condition))

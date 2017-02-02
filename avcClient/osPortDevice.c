@@ -1,5 +1,5 @@
 /**
- * @file avcPortDevice.c
+ * @file osPortDevice.c
  *
  * Porting layer for device parameters
  *
@@ -9,11 +9,9 @@
 
 #include "legato.h"
 #include "interfaces.h"
-#include "lwm2mcorePortDevice.h"
-
-#include "../avcDaemon/avData.h"
-#include "../avcDaemon/assetData.h"
-#include "../avcAppUpdate/avcUpdateShared.h"
+#include "osPortDevice.h"
+#include "assetData.h"
+#include "avcUpdateShared.h" // For MAX_VERSION_STR_BYTES
 #include <sys/utsname.h>
 
 //--------------------------------------------------------------------------------------------------

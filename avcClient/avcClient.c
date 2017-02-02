@@ -129,7 +129,7 @@ static void ConnectionStateHandler
 //--------------------------------------------------------------------------------------------------
 static int EventHandler
 (
-    lwm2mcore_Status_t status              ///< [IN] event status
+    lwm2mcore_status_t status              ///< [IN] event status
 )
 {
     int result = 0;

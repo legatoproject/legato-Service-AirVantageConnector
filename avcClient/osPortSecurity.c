@@ -1,5 +1,5 @@
 /**
- * @file avcPortSecurity.c
+ * @file osPortSecurity.c
  *
  * Porting layer for credential management
  *
@@ -9,7 +9,7 @@
 
 #include "legato.h"
 #include "interfaces.h"
-#include "lwm2mcorePortSecurity.h"
+#include "osPortSecurity.h"
 #include "pa_avc.h"
 
 //--------------------------------------------------------------------------------------------------

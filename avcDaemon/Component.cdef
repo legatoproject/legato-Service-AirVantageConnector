@@ -16,17 +16,18 @@ sources:
     avcServer.c
     // AVC
     ../avcClient/avcClient.c
-    ../avcClient/avcPortSecurity.c
-    ../avcClient/avcPortDevice.c
-    ../avcClient/os_portUpdate.c
+    ../avcClient/osPortSecurity.c
+    ../avcClient/osPortDevice.c
+    ../avcClient/osPortUpdate.c
 
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/dtlsconnection.c
+    // LWM2MCore
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/dtlsConnection.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/lwm2mcoreSession.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/lwm2mcoreObjects.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/lwm2mcoreObjectsTable.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/lwm2mcoreHandlers.c
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/objects.c
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/objectsTable.c
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/handlers.c
 
-    // Adaptation layer
+    // LWM2MCore: Adaptation layer
     ../avcClient/os/legato/osDebug.c
     ../avcClient/os/legato/osPlatform.c
     ../avcClient/os/legato/osTime.c
@@ -70,20 +71,18 @@ sources:
 cflags:
 {
     -I$CURDIR/../platformAdaptor/inc
-    -I../platformAdaptor/inc
     -I${LEGATO_ROOT}/framework/c/src    // TODO: Remove this encapsulation breakage.
-    -I../avcDaemon/
-    -I../avcAppUpdate/
-    -I../avcClient/
+    -I$CURDIR/../avcDaemon
+    -I$CURDIR/../avcAppUpdate
+    -I$CURDIR/../avcClient
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/inc
-    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/object_manager
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/os
-    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/session_manager
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/er-coap-13
-    -I../inc
     -DLWM2M_CLIENT_MODE
     -DLWM2M_LITTLE_ENDIAN
     -DLWM2M_BOOTSTRAP
@@ -92,7 +91,6 @@ cflags:
     -DLWM2M_WITH_LOGS
     -DWITH_LOGS
     -DSIERRA
-    -DCREDENTIALS_DEBUG
     -w
     -std=gnu99
     -DWITH_SHA256
