@@ -14,6 +14,20 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Define buffer length for data dump
+ */
+//--------------------------------------------------------------------------------------------------
+#define DUMP_BUFFER_LEN 80
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Define buffer length for log
+ */
+//--------------------------------------------------------------------------------------------------
+#define LOG_BUFFER_LEN 255
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Function for assert
  */
 //--------------------------------------------------------------------------------------------------
@@ -26,7 +40,7 @@ void os_assert
 {
     if (!(condition))
     {
-        LE_FATAL ("Assertion at function %s: line %d !!!!!!", functionPtr, line);
+        LE_FATAL("Assertion at function %s: line %d !!!!!!", functionPtr, line);
     }
 }
 
@@ -49,17 +63,26 @@ void lwm2m_printf(
 {
     va_list ap;
     int ret;
-    static char strBuffer[128];
-    memset (strBuffer, 0, 128);
+    static char strBuffer[LOG_BUFFER_LEN];
+    memset(strBuffer, 0, LOG_BUFFER_LEN);
 
-    va_start (ap, format);
-    ret = vsprintf (strBuffer,format, ap);
-    va_end (ap);
+    va_start(ap, format);
+    ret = vsnprintf(strBuffer, LOG_BUFFER_LEN, format, ap);
+    va_end(ap);
     /* LOG and LOG_ARG macros sets <CR><LF> at the end: remove it */
-    strBuffer[ret-2] = '\0';
-    LE_INFO ((char*)strBuffer);
+    if (strBuffer[ret-1] == '\n')
+    {
+        if (strBuffer[ret-2] == '\r')
+        {
+             strBuffer[ret-2] = '\0';
+        }
+        else
+        {
+              strBuffer[ret-1] = '\0';
+        }
+    }
+    LE_INFO((char*)strBuffer);
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -75,25 +98,25 @@ void os_debug_data_dump(
     int i;
     unsigned char buffPtr[17];
     unsigned char *pcPtr = (unsigned char*)addrPtr;
-    static char strBuffer[80];
-    memset (strBuffer, 0, 80);
+    static char strBuffer[DUMP_BUFFER_LEN];
+    memset(strBuffer, 0, DUMP_BUFFER_LEN);
 
 
     // Output description if given.
     if (descPtr != NULL)
     {
-        LE_INFO ("%s:", descPtr);
+        LE_INFO("%s:", descPtr);
     }
 
     if (len == 0)
     {
-        LE_INFO ("  ZERO LENGTH");
+        LE_INFO("  ZERO LENGTH");
         return;
     }
 
     if (len < 0)
     {
-        LE_INFO ("  NEGATIVE LENGTH: %i\n",len);
+        LE_INFO("  NEGATIVE LENGTH: %i\n",len);
         return;
     }
 
@@ -106,16 +129,22 @@ void os_debug_data_dump(
             // Just don't print ASCII for the zeroth line.
             if (i != 0)
             {
-                sprintf (strBuffer + strlen (strBuffer), "  %s", buffPtr);
-                LE_INFO ((char*)strBuffer);
-                memset (strBuffer, 0, 80);
+                snprintf(strBuffer + strlen(strBuffer),
+                         DUMP_BUFFER_LEN - strlen(strBuffer),
+                         "  %s", buffPtr);
+                LE_INFO((char*)strBuffer);
+                memset(strBuffer, 0, DUMP_BUFFER_LEN);
             }
 
             // Output the offset.
-            sprintf (strBuffer + strlen (strBuffer), "  %04x ", i);
+            snprintf(strBuffer + strlen(strBuffer),
+                     DUMP_BUFFER_LEN - strlen(strBuffer),
+                     "  %04x ", i);
         }
         // Now the hex code for the specific character.
-        sprintf (strBuffer + strlen (strBuffer), " %02x", pcPtr[i]);
+        snprintf(strBuffer + strlen(strBuffer),
+                 DUMP_BUFFER_LEN - strlen(strBuffer),
+                 " %02x", pcPtr[i]);
 
         // And store a printable ASCII character for later.
         if ((pcPtr[i] < 0x20) || (pcPtr[i] > 0x7e))
@@ -132,13 +161,14 @@ void os_debug_data_dump(
     // Pad out last line if not exactly 16 characters.
     while ((i % 16) != 0)
     {
-        //printf ("   ");
-        sprintf (strBuffer + strlen (strBuffer), "   ");
+        snprintf(strBuffer + strlen (strBuffer), DUMP_BUFFER_LEN - strlen(strBuffer), "   ");
         i++;
     }
 
     // And print the final ASCII bit.
-    sprintf (strBuffer + strlen (strBuffer), "  %s", buffPtr);
-    LE_INFO ((char*)strBuffer);
+    snprintf(strBuffer + strlen (strBuffer),
+             DUMP_BUFFER_LEN - strlen(strBuffer),
+             "  %s", buffPtr);
+    LE_INFO((char*)strBuffer);
 }
 
