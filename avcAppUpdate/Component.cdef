@@ -17,7 +17,7 @@ requires:
     {
         ../avcDaemon
         $LEGATO_ROOT/framework/c/src/appCfg
-        $LEGATO_AVC_PA
+        $LEGATO_AVC_PA_DEFAULT // TODO: Remove unneeded PA AVC
     }
 }
 
@@ -25,7 +25,7 @@ cflags:
 {
     -std=c99
     -I../avcDaemon
-    -I$CURDIR/../platformAdaptor/inc
+    -I${LEGATO_ROOT}/components/airVantage/platformAdaptor/inc // TODO: Remove unneeded PA AVC
     -I${LEGATO_ROOT}/framework/c/src    // TODO: Remove this encapsulation breakage.
     -I${LEGATO_ROOT}/framework/c/src/appCfg    // TODO: Remove this encapsulation breakage.
 }

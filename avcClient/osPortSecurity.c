@@ -19,13 +19,38 @@
 #include "legato.h"
 #include "interfaces.h"
 #include "osPortSecurity.h"
-#include "pa_avc.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
  *                  OBJECT 0: SECURITY
  */
 //--------------------------------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Prefix to retrieve files from secStoreGlobal service.
+ */
+//--------------------------------------------------------------------------------------------------
+#define SECURE_STORAGE_PREFIX "/avms"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Array to describe the location of a specific credential type in the secure storage.
+ */
+//--------------------------------------------------------------------------------------------------
+static const char* CredentialLocations[LWM2MCORE_CREDENTIAL_MAX] = {
+    "LWM2M_FW_KEY",                     ///< LWM2MCORE_CREDENTIAL_FW_KEY
+    "LWM2M_SW_KEY",                     ///< LWM2MCORE_CREDENTIAL_SW_KEY
+    "certificate",                      ///< LWM2MCORE_CREDENTIAL_CERTIFICATE
+    "LWM2M_BOOTSTRAP_SERVER_IDENTITY",  ///< LWM2MCORE_CREDENTIAL_BS_PUBLIC_KEY
+    "bs_server_public_key",             ///< LWM2MCORE_CREDENTIAL_BS_SERVER_PUBLIC_KEY
+    "LWM2M_BOOTSTRAP_SERVER_PSK",       ///< LWM2MCORE_CREDENTIAL_BS_SECRET_KEY
+    "LWM2M_BOOTSTRAP_SERVER_ADDR",      ///< LWM2MCORE_CREDENTIAL_BS_ADDRESS
+    "LWM2M_DM_PSK_IDENTITY",            ///< LWM2MCORE_CREDENTIAL_DM_PUBLIC_KEY
+    "dm_server_public_key",             ///< LWM2MCORE_CREDENTIAL_DM_SERVER_PUBLIC_KEY
+    "LWM2M_DM_PSK_SECRET",              ///< LWM2MCORE_CREDENTIAL_DM_SECRET_KEY
+    "LWM2M_DM_SERVER_ADDR",             ///< LWM2MCORE_CREDENTIAL_DM_ADDRESS
+};
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -45,32 +70,35 @@
 lwm2mcore_sid_t os_portSecurityGetCredential
 (
     lwm2mcore_credentials_t credId,         ///< [IN] credential Id of credential to be retrieved
-    char *bufferPtr,                        ///< [INOUT] data buffer
-    size_t *lenPtr                          ///< [INOUT] length of input buffer and length of the
+    char* bufferPtr,                        ///< [INOUT] data buffer
+    size_t* lenPtr                          ///< [INOUT] length of input buffer and length of the
                                             ///< returned data
 )
 {
-    lwm2mcore_sid_t result;
-
     if ((bufferPtr == NULL) || (lenPtr == NULL) || (credId >= LWM2MCORE_CREDENTIAL_MAX))
     {
-        result = LWM2MCORE_ERR_INVALID_ARG;
+        LE_ERROR("Bad parameter bufferPtr[%p] lenPtr[%p] credId[%u]", bufferPtr, lenPtr, credId);
+        return LWM2MCORE_ERR_INVALID_ARG;
     }
-    else
+
+    char credsPathStr[SECSTOREGLOBAL_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+
+    LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                        credsPathStr,
+                                        sizeof(credsPathStr),
+                                        CredentialLocations[credId],
+                                        NULL), "Buffer is not long enough");
+    le_result_t result = secStoreGlobal_Read(credsPathStr, (uint8_t*)bufferPtr, lenPtr);
+    if (LE_OK != result)
     {
-        le_result_t paResult = pa_avc_GetCredential(credId, bufferPtr, lenPtr);
-        if (LE_OK == paResult)
-        {
-            result = LWM2MCORE_ERR_COMPLETED_OK;
-            LE_INFO("os_portSecurityGetCredential bufferPtr %d lenPtr %d", bufferPtr, *lenPtr);
-        }
-        else
-        {
-            result = LWM2MCORE_ERR_GENERAL_ERROR;
-        }
+        LE_ERROR("Unable to retrieve credentials for %d [%s]: %d %s",
+                 credId, CredentialLocations[credId], result, LE_RESULT_TXT(result));
+        return LWM2MCORE_ERR_GENERAL_ERROR;
     }
-    LE_INFO("os_portSecurityGetCredential credId %d result %d", credId, result);
-    return result;
+
+    LE_DEBUG("credId %d [%s], len %zu", credId, CredentialLocations[credId], *lenPtr);
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -91,36 +119,44 @@ lwm2mcore_sid_t os_portSecurityGetCredential
 lwm2mcore_sid_t os_portSecuritySetCredential
 (
     lwm2mcore_credentials_t credId,         ///< [IN] credential Id of credential to be set
-    char *bufferPtr,                        ///< [INOUT] data buffer
+    char* bufferPtr,                        ///< [INOUT] data buffer
     size_t len                              ///< [IN] length of input buffer and length of the
                                             ///< returned data
 )
 {
-    lwm2mcore_sid_t result;
+    if ((bufferPtr == NULL) || (credId >= LWM2MCORE_CREDENTIAL_MAX))
+    {
+        LE_ERROR("Bad parameter bufferPtr[%p] len[%d] credId[%u]", bufferPtr, len, credId);
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
 
-    if ((bufferPtr == NULL) || (!len) || (credId >= LWM2MCORE_CREDENTIAL_MAX))
+    char credsPathStr[SECSTOREGLOBAL_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+
+    LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                        credsPathStr,
+                                        sizeof(credsPathStr),
+                                        CredentialLocations[credId],
+                                        NULL), "Buffer is not long enough");
+
+    le_result_t result = secStoreGlobal_Write(credsPathStr, (uint8_t*)bufferPtr, len);
+    if (LE_OK != result)
     {
-        result = LWM2MCORE_ERR_INVALID_ARG;
+        LE_ERROR("Unable to write credentials for %d [%s]", credId, CredentialLocations[credId]);
+        return LWM2MCORE_ERR_GENERAL_ERROR;
     }
-    else
-    {
-        le_result_t paResult = pa_avc_SetCredential(credId, bufferPtr, len);
-        if (LE_OK == paResult)
-        {
-            result = LWM2MCORE_ERR_COMPLETED_OK;
-        }
-        else
-        {
-            result = LWM2MCORE_ERR_GENERAL_ERROR;
-        }
-    }
-    return result;
+
+    LE_DEBUG("credId %d [%s], len %zu", credId, CredentialLocations[credId], len);
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Function to check if one credential is present in platform storage
+ * Function to check if one credential is present in platform storage.
+ *
+ * Since there is no GetSize in the le_secStore.api (that provides secStoreGlobal), tries to
+ * retrieve the credentials with a buffer too small.
  *
  * @return
  *      - true if the credential is present
@@ -128,55 +164,77 @@ lwm2mcore_sid_t os_portSecuritySetCredential
  *
  */
 //--------------------------------------------------------------------------------------------------
-static bool CredentialCheckPresence
+bool os_portSecurityCheckCredential
 (
     lwm2mcore_credentials_t credId      ///< [IN] Credential identifier
 )
 {
-    bool result = false;
-    le_result_t paResult;
-    size_t size = 0;
+    char credsPathStr[SECSTOREGLOBAL_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
 
-    paResult = pa_avc_GetCredentialLength((uint8_t)credId, &size);
+    LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                        credsPathStr,
+                                        sizeof(credsPathStr),
+                                        CredentialLocations[credId],
+                                        NULL), "Buffer is not long enough");
 
-    if ((LE_OK == paResult) && size)
+    // The provided buffer is too small and that is fine, as we just want to check that it starts
+    // with something.
+    uint8_t bufferPtr[10] = {0};
+    size_t size = sizeof(bufferPtr);
+    bool ret = true;
+    const char* retTxt = "Present";
+
+    le_result_t result = secStoreGlobal_Read(credsPathStr, bufferPtr, &size);
+    if ((LE_OK != result) && (LE_OVERFLOW != result) && (bufferPtr[0] != 0))
     {
-        result = true;
+        ret = false;
+        retTxt = "Not present";
     }
 
-    LE_INFO("Credential presence: credId %d result %d", credId, result);
-    return result;
+    LE_DEBUG("credId %d result %s [%d]", credId, retTxt, ret);
+    return ret;
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Function to check if a Device Management server credential was provided
- *
- * @note This API is called by LWM2MCore
+ * This function erases one credential from NV storage
  *
  * @return
- *      - true if  a Device Management server was provided
+ *      - true if the credential is deleted
  *      - false else
  */
 //--------------------------------------------------------------------------------------------------
-bool os_portSecurityCheckDmCredentialsPresence
+bool os_portSecurityDeleteCredential
 (
-    void
+    lwm2mcore_credentials_t credId      ///< [IN] Credential identifier
 )
 {
-    bool result = false;
-
-    /* Check if credentials linked to DM server are present:
-     * PSK Id, PSK secret, server URL
-     */
-    if (CredentialCheckPresence(LWM2MCORE_CREDENTIAL_DM_PUBLIC_KEY)
-     && CredentialCheckPresence(LWM2MCORE_CREDENTIAL_DM_SECRET_KEY)
-     && CredentialCheckPresence(LWM2MCORE_CREDENTIAL_DM_ADDRESS))
+    if (credId >= LWM2MCORE_CREDENTIAL_MAX)
     {
-        result = true;
+        LE_ERROR("Bad parameter credId[%u]", credId);
+        return LE_BAD_PARAMETER;
     }
-    LE_INFO("os_portSecurityDmServerPresence result %d", result);
-    return result;
+
+    char credsPathStr[SECSTOREGLOBAL_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+
+    LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                        credsPathStr,
+                                        sizeof(credsPathStr),
+                                        CredentialLocations[credId],
+                                        NULL), "Buffer is not long enough");
+
+    le_result_t result = secStoreGlobal_Delete(credsPathStr);
+    if ((LE_OK != result) && (LE_NOT_FOUND != result))
+    {
+        LE_ERROR("Unable to delete credentials for %d [%s]: %d %s",
+                 credId, CredentialLocations[credId],
+                 result, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    LE_DEBUG("credId %d [%s] deleted", credId, CredentialLocations[credId]);
+
+    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------

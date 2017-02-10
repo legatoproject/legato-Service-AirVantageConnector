@@ -16,7 +16,6 @@
 #include "osTimer.h"
 #include "osPortSecurity.h"
 #include "osPortTypes.h"
-#include "pa_avc.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -144,17 +143,7 @@ static int EventHandler
 
         case LWM2MCORE_EVENT_SESSION_FAILED:
         {
-            bool dmSession = false;
             LE_ERROR("Session failure");
-            /* Check if the failed connection was on DM server
-             * In this case, delete stored DM credentials in order to force a connection to the
-             * bootstrap server
-             */
-            if (lwm2mcore_connectionGetType(Context, &dmSession) && dmSession)
-            {
-                /* Erase DM credentials to force a bootstrap session */
-                pa_avc_CredentialDmErase();
-            }
             avcServer_UpdateHandler(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
                                     0, 0, LE_AVC_ERR_NONE);
         }

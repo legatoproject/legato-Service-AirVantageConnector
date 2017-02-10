@@ -1,3 +1,4 @@
+
 provides:
 {
     api:
@@ -74,6 +75,7 @@ sources:
 cflags:
 {
     -I$CURDIR/../platformAdaptor/inc
+    -I${LEGATO_ROOT}/components/airVantage/platformAdaptor/inc // TODO: Remove unneeded PA AVC
     -I${LEGATO_ROOT}/framework/c/src    // TODO: Remove this encapsulation breakage.
     -I$CURDIR/../avcDaemon
     -I$CURDIR/../avcAppUpdate
@@ -121,11 +123,11 @@ requires:
         le_appInfo.api
         le_fwupdate.api
         le_update.api
+        secStoreGlobal = le_secStore.api
     }
 
     component:
     {
-        ../platformAdaptor/default/le_pa_avc_default
-        $LEGATO_AVC_PA
+        $LEGATO_AVC_PA_DEFAULT // TODO: Remove unneeded PA AVC
     }
 }
