@@ -104,6 +104,8 @@ ldflags:
 {
     -lcurl
     -lz
+    -lssl
+    -lcrypto
 }
 
 requires:

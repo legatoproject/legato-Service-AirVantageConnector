@@ -385,6 +385,7 @@ le_result_t packageDownloader_StartDownload
     memset(data.packageUri, 0, LWM2MCORE_PACKAGE_URI_MAX_LEN + 1);
     memcpy(data.packageUri, uriPtr, strlen(uriPtr));
     data.packageSize = 0;
+    data.updateType = type;
 
     if (-1 == stat(PKGDWL_PATH, &st))
     {
