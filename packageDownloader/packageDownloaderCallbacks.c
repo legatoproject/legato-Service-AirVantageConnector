@@ -8,8 +8,6 @@
  */
 
 #include <legato.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <curl/curl.h>
 #include <osPortUpdate.h>
 #include <lwm2mcorePackageDownloader.h>
@@ -19,10 +17,17 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Curl connection to server timeout
+ * Value of 1 mebibyte in bytes
  */
 //--------------------------------------------------------------------------------------------------
-#define CONNECTION_TIMEOUT  25L
+#define MEBIBYTE            (1 << 20)
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Maximum in memory chunk size
+ */
+//--------------------------------------------------------------------------------------------------
+#define MAX_DWL_SIZE        (4 * MEBIBYTE)
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -43,63 +48,80 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Download status
+ */
+//--------------------------------------------------------------------------------------------------
+#define DWL_RESUME  0x00
+#define DWL_PAUSE   0x01
+#define DWL_ERROR   0x02
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * PackageInfo data structure.
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    double  totalSize;              ///< total file size
+    long    httpRespCode;           ///< http response code
+    char    curlVersion[BUF_SIZE];  ///< libcurl version
+}
+PackageInfo_t;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Memory chunk data structure.
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    uint8_t         mem[MAX_DWL_SIZE];  ///< downloaded data chunk
+    size_t          size;               ///< downloaded data size
+    size_t          offset;             ///< downloaded data chunks offset
+    uint8_t         state;              ///< download state
+    le_sem_Ref_t    resumeSem;          ///< resume semaphore
+    le_sem_Ref_t    pauseSem;           ///< pause semaphore
+}
+Chunk_t;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Package data structure
  */
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    CURL    *curlPtr;                       ///< curl pointer
-    int     fd;                             ///< fifo file descriptor
-    uint8_t chunk[MAX_DATA_BUFFER_CHUNK];   ///< downloaded data chunk
-    char    range[BUF_SIZE];                ///< curl range string
-    size_t  size;                           ///< downloaded data size
-    size_t  offset;                         ///< downloaded data offset
+    CURL            *curlPtr;   ///< curl pointer
+    int             fd;         ///< fifo file descriptor
+    const char      *uriPtr;    ///< package URI pointer
+    Chunk_t         chunk;      ///< memory chunk
+    PackageInfo_t   pkgInfo;    ///< package information
 }
 Package_t;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Write downloaded data to chunk
+ * Write downloaded data to memory chunk
  */
 //--------------------------------------------------------------------------------------------------
-static size_t WriteData
+static size_t Write
 (
-    void    *ptr,
+    void    *contentsPtr,
     size_t  size,
     size_t  nmemb,
     void    *streamPtr
 )
 {
-    Package_t *pkgPtr = (Package_t *)streamPtr;
-    size_t count = size * nmemb;
+    size_t count;
+    Chunk_t *chunkPtr;
+    chunkPtr = (Chunk_t *)streamPtr;
 
-    if (count > MAX_DATA_BUFFER_CHUNK)
-    {
-        LE_ERROR("read data size is higher than chunk max size");
-        pkgPtr->size = 0;
-        return 0;
-    }
-
-    memcpy(pkgPtr->chunk + pkgPtr->size, ptr, count);
-    pkgPtr->size += count;
+    count = size * nmemb;
+    memcpy(chunkPtr->mem + chunkPtr->size, contentsPtr, count);
+    chunkPtr->size += count;
+    chunkPtr->mem[chunkPtr->size] = 0;
 
     return count;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Return the size of downloaded data
- */
-//--------------------------------------------------------------------------------------------------
-static size_t WriteDummy
-(
-    void    *ptr,
-    size_t  size,
-    size_t  nmemb,
-    void    *streamPtr
-)
-{
-    return (size * nmemb);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -107,17 +129,34 @@ static size_t WriteDummy
  * Construct range string
  */
 //--------------------------------------------------------------------------------------------------
-static int CurlRange
+static int CalculateRange
 (
-    size_t  size,
-    size_t  offset,
-    char    *rangePtr
+    char        *bufPtr,
+    uint64_t    *offsetPtr,
+    uint64_t    *sizePtr
 )
 {
     int ret;
+    uint64_t lowLimit;
+    uint64_t highLimit;
 
-    memset(rangePtr, 0, BUF_SIZE);
-    ret = snprintf(rangePtr, BUF_SIZE, "%zu-%zu", offset, (offset + size) - 1);
+    lowLimit = *offsetPtr;
+
+    if (MAX_DWL_SIZE > *sizePtr)
+    {
+        highLimit = (lowLimit + *sizePtr) - 1;
+        *sizePtr = 0;
+    }
+    else
+    {
+        highLimit = (lowLimit + MAX_DWL_SIZE) - 1;
+        *sizePtr -= MAX_DWL_SIZE;
+        *offsetPtr += MAX_DWL_SIZE;
+    }
+
+    ret = snprintf(bufPtr, BUF_SIZE, "%llu-%llu",
+                (unsigned long long) lowLimit,
+                (unsigned long long) highLimit);
 
     return ret;
 }
@@ -160,6 +199,126 @@ static int CheckHttpStatusCode
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Get download information
+ */
+//--------------------------------------------------------------------------------------------------
+static int GetDownloadInfo
+(
+    Package_t *pkgPtr
+)
+{
+    CURLcode rc;
+    PackageInfo_t *pkgInfoPtr;
+
+    pkgInfoPtr = &pkgPtr->pkgInfo;
+
+    // CURLOPT_WRITEFUNCTION will always succeed
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, Write);
+
+    // just get the header, will always succeed
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOBODY, 1L);
+
+    rc = curl_easy_perform(pkgPtr->curlPtr);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("failed to perform curl request: %s", curl_easy_strerror(rc));
+        return -1;
+    }
+
+    // check for a valid response
+    rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_RESPONSE_CODE,
+            &pkgInfoPtr->httpRespCode);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("failed to get response code: %s", curl_easy_strerror(rc));
+        return -1;
+    }
+
+    rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
+            &pkgInfoPtr->totalSize);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("failed to get file size: %s", curl_easy_strerror(rc));
+        return -1;
+    }
+
+    memset(pkgInfoPtr->curlVersion, 0, BUF_SIZE);
+    memcpy(pkgInfoPtr->curlVersion, curl_version(), BUF_SIZE);
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Download thread function
+ */
+//--------------------------------------------------------------------------------------------------
+static void *Download
+(
+    void *ctxPtr
+)
+{
+
+    CURLcode rc;
+    Package_t *pkgPtr;
+    Chunk_t *chunkPtr;
+    uint64_t totalSize;
+    uint64_t offset;
+    double dwlSize;
+    char buf[BUF_SIZE];
+
+    pkgPtr = (Package_t *)ctxPtr;
+    chunkPtr = &pkgPtr->chunk;
+
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOBODY, 0L);
+
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, Write);
+
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEDATA, (void *)chunkPtr);
+
+    totalSize = (uint64_t)pkgPtr->pkgInfo.totalSize;
+    offset = 0;
+    dwlSize = 0;
+
+    while (totalSize)
+    {
+        CalculateRange(buf, &offset, &totalSize);
+
+        memset(chunkPtr->mem, 0, MAX_DWL_SIZE);
+        chunkPtr->size = 0;
+
+        curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_RANGE, buf);
+
+        rc = curl_easy_perform(pkgPtr->curlPtr);
+
+        if(CURLE_OK != rc)
+        {
+            LE_ERROR("curl_easy_perform failed: %s", curl_easy_strerror(rc));
+            chunkPtr->size = 0;
+            chunkPtr->state = DWL_ERROR;
+        }
+        else
+        {
+            dwlSize += (double)chunkPtr->size;
+            LE_DEBUG("last download: %g MiB", (double)chunkPtr->size / MEBIBYTE);
+            LE_DEBUG("total download: %g MiB - %g%%", dwlSize / MEBIBYTE,
+                (dwlSize / pkgPtr->pkgInfo.totalSize) * 100);
+            chunkPtr->state = DWL_PAUSE;
+        }
+
+        le_sem_Post(chunkPtr->pauseSem);
+
+        if (DWL_PAUSE == chunkPtr->state)
+        {
+            le_sem_Wait(chunkPtr->resumeSem);
+        }
+    }
+
+    return (void *)0;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * InitDownload callback function definition
  */
 //--------------------------------------------------------------------------------------------------
@@ -169,9 +328,10 @@ lwm2mcore_DwlResult_t InitDownload
     void *ctxPtr
 )
 {
-    CURLcode rc;
-    packageDownloader_DownloadCtx_t *dwlCtxPtr;
     static Package_t pkg;
+    CURLcode rc;
+    le_thread_Ref_t dwlRef;
+    packageDownloader_DownloadCtx_t *dwlCtxPtr;
 
     dwlCtxPtr = (packageDownloader_DownloadCtx_t *)ctxPtr;
 
@@ -180,12 +340,7 @@ lwm2mcore_DwlResult_t InitDownload
 
     dwlCtxPtr->ctxPtr = (void *)&pkg;
 
-    pkg.fd = open(dwlCtxPtr->fifoPtr, O_WRONLY);
-    if (-1 == pkg.fd)
-    {
-        LE_ERROR("open fifo failed: %m");
-        return DWL_FAULT;
-    }
+    LE_DEBUG("Initialize package downloader on `%s'", uriPtr);
 
     // initialize everything possible
     rc = curl_global_init(CURL_GLOBAL_ALL);
@@ -203,25 +358,12 @@ lwm2mcore_DwlResult_t InitDownload
         return DWL_FAULT;
     }
 
-    LE_DEBUG("libcurl version %s", curl_version());
-
     // set URL to get here
     rc= curl_easy_setopt(pkg.curlPtr, CURLOPT_URL, uriPtr);
     if (CURLE_OK != rc)
     {
         LE_ERROR("failed to set URI %s: %s", uriPtr, curl_easy_strerror(rc));
         return DWL_FAULT;
-    }
-
-    // set the connection to server timeout
-    curl_easy_setopt(pkg.curlPtr, CURLOPT_CONNECTTIMEOUT, CONNECTION_TIMEOUT);
-
-    // set the tcp keep alive option
-    rc = curl_easy_setopt(pkg.curlPtr, CURLOPT_TCP_KEEPALIVE, 1L);
-    if (CURLE_OK != rc)
-    {
-        LE_ERROR("tcp keepalive option is not supported, libcurl version %s",
-            curl_version());
     }
 
     // disable tls verification
@@ -242,6 +384,35 @@ lwm2mcore_DwlResult_t InitDownload
         return DWL_FAULT;
     }
 
+    if (-1 == GetDownloadInfo(&pkg))
+    {
+        return DWL_FAULT;
+    }
+
+    if (-1 == CheckHttpStatusCode(pkg.pkgInfo.httpRespCode))
+    {
+        return DWL_FAULT;
+    }
+
+    pkg.fd = open(dwlCtxPtr->fifoPtr, O_WRONLY);
+    if (-1 == pkg.fd)
+    {
+        LE_ERROR("open fifo failed: %m");
+        return DWL_FAULT;
+    }
+
+    pkg.uriPtr = uriPtr;
+
+    pkg.chunk.size = 0;
+    pkg.chunk.offset = 0;
+    pkg.chunk.state = DWL_RESUME;
+
+    pkg.chunk.resumeSem = le_sem_Create("Resume-Semaphore", 0);
+    pkg.chunk.pauseSem = le_sem_Create("Pause-Semaphore", 0);
+
+    dwlRef = le_thread_Create("Downloader", (void *)Download, (void *)&pkg);
+    le_thread_Start(dwlRef);
+
     return DWL_OK;
 }
 
@@ -256,49 +427,19 @@ lwm2mcore_DwlResult_t GetInfo
     void                                *ctxPtr
 )
 {
-    CURLcode rc;
-    double size;
-    long code;
     packageDownloader_DownloadCtx_t *dwlCtxPtr;
     Package_t *pkgPtr;
+    PackageInfo_t *pkgInfoPtr;
 
     dwlCtxPtr = (packageDownloader_DownloadCtx_t *)ctxPtr;
     pkgPtr = (Package_t *)dwlCtxPtr->ctxPtr;
+    pkgInfoPtr = &pkgPtr->pkgInfo;
 
-    // CURLOPT_WRITEFUNCTION will always succeed
-    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, WriteDummy);
+    LE_DEBUG("using: %s", pkgInfoPtr->curlVersion);
+    LE_DEBUG("connection status: %ld", pkgInfoPtr->httpRespCode);
+    LE_DEBUG("package full size: %g MiB", pkgInfoPtr->totalSize / MEBIBYTE);
 
-    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOBODY, 1L);
-
-    rc = curl_easy_perform(pkgPtr->curlPtr);
-    if (CURLE_OK != rc)
-    {
-        LE_ERROR("failed to perform curl request: %s", curl_easy_strerror(rc));
-        return DWL_FAULT;
-    }
-
-    // check for a valid response
-    rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_RESPONSE_CODE, &code);
-    if (CURLE_OK != rc)
-    {
-        LE_ERROR("failed to get file info: %s", curl_easy_strerror(rc));
-        return DWL_FAULT;
-    }
-
-    if (-1 == CheckHttpStatusCode(code))
-    {
-        LE_ERROR("invalid response code %ld", code);
-        return DWL_FAULT;
-    }
-
-    rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &size);
-    if (CURLE_OK != rc)
-    {
-        LE_ERROR("failed to get file info: %s", curl_easy_strerror(rc));
-        return DWL_FAULT;
-    }
-
-    dataPtr->packageSize = (uint64_t)size;
+    dataPtr->packageSize = (uint64_t)pkgInfoPtr->totalSize;
 
     return DWL_OK;
 }
@@ -343,50 +484,45 @@ lwm2mcore_DwlResult_t DownloadRange
     void        *ctxPtr
 )
 {
-    int ret;
-    CURLcode rc;
     packageDownloader_DownloadCtx_t *dwlCtxPtr;
     Package_t *pkgPtr;
+    Chunk_t *chunkPtr;
 
     dwlCtxPtr = (packageDownloader_DownloadCtx_t *)ctxPtr;
     pkgPtr = (Package_t *)dwlCtxPtr->ctxPtr;
+    chunkPtr = &pkgPtr->chunk;
 
-    memset(pkgPtr->range, 0, BUF_SIZE);
+    if (DWL_RESUME == chunkPtr->state)
+    {
+        le_sem_Wait(chunkPtr->pauseSem);
+    }
 
-    ret = CurlRange(bufSize, startOffset, pkgPtr->range);
-    if (BUF_SIZE <= ret)
+    if ( (!chunkPtr->size) || (DWL_ERROR == chunkPtr->state) )
     {
         return DWL_FAULT;
     }
 
-    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOBODY, 0L);
-
-    memset(pkgPtr->chunk, 0, MAX_DATA_BUFFER_CHUNK);
-    pkgPtr->size = 0;
-    pkgPtr->offset = 0;
-
-    rc = curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_RANGE, pkgPtr->range);
-    if (CURLE_OK != rc)
+    if (bufSize > chunkPtr->size)
     {
-        LE_ERROR("failed to set curl range: %s", curl_easy_strerror(rc));
-        return DWL_FAULT;
+        bufSize = chunkPtr->size;
+        chunkPtr->size = 0;
+    }
+    else
+    {
+        chunkPtr->size -= bufSize;
     }
 
-    // will always succeed
-    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, WriteData);
+    startOffset -= chunkPtr->offset * MAX_DWL_SIZE;
 
-    // will always succeed
-    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEDATA, (void *)pkgPtr);
+    *dwlLenPtr = bufSize;
+     memcpy(bufPtr, chunkPtr->mem + startOffset, bufSize);
 
-    rc = curl_easy_perform(pkgPtr->curlPtr);
-    if (CURLE_OK != rc)
+    if (!chunkPtr->size)
     {
-        LE_ERROR("failed to perform curl request: %s", curl_easy_strerror(rc));
-        return DWL_FAULT;
+        chunkPtr->offset++;
+        chunkPtr->state = DWL_RESUME;
+        le_sem_Post(chunkPtr->resumeSem);
     }
-
-    *dwlLenPtr = pkgPtr->size;
-    memcpy(bufPtr, pkgPtr->chunk, pkgPtr->size);
 
     return DWL_OK;
 }
@@ -440,9 +576,11 @@ lwm2mcore_DwlResult_t EndDownload
 {
     packageDownloader_DownloadCtx_t *dwlCtxPtr;
     Package_t *pkgPtr;
+    Chunk_t *chunkPtr;
 
     dwlCtxPtr = (packageDownloader_DownloadCtx_t *)ctxPtr;
     pkgPtr = (Package_t *)dwlCtxPtr->ctxPtr;
+    chunkPtr = &pkgPtr->chunk;
 
     curl_easy_cleanup(pkgPtr->curlPtr);
 
@@ -453,6 +591,9 @@ lwm2mcore_DwlResult_t EndDownload
         LE_ERROR("failed to close fd: %m");
         return DWL_FAULT;
     }
+
+    le_sem_Delete(chunkPtr->pauseSem);
+    le_sem_Delete(chunkPtr->resumeSem);
 
     return DWL_OK;
 }

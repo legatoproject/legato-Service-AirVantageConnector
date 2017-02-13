@@ -8,23 +8,60 @@
  */
 
 #include <legato.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/epoll.h>
 #include <interfaces.h>
 #include <lwm2mcorePackageDownloader.h>
 #include <osPortUpdate.h>
 #include "packageDownloaderCallbacks.h"
 #include "packageDownloader.h"
 
-#define PKGDWL_PATH "/tmp/pkgdwl"
-#define FIFO_NAME   "fifo"
-#define FIFO_PATH   PKGDWL_PATH "/" FIFO_NAME
-#define STATE_PATH  PKGDWL_PATH "/" "state"
-#define RESULT_PATH PKGDWL_PATH "/" "result"
+//--------------------------------------------------------------------------------------------------
+/**
+ * Package download temporary directory
+ */
+//--------------------------------------------------------------------------------------------------
+#define PKGDWL_PATH         "/tmp/pkgdwl"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Fifo file name
+ */
+//--------------------------------------------------------------------------------------------------
+#define FIFO_NAME           "fifo"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Fifo file path
+ */
+//--------------------------------------------------------------------------------------------------
+#define FIFO_PATH           PKGDWL_PATH "/" FIFO_NAME
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Download state path
+ */
+//--------------------------------------------------------------------------------------------------
+#define STATE_PATH          PKGDWL_PATH "/" "state"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Result state path
+ */
+//--------------------------------------------------------------------------------------------------
+#define RESULT_PATH         PKGDWL_PATH "/" "result"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Package download directory mode
+ */
+//--------------------------------------------------------------------------------------------------
+#define PKGDWL_DIR_MODE     0700
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Fifo mode
+ */
+//--------------------------------------------------------------------------------------------------
+#define FIFO_MODE           0600
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -45,8 +82,6 @@ lwm2mcore_DwlResult_t packageDownloader_SetUpdateStateModified
         LE_ERROR("failed to open %s: %m", STATE_PATH);
         return DWL_FAULT;
     }
-
-    LE_DEBUG("update state %d", updateState);
 
     sprintf(buf, "%d", (int)updateState);
 
@@ -76,8 +111,6 @@ lwm2mcore_DwlResult_t packageDownloader_SetUpdateResultModified
         LE_ERROR("failed to open %s: %m", RESULT_PATH);
         return DWL_FAULT;
     }
-
-    LE_DEBUG("update result %d", updateResult);
 
     sprintf(buf, "%d", (int)updateResult);
 
@@ -327,7 +360,7 @@ void *packageDownloader_StoreSwPackage
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Downlod and store a package
+ * Download and store a package
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_StartDownload
@@ -342,7 +375,7 @@ le_result_t packageDownloader_StartDownload
     le_thread_Ref_t dwlRef;
     le_thread_Ref_t storeRef;
     struct stat st;
-    char *dwlType[3] = {
+    char *dwlType[2] = {
         [0] = "FW_UPDATE",
         [1] = "SW_UPDATE",
     };
@@ -353,22 +386,22 @@ le_result_t packageDownloader_StartDownload
     memcpy(data.packageUri, uriPtr, strlen(uriPtr));
     data.packageSize = 0;
 
-    if (stat(PKGDWL_PATH, &st) == -1)
+    if (-1 == stat(PKGDWL_PATH, &st))
     {
-        if (mkdir("/tmp/pkgdwl", 0700) == -1)
+        if (-1 == mkdir(PKGDWL_PATH, PKGDWL_DIR_MODE))
         {
             LE_ERROR("failed to create pkgdwl directory %m");
             return LE_FAULT;
         }
     }
 
-    if ( (-1 == mkfifo(FIFO_PATH, 0600)) && (EEXIST != errno) )
+    if ( (-1 == mkfifo(FIFO_PATH, FIFO_MODE)) && (EEXIST != errno) )
     {
         LE_ERROR("failed to create fifo: %m");
         return LE_FAULT;
     }
 
-    if (unlink(STATE_PATH) == -1)
+    if (-1 == unlink(STATE_PATH))
     {
         if (errno != ENOENT)
         {
@@ -377,7 +410,7 @@ le_result_t packageDownloader_StartDownload
         }
     }
 
-    if (unlink(RESULT_PATH) == -1)
+    if (-1 == unlink(RESULT_PATH))
     {
         if (errno != ENOENT)
         {
@@ -442,4 +475,3 @@ le_result_t packageDownloader_AbortDownload
 
     return LE_OK;
 }
-
