@@ -40,6 +40,17 @@ typedef void (*avcServer_UninstallHandlerFunc_t)
 );
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Prototype for handler used with avcServer_QueryDownload() to return download response.
+ */
+//--------------------------------------------------------------------------------------------------
+typedef void (*avcServer_DownloadHandlerFunc_t)
+(
+    void
+);
+
+
 
 //--------------------------------------------------------------------------------------------------
 // Interface functions
@@ -111,6 +122,29 @@ LE_SHARED void avcServer_SetUpdateType
 (
     le_avc_UpdateType_t updateType  ///< [IN]
 );
+
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Query the AVC Server if it's okay to proceed with an package download
+ *
+ * If a download can't proceed right away, then the handlerRef function will be called when it is
+ * okay to proceed with a download. Note that handlerRef will be called at most once.
+ *
+ * @return
+ *      - LE_OK if download can proceed right away (handlerRef will not be called)
+ *      - LE_BUSY if handlerRef will be called later to notify when download can proceed
+ *      - LE_FAULT on error
+ */
+//--------------------------------------------------------------------------------------------------
+LE_SHARED le_result_t avcServer_QueryDownload
+(
+    avcServer_DownloadHandlerFunc_t handlerRef  ///< [IN] Handler to receive download response.
+);
+
+
+
 
 
 //--------------------------------------------------------------------------------------------------

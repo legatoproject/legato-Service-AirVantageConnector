@@ -132,7 +132,6 @@ typedef struct
     DataTypes_t type;
     AccessBitMask_t access;
     bool isObserve;
-    pa_avc_LWM2MOperationDataRef_t readCallBackOpRef;
     uint8_t tokenLength;
     uint8_t token[8];
     union
@@ -460,7 +459,6 @@ static void InitDefaultFieldData
 )
 {
     fieldDataPtr->isObserve = false;
-    fieldDataPtr->readCallBackOpRef = NULL;
 
     switch ( fieldDataPtr->type )
     {
@@ -521,7 +519,8 @@ static le_result_t CreateFieldFromModel
     // Init with hard-coded defaults, which could get overwritten below.
     InitDefaultFieldData(fieldDataPtr);
 
-    if ( nodeType==LE_CFG_TYPE_EMPTY || nodeType==LE_CFG_TYPE_DOESNT_EXIST )
+    if (   ( nodeType == LE_CFG_TYPE_EMPTY )
+        || ( nodeType == LE_CFG_TYPE_DOESNT_EXIST ) )
     {
         LE_DEBUG("No default for name=%s", fieldDataPtr->name);
     }
@@ -1267,8 +1266,8 @@ static le_result_t CallFieldActionHandlers
         {
             // Client registered handlers should only be called by server actions, and server
             // registered handlers should only be called by client actions.
-            if ( ( handlerDataPtr->isClient && !isClient ) ||
-                 ( !handlerDataPtr->isClient && isClient ) )
+            if ( ( ( handlerDataPtr->isClient) && (!isClient) ) ||
+                 ( (!handlerDataPtr->isClient) && ( isClient) ) )
             {
                 handlerDataPtr->fieldActionHandlerPtr(instanceDataPtr,
                                                       fieldId,
@@ -1538,10 +1537,7 @@ le_result_t static SetInt
 {
     le_result_t result;
     FieldData_t* fieldDataPtr;
-    uint8_t valueData[256+1];  // +1 for null byte, if storing a string
-    size_t bytesWritten;
     int prevValue;
-    pa_avc_LWM2MOperationDataRef_t opRef;
 
     result = GetFieldFromInstance(instanceRef, fieldId, &fieldDataPtr);
 
@@ -1562,62 +1558,6 @@ le_result_t static SetInt
 
     // Call any registered handlers to be notified of write.
     CallFieldActionHandlers( instanceRef, fieldId, ASSET_DATA_ACTION_WRITE, isClient );
-
-    // Send a read response for read call back operation.
-    if (fieldDataPtr->readCallBackOpRef != NULL && isClient == true)
-    {
-        // Format the response string.
-        result = FormatString((char*)valueData, sizeof(valueData), "%i", fieldDataPtr->intValue);
-        bytesWritten = strlen((char*)valueData);
-
-        if ( result != LE_OK )
-        {
-            LE_ERROR("Failed to send read response.");
-            return LE_FAULT;
-        }
-
-        pa_avc_ReadCallBackReport(fieldDataPtr->readCallBackOpRef, valueData, bytesWritten);
-        fieldDataPtr->readCallBackOpRef = NULL;
-    }
-
-    //LE_PRINT_VALUE("%d", prevValue);
-    //LE_PRINT_VALUE("%d", value);
-
-    // Notify the server if observe is enabled and the value is changed.
-    // The server sends notify on entire object, so we need to send the TLV of entire
-    // object but include only the resource that changed.
-    if (fieldDataPtr->isObserve && prevValue != value && isClient == true)
-    {
-        assetData_AssetDataRef_t assetRef;
-        result = assetData_GetAssetRefById(instanceRef->assetDataPtr->appName,
-                                           instanceRef->assetDataPtr->assetId,
-                                           &assetRef);
-
-        if ( result == LE_OK)
-        {
-            result = WriteNotifyObjectToTLV(assetRef,
-                                            instanceRef->instanceId,
-                                            fieldId,
-                                            valueData,
-                                            sizeof(valueData),
-                                            &bytesWritten);
-            if ( result != LE_OK )
-            {
-                LE_ERROR("Failed to send lwm2m notification.");
-                return LE_FAULT;
-            }
-
-            opRef = pa_avc_CreateOpData(instanceRef->assetDataPtr->appName,
-                                        instanceRef->assetDataPtr->assetId,
-                                        -1,
-                                        -1,
-                                        PA_AVC_OPTYPE_NOTIFY,
-                                        fieldDataPtr->token,
-                                        fieldDataPtr->tokenLength);
-
-            pa_avc_NotifyChange(opRef, valueData, bytesWritten);
-        }
-    }
 
     return LE_OK;
 }
@@ -1643,10 +1583,7 @@ le_result_t static SetFloat
 {
     le_result_t result;
     FieldData_t* fieldDataPtr;
-    uint8_t valueData[256+1];  // +1 for null byte, if storing a string
-    size_t bytesWritten;
     float prevValue;
-    pa_avc_LWM2MOperationDataRef_t opRef;
 
     result = GetFieldFromInstance(instanceRef, fieldId, &fieldDataPtr);
     if ( result != LE_OK )
@@ -1666,62 +1603,6 @@ le_result_t static SetFloat
 
     // Call any registered handlers to be notified of write.
     CallFieldActionHandlers( instanceRef, fieldId, ASSET_DATA_ACTION_WRITE, isClient );
-
-    // Send a read response for read call back operation.
-    if (fieldDataPtr->readCallBackOpRef !=NULL && isClient == true)
-    {
-        // Format the response string.
-        result = FormatString((char*)valueData, sizeof(valueData), "%lf", fieldDataPtr->floatValue);
-        bytesWritten = strlen((char*)valueData);
-
-        if ( result != LE_OK )
-        {
-            LE_ERROR("Failed to send read response.");
-            return LE_FAULT;
-        }
-
-        pa_avc_ReadCallBackReport(fieldDataPtr->readCallBackOpRef, valueData, bytesWritten);
-        fieldDataPtr->readCallBackOpRef = NULL;
-    }
-
-    //LE_PRINT_VALUE("%lf", prevValue);
-    //LE_PRINT_VALUE("%lf", value);
-
-    // Notify the server if observe is enabled and the value is changed.
-    // The server sends notify on entire object, so we need to send the TLV of entire
-    // object but include only the resource that changed.
-    if (fieldDataPtr->isObserve && prevValue != value && isClient == true)
-    {
-        assetData_AssetDataRef_t assetRef;
-        result = assetData_GetAssetRefById(instanceRef->assetDataPtr->appName,
-                                           instanceRef->assetDataPtr->assetId,
-                                           &assetRef);
-
-        if ( result == LE_OK)
-        {
-            result = WriteNotifyObjectToTLV(assetRef,
-                                            instanceRef->instanceId,
-                                            fieldId,
-                                            valueData,
-                                            sizeof(valueData),
-                                            &bytesWritten);
-            if ( result != LE_OK )
-            {
-                LE_ERROR("Failed to send lwm2m notification.");
-                return LE_FAULT;
-            }
-
-            opRef = pa_avc_CreateOpData(instanceRef->assetDataPtr->appName,
-                                        instanceRef->assetDataPtr->assetId,
-                                        -1,
-                                        -1,
-                                        PA_AVC_OPTYPE_NOTIFY,
-                                        fieldDataPtr->token,
-                                        fieldDataPtr->tokenLength);
-
-            pa_avc_NotifyChange(opRef, valueData, bytesWritten);
-        }
-    }
 
     return LE_OK;
 }
@@ -1788,10 +1669,7 @@ le_result_t static SetBool
 {
     le_result_t result;
     FieldData_t* fieldDataPtr;
-    uint8_t valueData[256+1];  // +1 for null byte, if storing a string
-    size_t bytesWritten;
     bool prevValue;
-    pa_avc_LWM2MOperationDataRef_t opRef;
 
     result = GetFieldFromInstance(instanceRef, fieldId, &fieldDataPtr);
     if ( result != LE_OK )
@@ -1811,59 +1689,6 @@ le_result_t static SetBool
 
     // Call any registered handlers to be notified of write.
     CallFieldActionHandlers( instanceRef, fieldId, ASSET_DATA_ACTION_WRITE, isClient );
-
-    // Send a read response for read call back operation.
-    if (fieldDataPtr->readCallBackOpRef != NULL && isClient == true)
-    {
-        // Format the response string.
-        result = FormatString((char*)valueData, sizeof(valueData), "%i", fieldDataPtr->boolValue);
-        bytesWritten = strlen((char*)valueData);
-
-        if ( result != LE_OK )
-        {
-            LE_ERROR("Failed to send read response.");
-            return LE_FAULT;
-        }
-
-        pa_avc_ReadCallBackReport(fieldDataPtr->readCallBackOpRef, valueData, bytesWritten);
-        fieldDataPtr->readCallBackOpRef = NULL;
-    }
-
-    // Notify the server if observe is enabled and the value is changed.
-    // The server sends notify on entire object, so we need to send the TLV of entire
-    // object but include only the resource that changed.
-    if (fieldDataPtr->isObserve && prevValue != value && isClient == true)
-    {
-        assetData_AssetDataRef_t assetRef;
-        result = assetData_GetAssetRefById(instanceRef->assetDataPtr->appName,
-                                           instanceRef->assetDataPtr->assetId,
-                                           &assetRef);
-
-        if ( result == LE_OK)
-        {
-            result = WriteNotifyObjectToTLV(assetRef,
-                                            instanceRef->instanceId,
-                                            fieldId,
-                                            valueData,
-                                            sizeof(valueData),
-                                            &bytesWritten);
-            if ( result != LE_OK )
-            {
-                LE_ERROR("Failed to send lwm2m notification.");
-                return LE_FAULT;
-            }
-
-            opRef = pa_avc_CreateOpData(instanceRef->assetDataPtr->appName,
-                                        instanceRef->assetDataPtr->assetId,
-                                        -1,
-                                        -1,
-                                        PA_AVC_OPTYPE_NOTIFY,
-                                        fieldDataPtr->token,
-                                        fieldDataPtr->tokenLength);
-
-            pa_avc_NotifyChange(opRef, valueData, bytesWritten);
-        }
-    }
 
     return LE_OK;
 }
@@ -1933,10 +1758,7 @@ le_result_t static SetString
 {
     le_result_t result;
     FieldData_t* fieldDataPtr;
-    uint8_t valueData[256+1];  // +1 for null byte, if storing a string
-    size_t bytesWritten;
     char prevStr[STRING_VALUE_NUMBYTES];
-    pa_avc_LWM2MOperationDataRef_t opRef;
 
     result = GetFieldFromInstance(instanceRef, fieldId, &fieldDataPtr);
     if ( result != LE_OK )
@@ -1956,59 +1778,6 @@ le_result_t static SetString
 
     // Call any registered handlers to be notified of write.
     CallFieldActionHandlers( instanceRef, fieldId, ASSET_DATA_ACTION_WRITE, isClient );
-
-    // Send a read response for read call back operation.
-    if (fieldDataPtr->readCallBackOpRef != NULL && isClient == true)
-    {
-        // Format the response string.
-        le_utf8_Copy((char*)valueData, fieldDataPtr->strValuePtr, sizeof(valueData), NULL);
-        bytesWritten = strlen((char*)valueData);
-
-        if ( result != LE_OK )
-        {
-            LE_ERROR("Failed to send read response.");
-            return LE_FAULT;
-        }
-
-        pa_avc_ReadCallBackReport(fieldDataPtr->readCallBackOpRef, valueData, bytesWritten);
-        fieldDataPtr->readCallBackOpRef = NULL;
-    }
-
-    // Notify the server if observe is enabled and the value is changed.
-    // The server sends notify on entire object, so we need to send the TLV of entire
-    // object but include only the resource that changed.
-    if (fieldDataPtr->isObserve && strcmp(prevStr, strPtr) != 0 && isClient == true)
-    {
-        assetData_AssetDataRef_t assetRef;
-        result = assetData_GetAssetRefById(instanceRef->assetDataPtr->appName,
-                                           instanceRef->assetDataPtr->assetId,
-                                           &assetRef);
-
-        if ( result == LE_OK)
-        {
-            result = WriteNotifyObjectToTLV(assetRef,
-                                            instanceRef->instanceId,
-                                            fieldId,
-                                            valueData,
-                                            sizeof(valueData),
-                                            &bytesWritten);
-            if ( result != LE_OK )
-            {
-                LE_ERROR("Failed to send lwm2m notification.");
-                return LE_FAULT;
-            }
-
-            opRef = pa_avc_CreateOpData(instanceRef->assetDataPtr->appName,
-                                        instanceRef->assetDataPtr->assetId,
-                                        -1,
-                                        -1,
-                                        PA_AVC_OPTYPE_NOTIFY,
-                                        fieldDataPtr->token,
-                                        fieldDataPtr->tokenLength);
-
-            pa_avc_NotifyChange(opRef, valueData, bytesWritten);
-        }
-    }
 
     return result;
 }
@@ -2198,6 +1967,9 @@ static assetData_AssetActionHandlerRef_t AddAssetActionHandler
 
 
 //--------------------------------------------------------------------------------------------------
+// Interface functions
+//--------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------
 /**
  * Sends a registration update to the server and also used as a handler to receive
  * UpdateRequired indication. For create, RegistrationUpdate will be done by assetData create
@@ -2209,31 +1981,8 @@ void assetData_RegistrationUpdate
     void
 )
 {
-    // This size must the same as OBJ_PATH_MAX_LEN_V01 in qapi_lwm2m_v01.h
-    char assetList[4032];
-    int listSize;
-    int numAssets;
-
-    le_result_t rc;
-
-    rc = GetAssetList(assetList, sizeof(assetList), &listSize, &numAssets);
-    if (rc == LE_OK)
-    {
-        LE_DEBUG("Reg Update.");
-        pa_avc_RegistrationUpdate(assetList, listSize, numAssets);
-    }
-    else
-    {
-        //ToDo: Support REG_UPDATE of more than 4K
-        LE_ERROR("Asset data overflowed during registration update.");
-    }
-
-    // As a registration update already happened at this point, there is no need
-    // for the timer to kick off another one later.
-    le_timer_Stop(RegUpdateTimerRef);
+    LE_ERROR("unsupported function called.");
 }
-
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2246,22 +1995,9 @@ void assetData_RegUpdateIfNotObserved
     assetData_InstanceDataRef_t instanceRef    ///< The instance of object 9.
 )
 {
-    // If observe is enabled for object 9 state and result, don't force a registration
-    // update.
-    if ( (instanceRef != NULL) && assetData_IsObject9Observed(instanceRef) )
-    {
-        LE_DEBUG("Observe enabled on Object9.");
-        return;
-    }
-    else
-    {
-        assetData_RegistrationUpdate();
-    }
+    LE_ERROR("unsupported function called.");
 }
 
-//--------------------------------------------------------------------------------------------------
-// Interface functions
-//--------------------------------------------------------------------------------------------------
 
 
 //--------------------------------------------------------------------------------------------------
@@ -3282,7 +3018,6 @@ le_result_t assetData_server_SetString
 //--------------------------------------------------------------------------------------------------
 le_result_t assetData_server_GetValue
 (
-    pa_avc_LWM2MOperationDataRef_t opRef,       ///< [IN] Reference to LWM2M operation
     assetData_InstanceDataRef_t instanceRef,    ///< [IN] Asset instance to use
     int fieldId,                                ///< [IN] Field to read
     char* strBufPtr,                            ///< [OUT] The value read
@@ -3306,10 +3041,6 @@ le_result_t assetData_server_GetValue
     if (IsFieldReadCallBackExist(instanceRef, fieldDataPtr))
     {
         LE_DEBUG("Read call back exists.");
-
-        // Save the operation reference.
-        le_mem_AddRef(opRef);
-        fieldDataPtr->readCallBackOpRef = opRef;
 
         // Call any registered handlers to be notified of read.
         CallFieldActionHandlers( instanceRef, fieldId, ASSET_DATA_ACTION_READ, false );
@@ -4277,7 +4008,7 @@ static le_result_t ReadFieldValueFromTLV
     switch ( fieldDataPtr->type )
     {
         case DATA_TYPE_INT:
-            if ( valueNumBytes != 1 && valueNumBytes != 2 && valueNumBytes != 4 )
+            if ( (valueNumBytes != 1) && (valueNumBytes != 2) && (valueNumBytes != 4) )
             {
                 LE_ERROR("Invalid value length = %i", valueNumBytes);
                 result = LE_FAULT;
@@ -4316,7 +4047,7 @@ static le_result_t ReadFieldValueFromTLV
             break;
 
         case DATA_TYPE_FLOAT:
-            if ( valueNumBytes != 4 && valueNumBytes != 8 )
+            if ( (valueNumBytes != 4) && (valueNumBytes != 8) )
             {
                 LE_ERROR("Invalid value length = %i", valueNumBytes);
                 result = LE_FAULT;

@@ -11,7 +11,6 @@ provides:
 sources:
 {
     assetData.c
-    lwm2m.c
     avData.c
     avcServer.c
     // AVC

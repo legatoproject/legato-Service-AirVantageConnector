@@ -26,7 +26,6 @@
 #define LEGATO_ASSET_DATA_INCLUDE_GUARD
 
 #include "legato.h"
-#include "pa_avc.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -725,7 +724,6 @@ LE_SHARED le_result_t assetData_server_SetString
 //--------------------------------------------------------------------------------------------------
 LE_SHARED le_result_t assetData_server_GetValue
 (
-    pa_avc_LWM2MOperationDataRef_t opRef,       ///< [IN] Reference to LWM2M operation
     assetData_InstanceDataRef_t instanceRef,    ///< [IN] Asset instance to use
     int fieldId,                                ///< [IN] Field to read
     char* strBufPtr,                            ///< [OUT] The value read
