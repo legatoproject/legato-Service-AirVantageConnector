@@ -128,7 +128,7 @@ lwm2mcore_DwlResult_t packageDownloader_SetUpdateResultModified
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetUpdateState
 (
-    lwm2mcore_fwUpdateState_t *updateState
+    lwm2mcore_fwUpdateState_t *updateStatePtr
 )
 {
     FILE *file;
@@ -140,7 +140,7 @@ le_result_t packageDownloader_GetUpdateState
         if (ENOENT == errno)
         {
             LE_ERROR("download not started");
-            *updateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
+            *updateStatePtr = LWM2MCORE_FW_UPDATE_STATE_IDLE;
             return LE_OK;
         }
         LE_ERROR("failed to open %s: %m", STATE_PATH);
@@ -154,7 +154,7 @@ le_result_t packageDownloader_GetUpdateState
 
     LE_DEBUG("update state %s", buf);
 
-    *updateState = (int)strtol(buf, NULL, 10);
+    *updateStatePtr = (int)strtol(buf, NULL, 10);
 
     return LE_OK;
 }
@@ -166,7 +166,7 @@ le_result_t packageDownloader_GetUpdateState
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetUpdateResult
 (
-    lwm2mcore_fwUpdateResult_t *updateResult
+    lwm2mcore_fwUpdateResult_t *updateResultPtr
 )
 {
     FILE *file;
@@ -178,7 +178,7 @@ le_result_t packageDownloader_GetUpdateResult
         if (ENOENT == errno)
         {
             LE_ERROR("download not started");
-            *updateResult = LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL;
+            *updateResultPtr = LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL;
             return LE_OK;
         }
         LE_ERROR("failed to open %s: %m", RESULT_PATH);
@@ -192,7 +192,7 @@ le_result_t packageDownloader_GetUpdateResult
 
     LE_DEBUG("update result %s", buf);
 
-    *updateResult = (int)strtol(buf, NULL, 10);
+    *updateResultPtr = (int)strtol(buf, NULL, 10);
 
     return LE_OK;
 }
@@ -442,7 +442,7 @@ le_result_t packageDownloader_StartDownload
     pkgDwl.getInfo = GetInfo;
     pkgDwl.setUpdateState = packageDownloader_SetUpdateStateModified;
     pkgDwl.setUpdateResult = packageDownloader_SetUpdateResultModified;
-    pkgDwl.downloadRange = DownloadRange;
+    pkgDwl.download = Download;
     pkgDwl.storeRange = StoreRange;
     pkgDwl.endDownload = EndDownload;
     pkgDwl.ctxPtr = (void *)&dwlCtx;

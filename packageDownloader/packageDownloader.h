@@ -21,9 +21,9 @@
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    const char      *fifoPtr;               ///< store fifo pointer
-    void            *ctxPtr;                ///< context pointer
-    le_thread_Ref_t mainRef;                ///< main thread reference
+    const char*      fifoPtr;               ///< store FIFO pointer
+    void*            ctxPtr;                ///< context pointer
+    le_thread_Ref_t  mainRef;               ///< main thread reference
     void (*downloadPackage)(void *ctxPtr);  ///< download package callback
     void (*storePackage)(void *ctxPtr);     ///< store package callback
 }
@@ -56,7 +56,7 @@ lwm2mcore_DwlResult_t packageDownloader_SetUpdateResultModified
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetUpdateState
 (
-    lwm2mcore_fwUpdateState_t *updateState
+    lwm2mcore_fwUpdateState_t* updateStatePtr
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -66,7 +66,7 @@ le_result_t packageDownloader_GetUpdateState
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetUpdateResult
 (
-    lwm2mcore_fwUpdateResult_t *updateResult
+    lwm2mcore_fwUpdateResult_t* updateResultPtr
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -74,40 +74,40 @@ le_result_t packageDownloader_GetUpdateResult
  * Download package thread function
  */
 //--------------------------------------------------------------------------------------------------
-void *packageDownloader_DownloadPackage
+void* packageDownloader_DownloadPackage
 (
-    void *ctxPtr
+    void* ctxPtr
 );
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Store fw package thread function
+ * Store FW package thread function
  */
 //--------------------------------------------------------------------------------------------------
-void *packageDownloader_StoreFwPackage
+void* packageDownloader_StoreFwPackage
 (
-    void *ctxPtr
+    void* ctxPtr
 );
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Store Sw package thread function
+ * Store SW package thread function
  */
 //--------------------------------------------------------------------------------------------------
-void *packageDownloader_StoreSwPackage
+void* packageDownloader_StoreSwPackage
 (
-    void *ctxPtr
+    void* ctxPtr
 );
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Downlod and store a package
+ * Download and store a package
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_StartDownload
 (
-    const char  *uriPtr,
-    lwm2mcore_updateType_t  type
+    const char*            uriPtr,
+    lwm2mcore_updateType_t type
 );
 
 //--------------------------------------------------------------------------------------------------

@@ -21,8 +21,8 @@
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t InitDownload
 (
-    char *uriPtr,
-    void *ctxPtr
+    char* uriPtr,
+    void* ctxPtr
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -32,8 +32,8 @@ lwm2mcore_DwlResult_t InitDownload
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t GetInfo
 (
-    lwm2mcore_PackageDownloaderData_t   *dataPtr,
-    void                                *ctxPtr
+    lwm2mcore_PackageDownloaderData_t* dataPtr,
+    void*                              ctxPtr
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -58,16 +58,13 @@ lwm2mcore_DwlResult_t SetUpdateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Download range callback definition
+ * Download callback definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t DownloadRange
+lwm2mcore_DwlResult_t Download
 (
-    uint8_t     *bufPtr,
-    size_t      bufSize,
-    uint64_t    startOffset,
-    size_t      *dwlLenPtr,
-    void        *ctxPtr
+    uint64_t startOffset,
+    void*    ctxPtr
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -77,10 +74,10 @@ lwm2mcore_DwlResult_t DownloadRange
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t StoreRange
 (
-    uint8_t     *bufPtr,
-    size_t      bufSize,
-    uint64_t    offset,
-    void        *ctxPtr
+    uint8_t* bufPtr,
+    size_t   bufSize,
+    uint64_t offset,
+    void*    ctxPtr
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -90,7 +87,7 @@ lwm2mcore_DwlResult_t StoreRange
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t EndDownload
 (
-    void *ctxPtr
+    void* ctxPtr
 );
 
 #endif /* _PACKAGEDOWNLOADERCALLBACKS_H */
