@@ -1,0 +1,22 @@
+executables:
+{
+    ts = ( tsComponent )
+}
+
+processes:
+{
+    run:
+    {
+        // Normally should be executed with 'app runProc' using:
+        // app runProc timeseries --exe=ts -- x
+        // where x is the test case number.
+        //( ts )
+    }
+}
+
+start: manual
+
+bindings:
+{
+    ts.tsComponent.le_avdata -> avcService.le_avdata
+}

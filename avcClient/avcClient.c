@@ -368,3 +368,34 @@ le_result_t avcClient_Update
         return LE_FAULT;
     }
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * LWM2M client entry point to push data
+ *
+ * @return
+ *      - LE_OK in case of success
+ *      - LE_FAULT in case of failure
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcClient_Push
+(
+    uint8_t* payload,
+    size_t payloadLength,
+    void* callback
+
+)
+{
+    LE_DEBUG("Push data");
+
+    if (true == lwm2mcore_push(Context, payload, payloadLength, callback))
+    {
+        LE_DEBUG("Push success");
+        return LE_OK;
+    }
+    else
+    {
+        LE_INFO("Push failed");
+        return LE_FAULT;
+    }
+}

@@ -15,6 +15,7 @@
 #include "interfaces.h"
 
 #include "assetData.h"
+#include "timeseriesData.h"
 #include "le_print.h"
 
 
@@ -59,6 +60,20 @@ InstanceRefData_t;
 
 
 //--------------------------------------------------------------------------------------------------
+/**
+ * Data associated with an record reference. This is used for keeping track of which client
+ * is using the record ref, so that everything can be cleaned up when the client dies.
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    le_avdata_RecordRef_t recRef;               ///< Record ref
+    le_msg_SessionRef_t clientSessionRef;       ///< Client using this record ref
+}
+RecordRefData_t;
+
+
+//--------------------------------------------------------------------------------------------------
 // Local Data
 //--------------------------------------------------------------------------------------------------
 
@@ -81,10 +96,27 @@ static le_mem_PoolRef_t InstanceRefDataPoolRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Record reference data memory pool. Used for keeping track of the client that is using a
+ * specific record ref. Initialized in avData_Init().
+ */
+//--------------------------------------------------------------------------------------------------
+static le_mem_PoolRef_t RecordRefDataPoolRef = NULL;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Safe Reference Map for instance references. Initialized in avData_Init().
  */
 //--------------------------------------------------------------------------------------------------
 static le_ref_MapRef_t InstanceRefMap;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Safe Reference Map for record references. Initialized in avData_Init().
+ */
+//--------------------------------------------------------------------------------------------------
+static le_ref_MapRef_t RecordRefMap;
 
 
 //--------------------------------------------------------------------------------------------------
@@ -163,6 +195,26 @@ static void ClientCloseSessionHandler
             le_ref_DeleteRef( InstanceRefMap, (void*)le_ref_GetSafeRef(iterRef) );
         }
     }
+
+    // Search for the record references used by the closed client, and clean up any data.
+    iterRef = le_ref_GetIterator(RecordRefMap);
+    RecordRefData_t* recRefDataPtr;
+
+    while ( le_ref_NextNode(iterRef) == LE_OK )
+    {
+        recRefDataPtr = le_ref_GetValue(iterRef);
+
+        if ( recRefDataPtr->clientSessionRef == sessionRef )
+        {
+            // Delete instance data, and also delete asset data, if last instance is deleted
+            timeSeries_Delete(recRefDataPtr->recRef);
+
+            // Delete safe reference and associated data
+            le_mem_Release((void*)recRefDataPtr);
+            le_ref_DeleteRef( RecordRefMap, (void*)le_ref_GetSafeRef(iterRef) );
+        }
+    }
+
 
     // Send registration update after the asset is removed.
     assetData_RegistrationUpdate();
@@ -713,6 +765,272 @@ void le_avdata_SetBinary
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Get the real record ref from the safe ref
+ */
+//--------------------------------------------------------------------------------------------------
+le_avdata_RecordRef_t GetRecRefFromSafeRef
+(
+    void* safeRef,
+    const char* funcNamePtr
+)
+{
+    RecordRefData_t* recRefDataPtr = le_ref_Lookup(RecordRefMap, safeRef);
+
+    if (recRefDataPtr == NULL)
+    {
+        LE_KILL_CLIENT("Invalid reference %p from %s", safeRef, funcNamePtr);
+        return NULL;
+    }
+
+    return recRefDataPtr->recRef;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Create a timeseries record
+ *
+ * @return Reference to the record
+ */
+//--------------------------------------------------------------------------------------------------
+le_avdata_RecordRef_t le_avdata_CreateRecord
+(
+    void
+)
+{
+    LE_DEBUG("Creating record");
+    timeSeries_RecordRef_t recRef;
+
+    LE_ASSERT(timeSeries_Create(&recRef) == LE_OK);
+    LE_ASSERT(recRef != NULL);
+
+    // Return a safe reference for the record
+    RecordRefData_t* recRefDataPtr = le_mem_ForceAlloc(RecordRefDataPoolRef);
+
+    recRefDataPtr->clientSessionRef = le_avdata_GetClientSessionRef();
+    recRefDataPtr->recRef = recRef;
+
+    return le_ref_CreateRef(RecordRefMap, recRefDataPtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete a timeseries record
+ */
+//--------------------------------------------------------------------------------------------------
+void le_avdata_DeleteRecord
+(
+    le_avdata_RecordRef_t recordRef
+        ///< [IN]
+)
+{
+    // Map safeRef to desired data
+    recordRef = GetRecRefFromSafeRef(recordRef, __func__);
+
+    // delete record data
+    timeSeries_Delete(recordRef);
+
+    le_ref_IterRef_t iterRef = le_ref_GetIterator(RecordRefMap);
+    RecordRefData_t* recRefDataPtr;
+
+    // remove safe ref
+    while ( le_ref_NextNode(iterRef) == LE_OK )
+    {
+        recRefDataPtr = le_ref_GetValue(iterRef);
+
+        if ( recRefDataPtr->recRef == recordRef )
+        {
+            le_mem_Release((void*)recRefDataPtr);
+            le_ref_DeleteRef(RecordRefMap, (void*)le_ref_GetSafeRef(iterRef));
+            break;
+        }
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Accumulate int data
+ *
+ * @note The client will be terminated if the recordRef is not valid, or the resource doesn't exist
+ *
+ * @return:
+ *      - LE_OK on success
+ *      - LE_NO_MEMORY if record is full
+ *      - LE_FAULT on any other error
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avdata_RecordInt
+(
+    le_avdata_RecordRef_t recordRef,
+        ///< [IN]
+
+    const char* path,
+        ///< [IN]
+
+    int32_t value,
+        ///< [IN]
+
+    uint64_t timestamp
+        ///< [IN]
+)
+{
+    le_result_t result;
+
+    // Map safeRef to desired data
+    recordRef = GetRecRefFromSafeRef(recordRef, __func__);
+
+    result = timeSeries_AddInt(recordRef, path, value, timestamp);
+
+    return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Accumulate float data
+ *
+ * @note The client will be terminated if the recordRef is not valid, or the resource doesn't exist
+ *
+ * @return:
+ *      - LE_OK on success
+ *      - LE_NO_MEMORY if record is full
+ *      - LE_FAULT on any other error
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avdata_RecordFloat
+(
+    le_avdata_RecordRef_t recordRef,
+        ///< [IN]
+
+    const char* path,
+        ///< [IN]
+
+    double value,
+        ///< [IN]
+
+    uint64_t timestamp
+        ///< [IN]
+)
+{
+    le_result_t result;
+
+    // Map safeRef to desired data
+    recordRef = GetRecRefFromSafeRef(recordRef, __func__);
+
+    result = timeSeries_AddFloat(recordRef, path, value, timestamp);
+
+    return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Accumulate boolean data
+ *
+ * @note The client will be terminated if the recordRef is not valid, or the resource doesn't exist
+ *
+ * @return:
+ *      - LE_OK on success
+ *      - LE_NO_MEMORY if record is full
+ *      - LE_FAULT on any other error
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avdata_RecordBool
+(
+    le_avdata_RecordRef_t recordRef,
+        ///< [IN]
+
+    const char* path,
+        ///< [IN]
+
+    bool value,
+        ///< [IN]
+
+    uint64_t timestamp
+        ///< [IN]
+)
+{
+    le_result_t result;
+
+    // Map safeRef to desired data
+    recordRef = GetRecRefFromSafeRef(recordRef, __func__);
+
+    result = timeSeries_AddBool(recordRef, path, value, timestamp);
+
+    return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Accumulate string data
+ *
+ * @note The client will be terminated if the recordRef is not valid, or the resource doesn't exist
+ *
+ * @return:
+ *      - LE_OK on success
+ *      - LE_NO_MEMORY if record is full
+ *      - LE_FAULT on any other error
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avdata_RecordString
+(
+    le_avdata_RecordRef_t recordRef,
+        ///< [IN]
+
+    const char* path,
+        ///< [IN]
+
+    const char* value,
+        ///< [IN]
+
+    uint64_t timestamp
+        ///< [IN]
+)
+{
+    le_result_t result;
+
+    // Map safeRef to desired data
+    recordRef = GetRecRefFromSafeRef(recordRef, __func__);
+
+    result = timeSeries_AddString(recordRef, path, value, timestamp);
+
+    return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Push record to the server
+ *
+* @return:
+ *      - LE_OK on success.
+ *      - LE_FAULT on any other error
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avdata_PushRecord
+(
+    le_avdata_RecordRef_t recordRef,
+        ///< [IN]
+
+    le_avdata_CallbackResultFunc_t handlerPtr,
+        ///< [IN]
+
+    void* contextPtr
+        ///< [IN]
+)
+{
+    le_result_t result;
+    recordRef = GetRecRefFromSafeRef(recordRef, __func__);
+    result = timeSeries_PushRecord(recordRef, handlerPtr, contextPtr);
+    return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Init this sub-component
  */
 //--------------------------------------------------------------------------------------------------
@@ -723,11 +1041,14 @@ void avData_Init
 {
     FieldEventDataPoolRef = le_mem_CreatePool("Field event data pool", sizeof(FieldEventData_t));
     InstanceRefDataPoolRef = le_mem_CreatePool("Instance ref data pool", sizeof(InstanceRefData_t));
+    RecordRefDataPoolRef = le_mem_CreatePool("Record ref data pool", sizeof(RecordRefData_t));
 
     // Create safe reference map for instance references. The size of the map should be based on
     // the expected number of user data instances across all apps.  For now, budget for 30 apps
     // and 10 instances per app.  This can always be increased/decreased later, if needed.
     InstanceRefMap = le_ref_CreateMap("InstRefMap", 300);
+
+    RecordRefMap = le_ref_CreateMap("RecRefMap", 300);
 
     // Add a handler for client session closes
     le_msg_AddServiceCloseHandler( le_avdata_GetServiceRef(), ClientCloseSessionHandler, NULL );
