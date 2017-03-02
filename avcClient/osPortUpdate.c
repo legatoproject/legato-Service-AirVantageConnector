@@ -24,12 +24,14 @@ static le_timer_Ref_t LaunchUpdateTimer;
  * Called when the install defer timer expires.
  */
 //--------------------------------------------------------------------------------------------------
-void LaunchUpdateTimerExpiryHandler
+static void LaunchUpdateTimerExpiryHandler
 (
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    lwm2mcore_updateType_t updateType = (intptr_t)le_timer_GetContextPtr(timerRef);
+    lwm2mcore_updateType_t updateType;
+
+    updateType = (lwm2mcore_updateType_t)le_timer_GetContextPtr(timerRef);
 
     switch (updateType)
     {
@@ -71,8 +73,8 @@ lwm2mcore_sid_t os_portUpdatePushPackage
 (
     lwm2mcore_updateType_t type,    ///< [IN] Update type
     uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
-    char* bufferPtr,                ///< [INOUT] data buffer
-    size_t len                      ///< [IN] length of input buffer
+    char* bufferPtr,                ///< [INOUT] Data buffer
+    size_t len                      ///< [IN] Length of input buffer
 )
 {
     return LWM2MCORE_ERR_OP_NOT_SUPPORTED;
@@ -97,8 +99,8 @@ lwm2mcore_sid_t os_portUpdateSetPackageUri
 (
     lwm2mcore_updateType_t type,    ///< [IN] Update type
     uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
-    char* bufferPtr,                ///< [INOUT] data buffer
-    size_t len                      ///< [IN] length of input buffer
+    char* bufferPtr,                ///< [INOUT] Data buffer
+    size_t len                      ///< [IN] Length of input buffer
 )
 {
     lwm2mcore_sid_t sid;
@@ -165,8 +167,8 @@ lwm2mcore_sid_t os_portUpdateGetPackageUri
 (
     lwm2mcore_updateType_t type,    ///< [IN] Update type
     uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
-    char* bufferPtr,                ///< [INOUT] data buffer
-    size_t* lenPtr                  ///< [INOUT] length of input buffer and length of the returned
+    char* bufferPtr,                ///< [INOUT] Data buffer
+    size_t* lenPtr                  ///< [INOUT] Length of input buffer and length of the returned
                                     ///< data
 )
 {
@@ -202,8 +204,8 @@ lwm2mcore_sid_t os_portUpdateLaunchUpdate
 (
     lwm2mcore_updateType_t type,    ///< [IN] Update type
     uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
-    char* bufferPtr,                ///< [INOUT] data buffer
-    size_t len                      ///< [IN] length of input buffer
+    char* bufferPtr,                ///< [INOUT] Data buffer
+    size_t len                      ///< [IN] Length of input buffer
 )
 {
     lwm2mcore_sid_t sid;
@@ -217,7 +219,7 @@ lwm2mcore_sid_t os_portUpdateLaunchUpdate
         le_clk_Time_t interval = {2, 0};
         LaunchUpdateTimer = le_timer_Create("launch update timer");
         if (   (LE_OK != le_timer_SetHandler(LaunchUpdateTimer, LaunchUpdateTimerExpiryHandler))
-            || (LE_OK != le_timer_SetContextPtr(LaunchUpdateTimer, (void*)(intptr_t)type))
+            || (LE_OK != le_timer_SetContextPtr(LaunchUpdateTimer, (void*)type))
             || (LE_OK != le_timer_SetInterval(LaunchUpdateTimer, interval))
             || (LE_OK != le_timer_Start(LaunchUpdateTimer))
            )

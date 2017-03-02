@@ -19,7 +19,7 @@
  * Initialize download callback definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t InitDownload
+lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
 (
     char* uriPtr,
     void* ctxPtr
@@ -30,7 +30,7 @@ lwm2mcore_DwlResult_t InitDownload
  * Get package information callback definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t GetInfo
+lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
 (
     lwm2mcore_PackageDownloaderData_t* dataPtr,
     void*                              ctxPtr
@@ -41,7 +41,7 @@ lwm2mcore_DwlResult_t GetInfo
  * Set update status callback definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t SetUpdateState
+lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateState
 (
     lwm2mcore_fwUpdateState_t updateState
 );
@@ -51,7 +51,7 @@ lwm2mcore_DwlResult_t SetUpdateState
  * Set update result callback definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t SetUpdateResult
+lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateResult
 (
     lwm2mcore_fwUpdateResult_t updateResult
 );
@@ -61,7 +61,7 @@ lwm2mcore_DwlResult_t SetUpdateResult
  * Download callback definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t Download
+lwm2mcore_DwlResult_t pkgDwlCb_Download
 (
     uint64_t startOffset,
     void*    ctxPtr
@@ -72,7 +72,7 @@ lwm2mcore_DwlResult_t Download
  * Store range callback definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t StoreRange
+lwm2mcore_DwlResult_t pkgDwlCb_StoreRange
 (
     uint8_t* bufPtr,
     size_t   bufSize,
@@ -85,7 +85,7 @@ lwm2mcore_DwlResult_t StoreRange
  * End download callback definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t EndDownload
+lwm2mcore_DwlResult_t pkgDwlCb_EndDownload
 (
     void* ctxPtr
 );

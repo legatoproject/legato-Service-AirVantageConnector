@@ -18,8 +18,8 @@ sources:
     ../avcClient/osPortSecurity.c
     ../avcClient/osPortDevice.c
     ../avcClient/osPortUpdate.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloaderCallbacks.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloader.c
+    ../packageDownloader/packageDownloaderCallbacks.c
+    ../packageDownloader/packageDownloader.c
 
     // LWM2MCore
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/dtlsConnection.c

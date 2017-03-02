@@ -65,6 +65,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Update state and update result buffer size
+ */
+//--------------------------------------------------------------------------------------------------
+#define BUFSIZE             3
+
+//--------------------------------------------------------------------------------------------------
+/**
  * SetUpdateState temporary callback function definition
  */
 //--------------------------------------------------------------------------------------------------
@@ -74,7 +81,7 @@ lwm2mcore_DwlResult_t packageDownloader_SetUpdateStateModified
 )
 {
     FILE *file;
-    char buf[2];
+    char buf[BUFSIZE];
 
     file = fopen(STATE_PATH, "w");
     if (!file)
@@ -83,7 +90,7 @@ lwm2mcore_DwlResult_t packageDownloader_SetUpdateStateModified
         return DWL_FAULT;
     }
 
-    sprintf(buf, "%d", (int)updateState);
+    snprintf(buf, BUFSIZE, "%d", (int)updateState);
 
     fwrite(buf, strlen(buf), 1, file);
 
@@ -103,7 +110,7 @@ lwm2mcore_DwlResult_t packageDownloader_SetUpdateResultModified
 )
 {
     FILE *file;
-    char buf[2];
+    char buf[BUFSIZE];
 
     file = fopen(RESULT_PATH, "w");
     if (!file)
@@ -112,7 +119,7 @@ lwm2mcore_DwlResult_t packageDownloader_SetUpdateResultModified
         return DWL_FAULT;
     }
 
-    sprintf(buf, "%d", (int)updateResult);
+    snprintf(buf, BUFSIZE, "%d", (int)updateResult);
 
     fwrite(buf, strlen(buf), 1, file);
 
@@ -132,7 +139,13 @@ le_result_t packageDownloader_GetUpdateState
 )
 {
     FILE *file;
-    char buf[2];
+    char buf[BUFSIZE];
+
+    if (!updateStatePtr)
+    {
+        LE_ERROR("invalid input parameter");
+        return LE_FAULT;
+    }
 
     file = fopen(STATE_PATH, "r");
     if (!file)
@@ -147,8 +160,8 @@ le_result_t packageDownloader_GetUpdateState
         return LE_FAULT;
     }
 
-    memset(buf, 0, 2);
-    fread(buf, 2, 1, file);
+    memset(buf, 0, BUFSIZE);
+    fread(buf, BUFSIZE, 1, file);
 
     fclose(file);
 
@@ -170,7 +183,13 @@ le_result_t packageDownloader_GetUpdateResult
 )
 {
     FILE *file;
-    char buf[2];
+    char buf[BUFSIZE];
+
+    if (!updateResultPtr)
+    {
+        LE_ERROR("invalid input parameter");
+        return LE_FAULT;
+    }
 
     file = fopen(RESULT_PATH, "r");
     if (!file)
@@ -185,8 +204,8 @@ le_result_t packageDownloader_GetUpdateResult
         return LE_FAULT;
     }
 
-    memset(buf, 0, 2);
-    fread(buf, 2, 1, file);
+    memset(buf, 0, BUFSIZE);
+    fread(buf, BUFSIZE, 1, file);
 
     fclose(file);
 
@@ -217,7 +236,7 @@ static le_result_t CheckSystemState
         return LE_FAULT;
     }
 
-    if (isSync == false)
+    if (false == isSync)
     {
         result = le_fwupdate_DualSysSync();
         if (result != LE_OK)
@@ -441,13 +460,13 @@ le_result_t packageDownloader_StartDownload
     }
 
     pkgDwl.data = data;
-    pkgDwl.initDownload = InitDownload;
-    pkgDwl.getInfo = GetInfo;
+    pkgDwl.initDownload = pkgDwlCb_InitDownload;
+    pkgDwl.getInfo = pkgDwlCb_GetInfo;
     pkgDwl.setUpdateState = packageDownloader_SetUpdateStateModified;
     pkgDwl.setUpdateResult = packageDownloader_SetUpdateResultModified;
-    pkgDwl.download = Download;
-    pkgDwl.storeRange = StoreRange;
-    pkgDwl.endDownload = EndDownload;
+    pkgDwl.download = pkgDwlCb_Download;
+    pkgDwl.storeRange = pkgDwlCb_StoreRange;
+    pkgDwl.endDownload = pkgDwlCb_EndDownload;
     pkgDwl.ctxPtr = (void *)&dwlCtx;
 
     dwlRef = le_thread_Create("Downloader", (void *)dwlCtx.downloadPackage,

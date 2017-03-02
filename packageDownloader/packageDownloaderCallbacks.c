@@ -197,7 +197,7 @@ static int GetDownloadInfo
  * InitDownload callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t InitDownload
+lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
 (
     char* uriPtr,
     void* ctxPtr
@@ -285,7 +285,7 @@ lwm2mcore_DwlResult_t InitDownload
  * GetInfo callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t GetInfo
+lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
 (
     lwm2mcore_PackageDownloaderData_t* dataPtr,
     void*                              ctxPtr
@@ -313,7 +313,7 @@ lwm2mcore_DwlResult_t GetInfo
  * SetUpdateState callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t SetUpdateState
+lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateState
 (
     lwm2mcore_fwUpdateState_t updateState
 )
@@ -326,7 +326,7 @@ lwm2mcore_DwlResult_t SetUpdateState
  * SetUpdateResult callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t SetUpdateResult
+lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateResult
 (
     lwm2mcore_fwUpdateResult_t updateResult
 )
@@ -339,7 +339,7 @@ lwm2mcore_DwlResult_t SetUpdateResult
  * Download callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t Download
+lwm2mcore_DwlResult_t pkgDwlCb_Download
 (
     uint64_t    startOffset,
     void*       ctxPtr
@@ -380,7 +380,7 @@ lwm2mcore_DwlResult_t Download
  * StoreRange callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t StoreRange
+lwm2mcore_DwlResult_t pkgDwlCb_StoreRange
 (
     uint8_t* bufPtr,
     size_t   bufSize,
@@ -417,7 +417,7 @@ lwm2mcore_DwlResult_t StoreRange
  * EndDownload callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t EndDownload
+lwm2mcore_DwlResult_t pkgDwlCb_EndDownload
 (
     void* ctxPtr
 )
