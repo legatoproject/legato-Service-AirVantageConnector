@@ -258,6 +258,9 @@ void *packageDownloader_DownloadPackage
     packageDownloader_DownloadCtx_t *dwlCtxPtr;
     static int ret = 0;
 
+    // Connect to services used by this thread
+    secStoreGlobal_ConnectService();
+
     pkgDwlPtr = (lwm2mcore_PackageDownloader_t *)ctxPtr;
     dwlCtxPtr = (packageDownloader_DownloadCtx_t *)pkgDwlPtr->ctxPtr;
 
