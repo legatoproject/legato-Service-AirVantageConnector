@@ -497,3 +497,15 @@ void avcClient_SendList
     lwm2mcore_updateSwList(Context, lwm2mObjListPtr, objListLen);
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Returns the context of this client
+ */
+//--------------------------------------------------------------------------------------------------
+int avcClient_GetContext
+(
+    void
+)
+{
+    return Context;
+}
