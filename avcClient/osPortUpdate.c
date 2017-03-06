@@ -10,7 +10,8 @@
 #include "legato.h"
 #include "interfaces.h"
 #include "osPortUpdate.h"
-#include <packageDownloader.h>
+#include "packageDownloader.h"
+#include "packageDownloaderUpdateInfo.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -37,7 +38,7 @@ static void LaunchUpdateTimerExpiryHandler
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
             LE_DEBUG("Launch FW update");
-            packageDownloader_SetUpdateStateModified(LWM2MCORE_FW_UPDATE_STATE_UPDATING);
+            packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING);
             le_fwupdate_DualSysSwap();
             break;
 
@@ -103,50 +104,42 @@ lwm2mcore_sid_t os_portUpdateSetPackageUri
     size_t len                      ///< [IN] Length of input buffer
 )
 {
-    lwm2mcore_sid_t sid;
-    LE_DEBUG("URI : len %d", len);
+    LE_DEBUG("URI: len %d", len);
 
     if (0 == len)
     {
-        /* If len is 0, then :
-         * the Update State shall be set to default value
-         * the package URI is deleted from storage file
-         * any active download is suspended
-         */
-        packageDownloader_AbortDownload();
-        sid = LWM2MCORE_ERR_COMPLETED_OK;
-    }
-    else
-    {
-        /* Parameter check */
-        if ((!bufferPtr)
-         || (LWM2MCORE_PACKAGE_URI_MAX_LEN < len)
-         || (LWM2MCORE_MAX_UPDATE_TYPE <= type))
+        // If length is 0, then the Update State shall be set to default value,
+        // any active download is suspended and the package URI is deleted from storage file.
+        if (LE_OK != packageDownloader_AbortDownload())
         {
-            LE_INFO("os_portUpdateWritePackageUri : bad param");
-            sid = LWM2MCORE_ERR_INVALID_ARG;
+            return LWM2MCORE_ERR_GENERAL_ERROR;
         }
-        else
-        {
-            /* Package URI: LWM2MCORE_PACKAGE_URI_MAX_LEN+1 for null byte: string format */
-            uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
-            memset(downloadUri, 0, LWM2MCORE_PACKAGE_URI_MAX_LEN+1);
-            memcpy(downloadUri, bufferPtr, len);
 
-            LE_DEBUG("Request to download firmware update from URL : %s, len %d", downloadUri, len);
-            /* Call API to launch the package download */
-            if (LE_FAULT == packageDownloader_StartDownload(downloadUri, type))
-            {
-                sid = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            else
-            {
-                sid = LWM2MCORE_ERR_COMPLETED_OK;
-            }
-        }
+        return LWM2MCORE_ERR_COMPLETED_OK;
     }
-    LE_DEBUG("SetPackageUri type %d: %d", type, sid);
-    return sid;
+
+    // Parameter check
+    if (   (!bufferPtr)
+        || (LWM2MCORE_PACKAGE_URI_MAX_LEN < len)
+        || (LWM2MCORE_MAX_UPDATE_TYPE <= type))
+    {
+        LE_INFO("os_portUpdateWritePackageUri : bad parameter");
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    // Package URI: LWM2MCORE_PACKAGE_URI_MAX_LEN+1 for null byte: string format
+    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
+    memset(downloadUri, 0, LWM2MCORE_PACKAGE_URI_MAX_LEN+1);
+    memcpy(downloadUri, bufferPtr, len);
+    LE_DEBUG("Request to download firmware update from URL : %s, len %d", downloadUri, len);
+
+    // Call API to launch the package download
+    if (LE_OK != packageDownloader_StartDownload(downloadUri, type))
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -263,24 +256,37 @@ lwm2mcore_sid_t os_portUpdateGetUpdateState
     }
     else
     {
-        /* Call API to get the update state */
-        if (LWM2MCORE_FW_UPDATE_TYPE == type)
+        // Call API to get the update state
+        switch (type)
         {
-            /* Firmware update */
-            if (LE_OK == packageDownloader_GetUpdateState(updateStatePtr))
-            {
-                sid = LWM2MCORE_ERR_COMPLETED_OK;
-                LE_DEBUG("updateState : %d", *updateStatePtr);
-            }
-            else
-            {
-                sid = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-        }
-        else
-        {
-            /* Software update */
-            sid = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            case LWM2MCORE_FW_UPDATE_TYPE:
+                if (LE_OK == packageDownloader_GetFwUpdateState(updateStatePtr))
+                {
+                    sid = LWM2MCORE_ERR_COMPLETED_OK;
+                    LE_DEBUG("updateState: %d", *updateStatePtr);
+                }
+                else
+                {
+                    sid = LWM2MCORE_ERR_GENERAL_ERROR;
+                }
+                break;
+
+            case LWM2MCORE_SW_UPDATE_TYPE:
+                if (LE_OK == packageDownloader_GetSwUpdateState(updateStatePtr))
+                {
+                    sid = LWM2MCORE_ERR_COMPLETED_OK;
+                    LE_DEBUG("updateState: %d", *updateStatePtr);
+                }
+                else
+                {
+                    sid = LWM2MCORE_ERR_GENERAL_ERROR;
+                }
+                break;
+
+            default:
+                LE_ERROR("unknown update type %d", type);
+                sid = LWM2MCORE_ERR_INVALID_ARG;
+                break;
         }
     }
     LE_DEBUG("GetUpdateState type %d: %d", type, sid);
@@ -315,24 +321,37 @@ lwm2mcore_sid_t os_portUpdateGetUpdateResult
     }
     else
     {
-        /* Call API to get the update result */
-        if (LWM2MCORE_FW_UPDATE_TYPE == type)
+        // Call API to get the update result
+        switch (type)
         {
-            /* Firmware update */
-            if (LE_OK == packageDownloader_GetUpdateResult(updateResultPtr))
-            {
-                LE_DEBUG("updateResult : %d", *updateResultPtr);
-                sid = LWM2MCORE_ERR_COMPLETED_OK;
-            }
-            else
-            {
-                sid = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-        }
-        else
-        {
-            /* Software update */
-            sid = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            case LWM2MCORE_FW_UPDATE_TYPE:
+                if (LE_OK == packageDownloader_GetFwUpdateResult(updateResultPtr))
+                {
+                    sid = LWM2MCORE_ERR_COMPLETED_OK;
+                    LE_DEBUG("updateResult: %d", *updateResultPtr);
+                }
+                else
+                {
+                    sid = LWM2MCORE_ERR_GENERAL_ERROR;
+                }
+                break;
+
+            case LWM2MCORE_SW_UPDATE_TYPE:
+                if (LE_OK == packageDownloader_GetSwUpdateResult(updateResultPtr))
+                {
+                    sid = LWM2MCORE_ERR_COMPLETED_OK;
+                    LE_DEBUG("updateResult: %d", *updateResultPtr);
+                }
+                else
+                {
+                    sid = LWM2MCORE_ERR_GENERAL_ERROR;
+                }
+                break;
+
+            default:
+                LE_ERROR("unknown update type %d", type);
+                sid = LWM2MCORE_ERR_INVALID_ARG;
+                break;
         }
     }
     LE_DEBUG("GetUpdateResult type %d: %d", type, sid);

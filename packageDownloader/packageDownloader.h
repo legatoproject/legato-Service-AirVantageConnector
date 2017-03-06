@@ -31,46 +31,6 @@ packageDownloader_DownloadCtx_t;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetUpdateState temporary callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetUpdateStateModified
-(
-    lwm2mcore_fwUpdateState_t updateState
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- * SetUpdateResult temporary callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetUpdateResultModified
-(
-    lwm2mcore_fwUpdateResult_t updateResult
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get update state
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetUpdateState
-(
-    lwm2mcore_fwUpdateState_t* updateStatePtr
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get update result
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetUpdateResult
-(
-    lwm2mcore_fwUpdateResult_t* updateResultPtr
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Download package thread function
  */
 //--------------------------------------------------------------------------------------------------

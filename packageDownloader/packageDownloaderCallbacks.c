@@ -13,6 +13,7 @@
 #include <lwm2mcorePackageDownloader.h>
 #include <interfaces.h>
 #include "packageDownloaderCallbacks.h"
+#include "packageDownloaderUpdateInfo.h"
 #include "packageDownloader.h"
 
 //--------------------------------------------------------------------------------------------------
@@ -310,27 +311,73 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetUpdateState callback function definition
+ * SetFwUpdateState callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateState
+lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
 (
-    lwm2mcore_fwUpdateState_t updateState
+    lwm2mcore_fwUpdateState_t fwUpdateState
 )
 {
+    if (LE_OK != packageDownloader_SetFwUpdateState(fwUpdateState))
+    {
+        return DWL_FAULT;
+    }
+
     return DWL_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetUpdateResult callback function definition
+ * SetFwUpdateResult callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateResult
+lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateResult
 (
-    lwm2mcore_fwUpdateResult_t updateResult
+    lwm2mcore_fwUpdateResult_t fwUpdateResult
 )
 {
+    if (LE_OK != packageDownloader_SetFwUpdateResult(fwUpdateResult))
+    {
+        return DWL_FAULT;
+    }
+
+    return DWL_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * SetSwUpdateState callback function definition
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t pkgDwlCb_SetSwUpdateState
+(
+    lwm2mcore_swUpdateState_t swUpdateState
+)
+{
+    if (LE_OK != packageDownloader_SetSwUpdateState(swUpdateState))
+    {
+        return DWL_FAULT;
+    }
+
+    return DWL_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * SetSwUpdateResult callback function definition
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t pkgDwlCb_SetSwUpdateResult
+(
+    lwm2mcore_swUpdateResult_t swUpdateResult
+)
+{
+    if (LE_OK != packageDownloader_SetSwUpdateResult(swUpdateResult))
+    {
+        return DWL_FAULT;
+    }
+
     return DWL_OK;
 }
 
