@@ -33,6 +33,7 @@ requires:
     component:
     {
         $LEGATO_AVC_PA_DEFAULT // TODO: Remove unneeded PA AVC
+        ${LEGATO_ROOT}/components/3rdParty/tinydtls
         $LEGATO_ROOT/framework/c/src/appCfg
     }
 }
