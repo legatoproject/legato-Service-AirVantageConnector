@@ -24,6 +24,7 @@ typedef struct
     const char*      fifoPtr;               ///< store FIFO pointer
     void*            ctxPtr;                ///< context pointer
     le_thread_Ref_t  mainRef;               ///< main thread reference
+    const char*      certPtr;               ///< PEM certificate path
     void (*downloadPackage)(void *ctxPtr);  ///< download package callback
     void (*storePackage)(void *ctxPtr);     ///< store package callback
 }

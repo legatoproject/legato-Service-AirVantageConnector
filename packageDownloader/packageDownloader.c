@@ -11,9 +11,13 @@
 #include <interfaces.h>
 #include <lwm2mcorePackageDownloader.h>
 #include <osPortUpdate.h>
+#include <osPortSecurity.h>
+#include <defaultDerKey.h>
 #include "packageDownloaderCallbacks.h"
 #include "packageDownloader.h"
 #include "avcAppUpdate.h"
+#include "avcFs.h"
+#include "avcFsConfig.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -73,7 +77,64 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetFwUpdateState temporary callback function definition
+ * PEM certificate file path
+ */
+//--------------------------------------------------------------------------------------------------
+#define PEMCERT_PATH         PKGDWL_PATH "/" "cert.pem"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * PEM or DER certificate max length
+ */
+//--------------------------------------------------------------------------------------------------
+#define MAX_CERT_LEN        4096
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Write PEM key to default certificate file path
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t WritePEMCertificate
+(
+    const char*     certPtr,
+    unsigned char*  pemKeyPtr,
+    int             pemKeyLen
+)
+{
+    int fd;
+    ssize_t count;
+    mode_t mode = 0;
+
+    mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+    fd = open(certPtr, O_WRONLY | O_CREAT | O_TRUNC, mode);
+    if (!fd)
+    {
+        LE_ERROR("failed to open %s: %m", certPtr);
+        return LE_FAULT;
+    }
+
+    count = write(fd, pemKeyPtr, pemKeyLen);
+    if (count == -1)
+    {
+        LE_ERROR("failed to write PEM cert: %m");
+        close(fd);
+        return LE_FAULT;
+    }
+    if (count < pemKeyLen)
+    {
+        LE_ERROR("failed to write PEM cert: wrote %zd", count);
+        close(fd);
+        return LE_FAULT;
+    }
+
+    close(fd);
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * SetUpdateState temporary callback function definition
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateStateModified
@@ -129,7 +190,6 @@ lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResultModified
 
     return DWL_OK;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -218,7 +278,6 @@ le_result_t packageDownloader_GetFwUpdateResult
 
     return LE_OK;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -344,7 +403,6 @@ void *packageDownloader_StoreFwPackage
     return (void *)0;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Download and store a package
@@ -358,16 +416,20 @@ le_result_t packageDownloader_StartDownload
 {
     static lwm2mcore_PackageDownloader_t pkgDwl;
     static packageDownloader_DownloadCtx_t dwlCtx;
+    static unsigned char pemKeyPtr[MAX_CERT_LEN] = "\0";
     lwm2mcore_PackageDownloaderData_t data;
-    le_thread_Ref_t dwlRef;
-    le_thread_Ref_t storeRef;
+    le_thread_Ref_t dwlRef, storeRef;
     struct stat st;
+    uint8_t derKey[MAX_CERT_LEN] = "\0";
+    size_t derKeyLen;
+    int pemKeyLen = MAX_CERT_LEN;
+    le_result_t result;
     char *dwlType[2] = {
         [0] = "FW_UPDATE",
         [1] = "SW_UPDATE",
     };
 
-    LE_DEBUG("downloading a `%s' from `%s'", dwlType[type], uriPtr);
+    LE_DEBUG("downloading a `%s'", dwlType[type]);
 
     memset(data.packageUri, 0, LWM2MCORE_PACKAGE_URI_MAX_LEN + 1);
     memcpy(data.packageUri, uriPtr, strlen(uriPtr));
@@ -407,8 +469,35 @@ le_result_t packageDownloader_StartDownload
         }
     }
 
+    result = avc_FsRead(DERCERT_PATH, derKey, &derKeyLen);
+    if (LE_OK != result)
+    {
+        LE_ERROR("using default DER key");
+        if (MAX_CERT_LEN < DEFAULT_DER_KEY_LEN)
+        {
+            LE_ERROR("Not enough space to hold the default key");
+            return LE_FAULT;
+        }
+        memcpy(derKey, DefaultDerKey, DEFAULT_DER_KEY_LEN);
+        derKeyLen = DEFAULT_DER_KEY_LEN;
+    }
+
+    result = os_portSecurityConvertDERToPEM((unsigned char *)derKey, derKeyLen,
+                                pemKeyPtr, &pemKeyLen);
+    if (LE_OK != result)
+    {
+        return LE_FAULT;
+    }
+
+    result = WritePEMCertificate(PEMCERT_PATH, pemKeyPtr, pemKeyLen);
+    if (LE_OK != result)
+    {
+        return LE_FAULT;
+    }
+
     dwlCtx.fifoPtr = FIFO_PATH;
     dwlCtx.mainRef = le_thread_GetCurrent();
+    dwlCtx.certPtr = PEMCERT_PATH;
     dwlCtx.downloadPackage = (void *)packageDownloader_DownloadPackage;
 
     switch (type)
@@ -489,4 +578,3 @@ le_result_t packageDownloader_AbortDownload
 
     return LE_OK;
 }
-

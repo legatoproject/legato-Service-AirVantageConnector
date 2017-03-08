@@ -214,7 +214,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
 
     dwlCtxPtr->ctxPtr = (void *)&pkg;
 
-    LE_DEBUG("Initialize package downloader on `%s'", uriPtr);
+    LE_DEBUG("Initialize package downloader");
 
     // initialize everything possible
     rc = curl_global_init(CURL_GLOBAL_ALL);
@@ -236,25 +236,15 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
     rc= curl_easy_setopt(pkg.curlPtr, CURLOPT_URL, uriPtr);
     if (CURLE_OK != rc)
     {
-        LE_ERROR("failed to set URI %s: %s", uriPtr, curl_easy_strerror(rc));
+        LE_ERROR("failed to set URI: %s", curl_easy_strerror(rc));
         return DWL_FAULT;
     }
 
-    // disable tls verification
-    // TODO this is really bad, needs to be reactivated later
-    rc= curl_easy_setopt(pkg.curlPtr, CURLOPT_SSL_VERIFYPEER, 0);
+    // set the path to CA bundle
+    rc= curl_easy_setopt(pkg.curlPtr, CURLOPT_CAINFO, dwlCtxPtr->certPtr);
     if (CURLE_OK != rc)
     {
-        LE_ERROR("failed to disable peer's ssl certificate verification %s: %s",
-            uriPtr, curl_easy_strerror(rc));
-        return DWL_FAULT;
-    }
-
-    rc= curl_easy_setopt(pkg.curlPtr, CURLOPT_SSL_VERIFYHOST, 0);
-    if (CURLE_OK != rc)
-    {
-        LE_ERROR("failed to disable peer's ssl certificate verification %s: %s",
-            uriPtr, curl_easy_strerror(rc));
+        LE_ERROR("failed to set CA path: %s", curl_easy_strerror(rc));
         return DWL_FAULT;
     }
 
