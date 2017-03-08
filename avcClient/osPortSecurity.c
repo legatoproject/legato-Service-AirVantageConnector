@@ -435,7 +435,11 @@ lwm2mcore_sid_t os_portSecuritySha1End
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    // The public key is stored in PKCS #1 DER format, convert it to a RSA key
+    // The public key is stored in PKCS #1 DER format, convert it to a RSA key.
+    // Note that two formats are possible, try both of them if necessary:
+    // - PEM DER ASN.1 PKCS#1 RSA Public key: ASN.1 type RSAPublicKey
+    // - X.509 SubjectPublicKeyInfo: Object Identifier rsaEncryption added for AlgorithmIdentifier
+
     // First create the memory BIO containing the DER key
     bufioPtr = BIO_new_mem_buf((void*)publicKey, publicKeyLen);
     if (!bufioPtr)
@@ -444,8 +448,24 @@ lwm2mcore_sid_t os_portSecuritySha1End
         PrintOpenSSLErrors();
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
-    // Then convert it to a RSA key
-    rsaKeyPtr = d2i_RSA_PUBKEY_bio(bufioPtr, NULL);
+    // Then convert it to a RSA key using PEM DER ASN.1 PKCS#1 RSA Public key format
+    rsaKeyPtr = d2i_RSAPublicKey_bio(bufioPtr, NULL);
+    if (!rsaKeyPtr)
+    {
+        // Memory BIO is modified by last function call, retrieve the DER key again
+        BIO_free(bufioPtr);
+        bufioPtr = BIO_new_mem_buf((void*)publicKey, publicKeyLen);
+        if (!bufioPtr)
+        {
+            LE_ERROR("Unable to create a memory BIO");
+            PrintOpenSSLErrors();
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+        }
+
+        // Then convert it to a RSA key using X.509 SubjectPublicKeyInfo format
+        rsaKeyPtr = d2i_RSA_PUBKEY_bio(bufioPtr, NULL);
+    }
+    BIO_free(bufioPtr);
     if (!rsaKeyPtr)
     {
         LE_ERROR("Unable to retrieve public key");
