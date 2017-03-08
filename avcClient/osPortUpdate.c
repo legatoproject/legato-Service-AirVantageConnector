@@ -37,7 +37,7 @@ static void LaunchUpdateTimerExpiryHandler
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
             LE_DEBUG("Launch FW update");
-            packageDownloader_SetUpdateStateModified(LWM2MCORE_FW_UPDATE_STATE_UPDATING);
+            packageDownloader_SetFwUpdateStateModified(LWM2MCORE_FW_UPDATE_STATE_UPDATING);
             le_fwupdate_DualSysSwap();
             break;
 
@@ -113,7 +113,7 @@ lwm2mcore_sid_t os_portUpdateSetPackageUri
          * the package URI is deleted from storage file
          * any active download is suspended
          */
-        packageDownloader_AbortDownload();
+        packageDownloader_AbortDownload(type);
         sid = LWM2MCORE_ERR_COMPLETED_OK;
     }
     else
@@ -172,18 +172,13 @@ lwm2mcore_sid_t os_portUpdateGetPackageUri
                                     ///< data
 )
 {
-    lwm2mcore_sid_t sid;
-
     if ((NULL == bufferPtr) || (NULL == lenPtr) || (LWM2MCORE_MAX_UPDATE_TYPE <= type))
     {
-        sid = LWM2MCORE_ERR_INVALID_ARG;
+        return LWM2MCORE_ERR_INVALID_ARG;
     }
-    else
-    {
-        sid = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
-    }
-    LE_DEBUG("GetPackageUri : %d", sid);
-    return sid;
+
+    *lenPtr = 0;
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -259,15 +254,15 @@ lwm2mcore_sid_t os_portUpdateGetUpdateState
     lwm2mcore_sid_t sid;
     if ((NULL == updateStatePtr) || (LWM2MCORE_MAX_UPDATE_TYPE <= type))
     {
-        sid = LWM2MCORE_ERR_INVALID_ARG;
+        return LWM2MCORE_ERR_INVALID_ARG;
     }
-    else
+
+    /* Call API to get the update state */
+    switch (type)
     {
-        /* Call API to get the update state */
-        if (LWM2MCORE_FW_UPDATE_TYPE == type)
-        {
-            /* Firmware update */
-            if (LE_OK == packageDownloader_GetUpdateState(updateStatePtr))
+        case LWM2MCORE_FW_UPDATE_TYPE:
+            if (LE_OK == packageDownloader_GetFwUpdateState(
+                                                        (lwm2mcore_fwUpdateState_t*)updateStatePtr))
             {
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
                 LE_DEBUG("updateState : %d", *updateStatePtr);
@@ -276,12 +271,24 @@ lwm2mcore_sid_t os_portUpdateGetUpdateState
             {
                 sid = LWM2MCORE_ERR_GENERAL_ERROR;
             }
-        }
-        else
-        {
-            /* Software update */
-            sid = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
-        }
+            break;
+
+        case LWM2MCORE_SW_UPDATE_TYPE:
+            if (LE_OK == packageDownloader_GetSwUpdateState(
+                                                        (lwm2mcore_swUpdateState_t*)updateStatePtr))
+            {
+                sid = LWM2MCORE_ERR_COMPLETED_OK;
+                LE_DEBUG("updateState : %d", *updateStatePtr);
+            }
+            else
+            {
+                sid = LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            break;
+
+        default:
+            LE_ERROR("Bad update type");
+            return LWM2MCORE_ERR_INVALID_ARG;
     }
     LE_DEBUG("GetUpdateState type %d: %d", type, sid);
     return sid;
@@ -311,33 +318,49 @@ lwm2mcore_sid_t os_portUpdateGetUpdateResult
     lwm2mcore_sid_t sid;
     if ((NULL == updateResultPtr) || (LWM2MCORE_MAX_UPDATE_TYPE <= type))
     {
-        sid = LWM2MCORE_ERR_INVALID_ARG;
+        return LWM2MCORE_ERR_INVALID_ARG;
     }
-    else
+
+    /* Call API to get the update result */
+    switch (type)
     {
-        /* Call API to get the update result */
-        if (LWM2MCORE_FW_UPDATE_TYPE == type)
-        {
-            /* Firmware update */
-            if (LE_OK == packageDownloader_GetUpdateResult(updateResultPtr))
+        case LWM2MCORE_FW_UPDATE_TYPE:
+            if (LE_OK == packageDownloader_GetFwUpdateResult(
+                                                    (lwm2mcore_fwUpdateResult_t*)updateResultPtr))
             {
-                LE_DEBUG("updateResult : %d", *updateResultPtr);
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
+                LE_DEBUG("updateState : %d", *updateResultPtr);
             }
             else
             {
                 sid = LWM2MCORE_ERR_GENERAL_ERROR;
             }
-        }
-        else
-        {
-            /* Software update */
-            sid = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
-        }
+            break;
+
+        case LWM2MCORE_SW_UPDATE_TYPE:
+            if (LE_OK == packageDownloader_GetSwUpdateResult(
+                                                    (lwm2mcore_swUpdateResult_t*)updateResultPtr))
+            {
+                sid = LWM2MCORE_ERR_COMPLETED_OK;
+                LE_DEBUG("updateState : %d", *updateResultPtr);
+            }
+            else
+            {
+                sid = LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            break;
+
+        default:
+            LE_ERROR("Bad update type");
+            return LWM2MCORE_ERR_INVALID_ARG;
     }
     LE_DEBUG("GetUpdateResult type %d: %d", type, sid);
     return sid;
 }
+
+/* For test only: will be removed with Legato development*/
+#define APPLICATION "application"
+#define VERSION "version"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -358,11 +381,14 @@ lwm2mcore_sid_t os_portUpdateGetPackageName
     lwm2mcore_updateType_t type,    ///< [IN] Update type
     uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
     char* bufferPtr,                ///< [INOUT] data buffer
-    size_t* lenPtr                  ///< [INOUT] length of input buffer and length of the returned
-                                    ///< data
+    uint32_t len                    ///< [IN] length of input buffer
 )
 {
-    return LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+    LE_INFO("os_portUpdateGetPackageName len %d", len);
+    memset(bufferPtr, 0, len);
+    snprintf(bufferPtr, len, "%s%d", APPLICATION, instanceId);
+    os_debug_data_dump ("application name", bufferPtr, strlen(bufferPtr));
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -384,10 +410,197 @@ lwm2mcore_sid_t os_portUpdateGetPackageVersion
     lwm2mcore_updateType_t type,    ///< [IN] Update type
     uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
     char* bufferPtr,                ///< [INOUT] data buffer
-    size_t* lenPtr                  ///< [INOUT] length of input buffer and length of the returned
-                                    ///< data
+    uint32_t len                    ///< [IN] length of input buffer
 )
 {
-    return LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+    LE_INFO("os_portUpdateGetPackageVersion len %d", len);
+    memset(bufferPtr, 0, len);
+    snprintf(bufferPtr, len, "%s%d", VERSION, instanceId);
+    os_debug_data_dump ("application version",bufferPtr, strlen(bufferPtr));
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * The server sets the "update supported objects" field for software update
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treament succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_sid_t os_portUpdateSetSwSupportedObjects
+(
+    uint16_t instanceId,            ///< [IN] Intance Id (any value for SW)
+    bool value                      ///< [IN] Update supported objects field value
+)
+{
+    LE_INFO("os_portUpdateSetSwSupportedObjects oiid %d, value %d", instanceId, value);
+    /* TODO: add Legato treatment */
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * The server requires the "update supported objects" field for software update
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treament succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_sid_t os_portUpdateGetSwSupportedObjects
+(
+    uint16_t instanceId,            ///< [IN] Intance Id (any value for SW)
+    bool* valuePtr                  ///< [INOUT] Update supported objects field value
+)
+{
+    if (NULL == valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+    else
+    {
+        /* TODO: add Legato treatment */
+        *valuePtr = true;
+        LE_INFO("os_portUpdateGetSwSupportedObjects, oiid %d, value %d", instanceId, *valuePtr);
+        return LWM2MCORE_ERR_COMPLETED_OK;
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * The server requires the activation state for one embedded application
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treament succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_sid_t os_portUpdateGetSwActivationState
+(
+    uint16_t instanceId,            ///< [IN] Intance Id (any value for SW)
+    bool* valuePtr                  ///< [INOUT] Activation state
+)
+{
+    if (NULL == valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+    else
+    {
+        /* TODO: add Legato treatment */
+        *valuePtr = true;
+        LE_INFO("os_portUpdateGetSwActivationState oiid %d, value %d", instanceId, *valuePtr);
+        return LWM2MCORE_ERR_COMPLETED_OK;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * The server requires an embedded application to be uninstalled (only for software update)
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treament succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_sid_t os_portUpdateLaunchSwUninstall
+(
+    uint16_t instanceId,            ///< [IN] Intance Id (any value for SW)
+    char* bufferPtr,                ///< [INOUT] data buffer
+    size_t len                      ///< [IN] length of input buffer
+)
+{
+    if ((NULL == bufferPtr) && len)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+    else
+    {
+        /* TODO: add Legato treatment */
+        return LWM2MCORE_ERR_COMPLETED_OK;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * The server requires an embedded application to be activated or deactivated (only for software
+ * update)
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treament succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_sid_t os_portUpdateActivateSoftware
+(
+    bool activation,        ///< [IN] Requested activation (true: activate, false: deactivate)
+    uint16_t instanceId,    ///< [IN] Intance Id (any value for SW)
+    char* bufferPtr,        ///< [INOUT] data buffer
+    size_t len              ///< [IN] length of input buffer
+)
+{
+    if ((NULL == bufferPtr) && len)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+    else
+    {
+        /* TODO: add Legato treatment */
+        return LWM2MCORE_ERR_COMPLETED_OK;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * The server request to create or delete an object instance of object 9
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treament succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_sid_t os_portUpdateSoftwareInstance
+(
+    bool create,                ///<[IN] Create (true) or delete (false)
+    uint16_t instanceId         ///<[IN] Object instance Id to create or delete
+)
+{
+    lwm2mcore_sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
+    /* TODO: add Legato treatment */
+    LE_INFO("os_portUpdateSoftwareInstance create %d, Oiid %d", create, instanceId);
+    return sID;
 }
 

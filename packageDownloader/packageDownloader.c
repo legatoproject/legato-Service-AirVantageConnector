@@ -37,17 +37,31 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Download state path
+ * Firmware download state path
  */
 //--------------------------------------------------------------------------------------------------
-#define STATE_PATH          PKGDWL_PATH "/" "state"
+#define FW_STATE_PATH          PKGDWL_PATH "/" "fwstate"
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Result state path
+ * Firmware result state path
  */
 //--------------------------------------------------------------------------------------------------
-#define RESULT_PATH         PKGDWL_PATH "/" "result"
+#define FW_RESULT_PATH         PKGDWL_PATH "/" "fwresult"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Software download state path
+ */
+//--------------------------------------------------------------------------------------------------
+#define SW_STATE_PATH          PKGDWL_PATH "/" "swstate"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Software result state path
+ */
+//--------------------------------------------------------------------------------------------------
+#define SW_RESULT_PATH         PKGDWL_PATH "/" "swresult"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -72,10 +86,10 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetUpdateState temporary callback function definition
+ * SetFwUpdateState temporary callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetUpdateStateModified
+lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateStateModified
 (
     lwm2mcore_fwUpdateState_t updateState
 )
@@ -83,10 +97,10 @@ lwm2mcore_DwlResult_t packageDownloader_SetUpdateStateModified
     FILE *file;
     char buf[BUFSIZE];
 
-    file = fopen(STATE_PATH, "w");
+    file = fopen(FW_STATE_PATH, "w");
     if (!file)
     {
-        LE_ERROR("failed to open %s: %m", STATE_PATH);
+        LE_ERROR("failed to open %s: %m", FW_STATE_PATH);
         return DWL_FAULT;
     }
 
@@ -101,10 +115,10 @@ lwm2mcore_DwlResult_t packageDownloader_SetUpdateStateModified
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetUpdateResult temporary callback function definition
+ * SetFwUpdateResult temporary callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetUpdateResultModified
+lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResultModified
 (
     lwm2mcore_fwUpdateResult_t updateResult
 )
@@ -112,10 +126,10 @@ lwm2mcore_DwlResult_t packageDownloader_SetUpdateResultModified
     FILE *file;
     char buf[BUFSIZE];
 
-    file = fopen(RESULT_PATH, "w");
+    file = fopen(FW_RESULT_PATH, "w");
     if (!file)
     {
-        LE_ERROR("failed to open %s: %m", RESULT_PATH);
+        LE_ERROR("failed to open %s: %m", FW_RESULT_PATH);
         return DWL_FAULT;
     }
 
@@ -130,12 +144,70 @@ lwm2mcore_DwlResult_t packageDownloader_SetUpdateResultModified
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get update state
+ * SetSwUpdateState temporary callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetUpdateState
+lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateStateModified
 (
-    lwm2mcore_fwUpdateState_t *updateStatePtr
+    lwm2mcore_swUpdateState_t updateState
+)
+{
+    FILE *file;
+    char buf[BUFSIZE];
+
+    file = fopen(SW_STATE_PATH, "w");
+    if (!file)
+    {
+        LE_ERROR("failed to open %s: %m", SW_STATE_PATH);
+        return DWL_FAULT;
+    }
+
+    snprintf(buf, BUFSIZE, "%d", (int)updateState);
+
+    fwrite(buf, strlen(buf), 1, file);
+
+    fclose(file);
+
+    return DWL_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * SetSwUpdateResult temporary callback function definition
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateResultModified
+(
+    lwm2mcore_swUpdateResult_t updateResult
+)
+{
+    FILE *file;
+    char buf[BUFSIZE];
+
+    file = fopen(SW_RESULT_PATH, "w");
+    if (!file)
+    {
+        LE_ERROR("failed to open %s: %m", SW_RESULT_PATH);
+        return DWL_FAULT;
+    }
+
+    snprintf(buf, BUFSIZE, "%d", (int)updateResult);
+
+    fwrite(buf, strlen(buf), 1, file);
+
+    fclose(file);
+
+    return DWL_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get firmware update state
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetFwUpdateState
+(
+    lwm2mcore_fwUpdateState_t* updateStatePtr
 )
 {
     FILE *file;
@@ -147,7 +219,7 @@ le_result_t packageDownloader_GetUpdateState
         return LE_FAULT;
     }
 
-    file = fopen(STATE_PATH, "r");
+    file = fopen(FW_STATE_PATH, "r");
     if (!file)
     {
         if (ENOENT == errno)
@@ -156,7 +228,7 @@ le_result_t packageDownloader_GetUpdateState
             *updateStatePtr = LWM2MCORE_FW_UPDATE_STATE_IDLE;
             return LE_OK;
         }
-        LE_ERROR("failed to open %s: %m", STATE_PATH);
+        LE_ERROR("failed to open %s: %m", FW_STATE_PATH);
         return LE_FAULT;
     }
 
@@ -174,12 +246,12 @@ le_result_t packageDownloader_GetUpdateState
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get update result
+ * Get firmware update result
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetUpdateResult
+le_result_t packageDownloader_GetFwUpdateResult
 (
-    lwm2mcore_fwUpdateResult_t *updateResultPtr
+    lwm2mcore_fwUpdateResult_t* updateResultPtr
 )
 {
     FILE *file;
@@ -191,7 +263,7 @@ le_result_t packageDownloader_GetUpdateResult
         return LE_FAULT;
     }
 
-    file = fopen(RESULT_PATH, "r");
+    file = fopen(FW_RESULT_PATH, "r");
     if (!file)
     {
         if (ENOENT == errno)
@@ -200,7 +272,95 @@ le_result_t packageDownloader_GetUpdateResult
             *updateResultPtr = LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL;
             return LE_OK;
         }
-        LE_ERROR("failed to open %s: %m", RESULT_PATH);
+        LE_ERROR("failed to open %s: %m", FW_RESULT_PATH);
+        return LE_FAULT;
+    }
+
+    memset(buf, 0, BUFSIZE);
+    fread(buf, BUFSIZE, 1, file);
+
+    fclose(file);
+
+    LE_DEBUG("update result %s", buf);
+
+    *updateResultPtr = (int)strtol(buf, NULL, 10);
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update state
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetSwUpdateState
+(
+    lwm2mcore_swUpdateState_t* updateStatePtr
+)
+{
+    FILE *file;
+    char buf[BUFSIZE];
+
+    if (!updateStatePtr)
+    {
+        LE_ERROR("invalid input parameter");
+        return LE_FAULT;
+    }
+
+    file = fopen(SW_STATE_PATH, "r");
+    if (!file)
+    {
+        if (ENOENT == errno)
+        {
+            LE_ERROR("download not started");
+            *updateStatePtr = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
+            return LE_OK;
+        }
+        LE_ERROR("failed to open %s: %m", SW_STATE_PATH);
+        return LE_FAULT;
+    }
+
+    memset(buf, 0, BUFSIZE);
+    fread(buf, BUFSIZE, 1, file);
+
+    fclose(file);
+
+    LE_DEBUG("update state %s", buf);
+
+    *updateStatePtr = (int)strtol(buf, NULL, 10);
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update result
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetSwUpdateResult
+(
+    lwm2mcore_swUpdateResult_t* updateResultPtr
+)
+{
+    FILE *file;
+    char buf[BUFSIZE];
+
+    if (!updateResultPtr)
+    {
+        LE_ERROR("invalid input parameter");
+        return LE_FAULT;
+    }
+
+    file = fopen(SW_RESULT_PATH, "r");
+    if (!file)
+    {
+        if (ENOENT == errno)
+        {
+            LE_ERROR("download not started");
+            *updateResultPtr = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
+            return LE_OK;
+        }
+        LE_ERROR("failed to open %s: %m", SW_RESULT_PATH);
         return LE_FAULT;
     }
 
@@ -424,20 +584,38 @@ le_result_t packageDownloader_StartDownload
         return LE_FAULT;
     }
 
-    if (-1 == unlink(STATE_PATH))
+    if (-1 == unlink(FW_STATE_PATH))
     {
         if (errno != ENOENT)
         {
-            LE_ERROR("failed to unlink %s: %m", STATE_PATH);
+            LE_ERROR("failed to unlink %s: %m", FW_STATE_PATH);
             return LE_FAULT;
         }
     }
 
-    if (-1 == unlink(RESULT_PATH))
+    if (-1 == unlink(FW_RESULT_PATH))
     {
         if (errno != ENOENT)
         {
-            LE_ERROR("failed to unlink %s: %m", RESULT_PATH);
+            LE_ERROR("failed to unlink %s: %m", FW_RESULT_PATH);
+            return LE_FAULT;
+        }
+    }
+
+    if (-1 == unlink(SW_STATE_PATH))
+    {
+        if (errno != ENOENT)
+        {
+            LE_ERROR("failed to unlink %s: %m", SW_STATE_PATH);
+            return LE_FAULT;
+        }
+    }
+
+    if (-1 == unlink(SW_RESULT_PATH))
+    {
+        if (errno != ENOENT)
+        {
+            LE_ERROR("failed to unlink %s: %m", SW_RESULT_PATH);
             return LE_FAULT;
         }
     }
@@ -462,8 +640,10 @@ le_result_t packageDownloader_StartDownload
     pkgDwl.data = data;
     pkgDwl.initDownload = pkgDwlCb_InitDownload;
     pkgDwl.getInfo = pkgDwlCb_GetInfo;
-    pkgDwl.setUpdateState = packageDownloader_SetUpdateStateModified;
-    pkgDwl.setUpdateResult = packageDownloader_SetUpdateResultModified;
+    pkgDwl.setFwUpdateState = packageDownloader_SetFwUpdateStateModified;
+    pkgDwl.setFwUpdateResult = packageDownloader_SetFwUpdateResultModified;
+    pkgDwl.setSwUpdateState = packageDownloader_SetSwUpdateStateModified;
+    pkgDwl.setSwUpdateResult = packageDownloader_SetSwUpdateResultModified;
     pkgDwl.download = pkgDwlCb_Download;
     pkgDwl.storeRange = pkgDwlCb_StoreRange;
     pkgDwl.endDownload = pkgDwlCb_EndDownload;
@@ -487,14 +667,25 @@ le_result_t packageDownloader_StartDownload
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_AbortDownload
 (
-    void
+    lwm2mcore_updateType_t  type
 )
 {
     /* The Update State needs to be set to default value
      * The package URI needs to be deleted from storage file
      * Any active download is suspended
      */
-    packageDownloader_SetUpdateStateModified(LWM2MCORE_FW_UPDATE_STATE_IDLE);
+    switch (type)
+    {
+        case LWM2MCORE_FW_UPDATE_TYPE:
+            packageDownloader_SetFwUpdateStateModified(LWM2MCORE_FW_UPDATE_STATE_IDLE);
+            break;
+        case LWM2MCORE_SW_UPDATE_TYPE:
+            packageDownloader_SetSwUpdateStateModified(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
+            break;
+        default:
+            LE_ERROR("unknown download type");
+            return LE_FAULT;
+    }
 
     return LE_OK;
 }

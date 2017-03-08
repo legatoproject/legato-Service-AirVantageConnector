@@ -31,42 +31,82 @@ packageDownloader_DownloadCtx_t;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetUpdateState temporary callback function definition
+ * SetFwUpdateState temporary callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetUpdateStateModified
+lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateStateModified
 (
     lwm2mcore_fwUpdateState_t updateState
 );
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetUpdateResult temporary callback function definition
+ * SetFwUpdateResult temporary callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetUpdateResultModified
+lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResultModified
 (
     lwm2mcore_fwUpdateResult_t updateResult
 );
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get update state
+ * SetSwUpdateState temporary callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetUpdateState
+lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateStateModified
 (
-    lwm2mcore_fwUpdateState_t* updateStatePtr
+    lwm2mcore_swUpdateState_t updateState
 );
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get update result
+ * SetSwUpdateResult temporary callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetUpdateResult
+lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateResultModified
+(
+    lwm2mcore_swUpdateResult_t updateResult
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get firmware update state
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetFwUpdateState
+(
+    lwm2mcore_fwUpdateState_t *updateStatePtr
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get firmware update result
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetFwUpdateResult
 (
     lwm2mcore_fwUpdateResult_t* updateResultPtr
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update state
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetSwUpdateState
+(
+    lwm2mcore_swUpdateState_t* updateStatePtr
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update result
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetSwUpdateResult
+(
+    lwm2mcore_swUpdateResult_t* updateResultPtr
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -117,7 +157,7 @@ le_result_t packageDownloader_StartDownload
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_AbortDownload
 (
-    void
+    lwm2mcore_updateType_t  type
 );
 
 #endif /*_PACKAGEDOWNLOADER_H */
