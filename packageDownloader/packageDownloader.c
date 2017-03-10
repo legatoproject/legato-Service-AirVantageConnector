@@ -12,7 +12,6 @@
 #include <lwm2mcorePackageDownloader.h>
 #include <osPortUpdate.h>
 #include "packageDownloaderCallbacks.h"
-#include "packageDownloaderUpdateInfo.h"
 #include "packageDownloader.h"
 
 //--------------------------------------------------------------------------------------------------
@@ -38,6 +37,20 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Download state path
+ */
+//--------------------------------------------------------------------------------------------------
+#define STATE_PATH          PKGDWL_PATH "/" "state"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Result state path
+ */
+//--------------------------------------------------------------------------------------------------
+#define RESULT_PATH         PKGDWL_PATH "/" "result"
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Package download directory mode
  */
 //--------------------------------------------------------------------------------------------------
@@ -49,6 +62,159 @@
  */
 //--------------------------------------------------------------------------------------------------
 #define FIFO_MODE           0600
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Update state and update result buffer size
+ */
+//--------------------------------------------------------------------------------------------------
+#define BUFSIZE             3
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * SetUpdateState temporary callback function definition
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t packageDownloader_SetUpdateStateModified
+(
+    lwm2mcore_fwUpdateState_t updateState
+)
+{
+    FILE *file;
+    char buf[BUFSIZE];
+
+    file = fopen(STATE_PATH, "w");
+    if (!file)
+    {
+        LE_ERROR("failed to open %s: %m", STATE_PATH);
+        return DWL_FAULT;
+    }
+
+    snprintf(buf, BUFSIZE, "%d", (int)updateState);
+
+    fwrite(buf, strlen(buf), 1, file);
+
+    fclose(file);
+
+    return DWL_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * SetUpdateResult temporary callback function definition
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t packageDownloader_SetUpdateResultModified
+(
+    lwm2mcore_fwUpdateResult_t updateResult
+)
+{
+    FILE *file;
+    char buf[BUFSIZE];
+
+    file = fopen(RESULT_PATH, "w");
+    if (!file)
+    {
+        LE_ERROR("failed to open %s: %m", RESULT_PATH);
+        return DWL_FAULT;
+    }
+
+    snprintf(buf, BUFSIZE, "%d", (int)updateResult);
+
+    fwrite(buf, strlen(buf), 1, file);
+
+    fclose(file);
+
+    return DWL_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get update state
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetUpdateState
+(
+    lwm2mcore_fwUpdateState_t *updateStatePtr
+)
+{
+    FILE *file;
+    char buf[BUFSIZE];
+
+    if (!updateStatePtr)
+    {
+        LE_ERROR("invalid input parameter");
+        return LE_FAULT;
+    }
+
+    file = fopen(STATE_PATH, "r");
+    if (!file)
+    {
+        if (ENOENT == errno)
+        {
+            LE_ERROR("download not started");
+            *updateStatePtr = LWM2MCORE_FW_UPDATE_STATE_IDLE;
+            return LE_OK;
+        }
+        LE_ERROR("failed to open %s: %m", STATE_PATH);
+        return LE_FAULT;
+    }
+
+    memset(buf, 0, BUFSIZE);
+    fread(buf, BUFSIZE, 1, file);
+
+    fclose(file);
+
+    LE_DEBUG("update state %s", buf);
+
+    *updateStatePtr = (int)strtol(buf, NULL, 10);
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get update result
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetUpdateResult
+(
+    lwm2mcore_fwUpdateResult_t *updateResultPtr
+)
+{
+    FILE *file;
+    char buf[BUFSIZE];
+
+    if (!updateResultPtr)
+    {
+        LE_ERROR("invalid input parameter");
+        return LE_FAULT;
+    }
+
+    file = fopen(RESULT_PATH, "r");
+    if (!file)
+    {
+        if (ENOENT == errno)
+        {
+            LE_ERROR("download not started");
+            *updateResultPtr = LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL;
+            return LE_OK;
+        }
+        LE_ERROR("failed to open %s: %m", RESULT_PATH);
+        return LE_FAULT;
+    }
+
+    memset(buf, 0, BUFSIZE);
+    fread(buf, BUFSIZE, 1, file);
+
+    fclose(file);
+
+    LE_DEBUG("update result %s", buf);
+
+    *updateResultPtr = (int)strtol(buf, NULL, 10);
+
+    return LE_OK;
+}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -113,7 +279,6 @@ void *packageDownloader_DownloadPackage
 
     // Connect to services used by this thread
     secStoreGlobal_ConnectService();
-    le_fs_ConnectService();
 
     pkgDwlPtr = (lwm2mcore_PackageDownloader_t *)ctxPtr;
     dwlCtxPtr = (packageDownloader_DownloadCtx_t *)pkgDwlPtr->ctxPtr;
@@ -259,6 +424,24 @@ le_result_t packageDownloader_StartDownload
         return LE_FAULT;
     }
 
+    if (-1 == unlink(STATE_PATH))
+    {
+        if (errno != ENOENT)
+        {
+            LE_ERROR("failed to unlink %s: %m", STATE_PATH);
+            return LE_FAULT;
+        }
+    }
+
+    if (-1 == unlink(RESULT_PATH))
+    {
+        if (errno != ENOENT)
+        {
+            LE_ERROR("failed to unlink %s: %m", RESULT_PATH);
+            return LE_FAULT;
+        }
+    }
+
     dwlCtx.fifoPtr = FIFO_PATH;
     dwlCtx.mainRef = le_thread_GetCurrent();
     dwlCtx.downloadPackage = (void *)packageDownloader_DownloadPackage;
@@ -279,10 +462,8 @@ le_result_t packageDownloader_StartDownload
     pkgDwl.data = data;
     pkgDwl.initDownload = pkgDwlCb_InitDownload;
     pkgDwl.getInfo = pkgDwlCb_GetInfo;
-    pkgDwl.setFwUpdateState = pkgDwlCb_SetFwUpdateState;
-    pkgDwl.setFwUpdateResult = pkgDwlCb_SetFwUpdateResult;
-    pkgDwl.setSwUpdateState = pkgDwlCb_SetSwUpdateState;
-    pkgDwl.setSwUpdateResult = pkgDwlCb_SetSwUpdateResult;
+    pkgDwl.setUpdateState = packageDownloader_SetUpdateStateModified;
+    pkgDwl.setUpdateResult = packageDownloader_SetUpdateResultModified;
     pkgDwl.download = pkgDwlCb_Download;
     pkgDwl.storeRange = pkgDwlCb_StoreRange;
     pkgDwl.endDownload = pkgDwlCb_EndDownload;
@@ -309,16 +490,11 @@ le_result_t packageDownloader_AbortDownload
     void
 )
 {
-    le_result_t result;
-
-    // ToDo Abort active download
-    // ToDo Delete stored URI and update type
-    // Set update state to the default value
-    result = packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
-    if (LE_OK != result)
-    {
-        return result;
-    }
+    /* The Update State needs to be set to default value
+     * The package URI needs to be deleted from storage file
+     * Any active download is suspended
+     */
+    packageDownloader_SetUpdateStateModified(LWM2MCORE_FW_UPDATE_STATE_IDLE);
 
     return LE_OK;
 }

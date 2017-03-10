@@ -20,7 +20,6 @@ sources:
     ../avcClient/osPortDevice.c
     ../avcClient/osPortUpdate.c
     ../packageDownloader/packageDownloaderCallbacks.c
-    ../packageDownloader/packageDownloaderUpdateInfo.c
     ../packageDownloader/packageDownloader.c
 
     // LWM2MCore
@@ -126,7 +125,6 @@ requires:
         le_fwupdate.api
         le_update.api
         secStoreGlobal = le_secStore.api
-        le_fs.api
     }
 
     component:

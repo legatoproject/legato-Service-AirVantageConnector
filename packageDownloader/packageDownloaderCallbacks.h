@@ -38,42 +38,22 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetFwUpdateState callback function definition
+ * Set update status callback definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
+lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateState
 (
-    lwm2mcore_fwUpdateState_t fwUpdateState
+    lwm2mcore_fwUpdateState_t updateState
 );
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetFwUpdateResult callback function definition
+ * Set update result callback definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateResult
+lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateResult
 (
-    lwm2mcore_fwUpdateResult_t fwUpdateResult
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- * SetSwUpdateState callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_SetSwUpdateState
-(
-    lwm2mcore_swUpdateState_t swUpdateState
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- * SetSwUpdateResult callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_SetSwUpdateResult
-(
-    lwm2mcore_swUpdateResult_t swUpdateResult
+    lwm2mcore_fwUpdateResult_t updateResult
 );
 
 //--------------------------------------------------------------------------------------------------

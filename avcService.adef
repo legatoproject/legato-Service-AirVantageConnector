@@ -59,6 +59,5 @@ bindings:
     avcDaemon.avcDaemon.le_rtc -> <root>.le_rtc
     avcDaemon.avcDaemon.le_fwupdate -> <root>.le_fwupdate
     avcDaemon.avcDaemon.le_update -> <root>.le_update
-    avcDaemon.avcDaemon.le_fs -> <root>.le_fs
     avcDaemon.avcDaemon.secStoreGlobal -> <root>.secStoreGlobal
 }
