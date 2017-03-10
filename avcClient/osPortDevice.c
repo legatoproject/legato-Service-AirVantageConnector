@@ -11,8 +11,8 @@
 #include "interfaces.h"
 #include "osPortDevice.h"
 #include "assetData.h"
-#include "avcUpdateShared.h" // For MAX_VERSION_STR_BYTES
 #include <sys/utsname.h>
+#include "avcAppUpdate.h"
 
 //--------------------------------------------------------------------------------------------------
 /**

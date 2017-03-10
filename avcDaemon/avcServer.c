@@ -17,6 +17,7 @@
 #include "lwm2mcore.h"
 
 #include "le_print.h"
+#include "avcAppUpdate.h"
 
 //--------------------------------------------------------------------------------------------------
 // Definitions
@@ -2031,6 +2032,7 @@ COMPONENT_INIT
     // Initialize the sub-components
     assetData_Init();
     avData_Init();
+    avcApp_Init();
     timeSeries_Init();
 
     // Read the user defined timeout from config tree @ /apps/avcService/modemActivityTimeout

@@ -51,26 +51,6 @@ lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResultModified
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetSwUpdateState temporary callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateStateModified
-(
-    lwm2mcore_swUpdateState_t updateState
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- * SetSwUpdateResult temporary callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateResultModified
-(
-    lwm2mcore_swUpdateResult_t updateResult
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Get firmware update state
  */
 //--------------------------------------------------------------------------------------------------
@@ -91,26 +71,6 @@ le_result_t packageDownloader_GetFwUpdateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get software update state
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetSwUpdateState
-(
-    lwm2mcore_swUpdateState_t* updateStatePtr
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get software update result
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetSwUpdateResult
-(
-    lwm2mcore_swUpdateResult_t* updateResultPtr
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Download package thread function
  */
 //--------------------------------------------------------------------------------------------------
@@ -125,16 +85,6 @@ void* packageDownloader_DownloadPackage
  */
 //--------------------------------------------------------------------------------------------------
 void* packageDownloader_StoreFwPackage
-(
-    void* ctxPtr
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Store SW package thread function
- */
-//--------------------------------------------------------------------------------------------------
-void* packageDownloader_StoreSwPackage
 (
     void* ctxPtr
 );

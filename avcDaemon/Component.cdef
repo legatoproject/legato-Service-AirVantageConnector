@@ -19,8 +19,10 @@ sources:
     ../avcClient/osPortSecurity.c
     ../avcClient/osPortDevice.c
     ../avcClient/osPortUpdate.c
-    ../packageDownloader/packageDownloaderCallbacks.c
-    ../packageDownloader/packageDownloader.c
+
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcAppUpdate/avcAppUpdate.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloaderCallbacks.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloader.c
 
     // LWM2MCore
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/dtlsConnection.c
@@ -77,6 +79,7 @@ cflags:
     -I$CURDIR/../platformAdaptor/inc
     -I${LEGATO_ROOT}/components/airVantage/platformAdaptor/inc // TODO: Remove unneeded PA AVC
     -I${LEGATO_ROOT}/framework/c/src    // TODO: Remove this encapsulation breakage.
+    -I${LEGATO_ROOT}/framework/c/src/appCfg    // TODO: Remove this encapsulation breakage.
     -I$CURDIR/../avcDaemon
     -I$CURDIR/../avcAppUpdate
     -I$CURDIR/../avcClient
@@ -115,6 +118,10 @@ requires:
 {
     api:
     {
+        le_instStat.api
+        le_appRemove.api
+        le_appCtrl.api
+
         le_cfg.api
         le_data.api
         modemServices/le_info.api
@@ -130,5 +137,6 @@ requires:
     component:
     {
         $LEGATO_AVC_PA_DEFAULT // TODO: Remove unneeded PA AVC
+        $LEGATO_ROOT/framework/c/src/appCfg
     }
 }

@@ -118,7 +118,7 @@ static void ConnectionStateHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Callback for the LWM2M events
+ * Callback for the LWM2M events linked to package download and update
  *
  * @return
  *      - 0 on success
@@ -126,7 +126,7 @@ static void ConnectionStateHandler
 
  */
 //--------------------------------------------------------------------------------------------------
-static int EventHandler
+static int PackageEventHandler
 (
     lwm2mcore_status_t status              ///< [IN] event status
 )
@@ -135,37 +135,6 @@ static int EventHandler
 
     switch (status.event)
     {
-        case LWM2MCORE_EVENT_SESSION_STARTED:
-            LE_DEBUG("Session start");
-            avcServer_UpdateHandler(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
-                                    0, 0, LE_AVC_ERR_NONE);
-        break;
-
-        case LWM2MCORE_EVENT_SESSION_FAILED:
-        {
-            LE_ERROR("Session failure");
-            avcServer_UpdateHandler(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
-                                    0, 0, LE_AVC_ERR_NONE);
-        }
-        break;
-
-        case LWM2MCORE_EVENT_SESSION_FINISHED:
-            LE_DEBUG("Session finished");
-            avcServer_UpdateHandler(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
-                                    0, 0, LE_AVC_ERR_NONE);
-            break;
-
-        case LWM2MCORE_EVENT_LWM2M_SESSION_TYPE_START:
-            if (status.u.session.type == LWM2MCORE_SESSION_BOOTSTRAP)
-            {
-                LE_DEBUG("Connected to bootstrap");
-            }
-            else
-            {
-                LE_DEBUG("Connected to DM");
-            }
-            break;
-
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_DETAILS:
             if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
             {
@@ -298,6 +267,77 @@ static int EventHandler
             {
                 LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
             }
+            break;
+
+        default:
+            if (LWM2MCORE_EVENT_LAST <= status.event)
+            {
+                LE_ERROR("unsupported event %d", status.event);
+                result = -1;
+            }
+            break;
+    }
+    return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Callback for the LWM2M events
+ *
+ * @return
+ *      - 0 on success
+ *      - negative value on failure.
+
+ */
+//--------------------------------------------------------------------------------------------------
+static int EventHandler
+(
+    lwm2mcore_status_t status              ///< [IN] event status
+)
+{
+    int result = 0;
+
+    switch (status.event)
+    {
+        case LWM2MCORE_EVENT_SESSION_STARTED:
+            LE_DEBUG("Session start");
+            avcServer_UpdateHandler(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
+                                    0, 0, LE_AVC_ERR_NONE);
+        break;
+
+        case LWM2MCORE_EVENT_SESSION_FAILED:
+        {
+            LE_ERROR("Session failure");
+            avcServer_UpdateHandler(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
+                                    0, 0, LE_AVC_ERR_NONE);
+        }
+        break;
+
+        case LWM2MCORE_EVENT_SESSION_FINISHED:
+            LE_DEBUG("Session finished");
+            avcServer_UpdateHandler(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
+                                    0, 0, LE_AVC_ERR_NONE);
+            break;
+
+        case LWM2MCORE_EVENT_LWM2M_SESSION_TYPE_START:
+            if (status.u.session.type == LWM2MCORE_SESSION_BOOTSTRAP)
+            {
+                LE_DEBUG("Connected to bootstrap");
+            }
+            else
+            {
+                LE_DEBUG("Connected to DM");
+            }
+            break;
+
+        case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_DETAILS:
+        case LWM2MCORE_EVENT_DOWNLOAD_PROGRESS:
+        case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FINISHED:
+        case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FAILED:
+        case LWM2MCORE_EVENT_UPDATE_STARTED:
+        case LWM2MCORE_EVENT_UPDATE_FINISHED:
+        case LWM2MCORE_EVENT_UPDATE_FAILED:
+            result = PackageEventHandler(status);
             break;
 
         default:
@@ -441,3 +481,19 @@ le_result_t avcClient_Push
         return LE_FAULT;
     }
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Send instances of object 9 and the Legato objects for all currently installed applications.
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_SendList
+(
+    char* lwm2mObjListPtr,      ///< [IN] Object instances list
+    size_t objListLen           ///< [IN] List length
+)
+{
+    lwm2mcore_updateSwList(Context, lwm2mObjListPtr, objListLen);
+}
+

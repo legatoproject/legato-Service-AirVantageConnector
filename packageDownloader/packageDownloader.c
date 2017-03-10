@@ -13,6 +13,7 @@
 #include <osPortUpdate.h>
 #include "packageDownloaderCallbacks.h"
 #include "packageDownloader.h"
+#include "avcAppUpdate.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -40,28 +41,14 @@
  * Firmware download state path
  */
 //--------------------------------------------------------------------------------------------------
-#define FW_STATE_PATH          PKGDWL_PATH "/" "fwstate"
+#define FW_STATE_PATH       PKGDWL_PATH "/" "fwstate"
 
 //--------------------------------------------------------------------------------------------------
 /**
  * Firmware result state path
  */
 //--------------------------------------------------------------------------------------------------
-#define FW_RESULT_PATH         PKGDWL_PATH "/" "fwresult"
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Software download state path
- */
-//--------------------------------------------------------------------------------------------------
-#define SW_STATE_PATH          PKGDWL_PATH "/" "swstate"
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Software result state path
- */
-//--------------------------------------------------------------------------------------------------
-#define SW_RESULT_PATH         PKGDWL_PATH "/" "swresult"
+#define FW_RESULT_PATH      PKGDWL_PATH "/" "fwresult"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -127,6 +114,7 @@ lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResultModified
     char buf[BUFSIZE];
 
     file = fopen(FW_RESULT_PATH, "w");
+
     if (!file)
     {
         LE_ERROR("failed to open %s: %m", FW_RESULT_PATH);
@@ -142,63 +130,6 @@ lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResultModified
     return DWL_OK;
 }
 
-//--------------------------------------------------------------------------------------------------
-/**
- * SetSwUpdateState temporary callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateStateModified
-(
-    lwm2mcore_swUpdateState_t updateState
-)
-{
-    FILE *file;
-    char buf[BUFSIZE];
-
-    file = fopen(SW_STATE_PATH, "w");
-    if (!file)
-    {
-        LE_ERROR("failed to open %s: %m", SW_STATE_PATH);
-        return DWL_FAULT;
-    }
-
-    snprintf(buf, BUFSIZE, "%d", (int)updateState);
-
-    fwrite(buf, strlen(buf), 1, file);
-
-    fclose(file);
-
-    return DWL_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * SetSwUpdateResult temporary callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateResultModified
-(
-    lwm2mcore_swUpdateResult_t updateResult
-)
-{
-    FILE *file;
-    char buf[BUFSIZE];
-
-    file = fopen(SW_RESULT_PATH, "w");
-    if (!file)
-    {
-        LE_ERROR("failed to open %s: %m", SW_RESULT_PATH);
-        return DWL_FAULT;
-    }
-
-    snprintf(buf, BUFSIZE, "%d", (int)updateResult);
-
-    fwrite(buf, strlen(buf), 1, file);
-
-    fclose(file);
-
-    return DWL_OK;
-}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -288,93 +219,6 @@ le_result_t packageDownloader_GetFwUpdateResult
     return LE_OK;
 }
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Get software update state
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetSwUpdateState
-(
-    lwm2mcore_swUpdateState_t* updateStatePtr
-)
-{
-    FILE *file;
-    char buf[BUFSIZE];
-
-    if (!updateStatePtr)
-    {
-        LE_ERROR("invalid input parameter");
-        return LE_FAULT;
-    }
-
-    file = fopen(SW_STATE_PATH, "r");
-    if (!file)
-    {
-        if (ENOENT == errno)
-        {
-            LE_ERROR("download not started");
-            *updateStatePtr = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
-            return LE_OK;
-        }
-        LE_ERROR("failed to open %s: %m", SW_STATE_PATH);
-        return LE_FAULT;
-    }
-
-    memset(buf, 0, BUFSIZE);
-    fread(buf, BUFSIZE, 1, file);
-
-    fclose(file);
-
-    LE_DEBUG("update state %s", buf);
-
-    *updateStatePtr = (int)strtol(buf, NULL, 10);
-
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get software update result
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetSwUpdateResult
-(
-    lwm2mcore_swUpdateResult_t* updateResultPtr
-)
-{
-    FILE *file;
-    char buf[BUFSIZE];
-
-    if (!updateResultPtr)
-    {
-        LE_ERROR("invalid input parameter");
-        return LE_FAULT;
-    }
-
-    file = fopen(SW_RESULT_PATH, "r");
-    if (!file)
-    {
-        if (ENOENT == errno)
-        {
-            LE_ERROR("download not started");
-            *updateResultPtr = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
-            return LE_OK;
-        }
-        LE_ERROR("failed to open %s: %m", SW_RESULT_PATH);
-        return LE_FAULT;
-    }
-
-    memset(buf, 0, BUFSIZE);
-    fread(buf, BUFSIZE, 1, file);
-
-    fclose(file);
-
-    LE_DEBUG("update result %s", buf);
-
-    *updateResultPtr = (int)strtol(buf, NULL, 10);
-
-    return LE_OK;
-}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -500,45 +344,6 @@ void *packageDownloader_StoreFwPackage
     return (void *)0;
 }
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Store sw package thread function
- */
-//--------------------------------------------------------------------------------------------------
-void *packageDownloader_StoreSwPackage
-(
-    void *ctxPtr
-)
-{
-    lwm2mcore_PackageDownloader_t *pkgDwlPtr;
-    packageDownloader_DownloadCtx_t *dwlCtxPtr;
-    le_result_t result;
-    int fd;
-
-    pkgDwlPtr = (lwm2mcore_PackageDownloader_t *)ctxPtr;
-    dwlCtxPtr = pkgDwlPtr->ctxPtr;
-
-    fd = open(dwlCtxPtr->fifoPtr, O_RDONLY | O_NONBLOCK, 0);
-    if (-1 == fd)
-    {
-        LE_ERROR("failed to open fifo %m");
-        return (void *)-1;
-    }
-
-    le_update_ConnectService();
-
-    result = le_update_Start(fd);
-    if (LE_OK != result)
-    {
-        LE_ERROR("failed to update software %s", LE_RESULT_TXT(result));
-        close(fd);
-        return (void *)-1;
-    }
-
-    close(fd);
-
-    return (void *)0;
-}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -602,24 +407,6 @@ le_result_t packageDownloader_StartDownload
         }
     }
 
-    if (-1 == unlink(SW_STATE_PATH))
-    {
-        if (errno != ENOENT)
-        {
-            LE_ERROR("failed to unlink %s: %m", SW_STATE_PATH);
-            return LE_FAULT;
-        }
-    }
-
-    if (-1 == unlink(SW_RESULT_PATH))
-    {
-        if (errno != ENOENT)
-        {
-            LE_ERROR("failed to unlink %s: %m", SW_RESULT_PATH);
-            return LE_FAULT;
-        }
-    }
-
     dwlCtx.fifoPtr = FIFO_PATH;
     dwlCtx.mainRef = le_thread_GetCurrent();
     dwlCtx.downloadPackage = (void *)packageDownloader_DownloadPackage;
@@ -630,7 +417,7 @@ le_result_t packageDownloader_StartDownload
             dwlCtx.storePackage = (void *)packageDownloader_StoreFwPackage;
             break;
         case LWM2MCORE_SW_UPDATE_TYPE:
-            dwlCtx.storePackage = (void *)packageDownloader_StoreSwPackage;
+            dwlCtx.storePackage = (void *)avcApp_StoreSwPackage;
             break;
         default:
             LE_ERROR("unknown download type");
@@ -642,8 +429,9 @@ le_result_t packageDownloader_StartDownload
     pkgDwl.getInfo = pkgDwlCb_GetInfo;
     pkgDwl.setFwUpdateState = packageDownloader_SetFwUpdateStateModified;
     pkgDwl.setFwUpdateResult = packageDownloader_SetFwUpdateResultModified;
-    pkgDwl.setSwUpdateState = packageDownloader_SetSwUpdateStateModified;
-    pkgDwl.setSwUpdateResult = packageDownloader_SetSwUpdateResultModified;
+    pkgDwl.setSwUpdateState = avcApp_SetDownloadState;
+    pkgDwl.setSwUpdateResult = avcApp_SetDownloadResult;
+
     pkgDwl.download = pkgDwlCb_Download;
     pkgDwl.storeRange = pkgDwlCb_StoreRange;
     pkgDwl.endDownload = pkgDwlCb_EndDownload;
@@ -653,9 +441,21 @@ le_result_t packageDownloader_StartDownload
                 (void *)&pkgDwl);
     le_thread_Start(dwlRef);
 
-    storeRef = le_thread_Create("Store", (void *)dwlCtx.storePackage,
-                    (void *)&pkgDwl);
-    le_thread_Start(storeRef);
+
+    if (type == LWM2MCORE_SW_UPDATE_TYPE)
+    {
+        // Spawning a new thread won't be a good idea for updateDaemon. For single installation
+        // UpdateDaemon requires all its API to be called from same thread. If we spawn thread,
+        // both download and installation has to be done from the same thread which will bring
+        // unwanted complexity.
+        return avcApp_StoreSwPackage((void *)&pkgDwl);
+    }
+    else
+    {
+        storeRef = le_thread_Create("Store", (void *)dwlCtx.storePackage,
+                        (void *)&pkgDwl);
+        le_thread_Start(storeRef);
+    }
 
     return LE_OK;
 }
@@ -680,7 +480,7 @@ le_result_t packageDownloader_AbortDownload
             packageDownloader_SetFwUpdateStateModified(LWM2MCORE_FW_UPDATE_STATE_IDLE);
             break;
         case LWM2MCORE_SW_UPDATE_TYPE:
-            packageDownloader_SetSwUpdateStateModified(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
+            avcApp_SetDownloadState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
             break;
         default:
             LE_ERROR("unknown download type");
@@ -689,3 +489,4 @@ le_result_t packageDownloader_AbortDownload
 
     return LE_OK;
 }
+

@@ -11,6 +11,7 @@
 #include "interfaces.h"
 #include "osPortUpdate.h"
 #include <packageDownloader.h>
+#include "avcAppUpdate.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -29,9 +30,7 @@ static void LaunchUpdateTimerExpiryHandler
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    lwm2mcore_updateType_t updateType;
-
-    updateType = (lwm2mcore_updateType_t)le_timer_GetContextPtr(timerRef);
+    lwm2mcore_updateType_t updateType = (lwm2mcore_updateType_t)le_timer_GetContextPtr(timerRef);
 
     switch (updateType)
     {
@@ -39,14 +38,6 @@ static void LaunchUpdateTimerExpiryHandler
             LE_DEBUG("Launch FW update");
             packageDownloader_SetFwUpdateStateModified(LWM2MCORE_FW_UPDATE_STATE_UPDATING);
             le_fwupdate_DualSysSwap();
-            break;
-
-        case LWM2MCORE_SW_UPDATE_TYPE:
-            LE_DEBUG("Launch SW update");
-            break;
-
-        case LWM2MCORE_MAX_UPDATE_TYPE:
-            LE_DEBUG("Launch internal update");
             break;
 
         default:
@@ -204,27 +195,43 @@ lwm2mcore_sid_t os_portUpdateLaunchUpdate
 )
 {
     lwm2mcore_sid_t sid;
-    if (LWM2MCORE_MAX_UPDATE_TYPE <= type)
+    switch (type)
     {
-        sid = LWM2MCORE_ERR_INVALID_ARG;
-    }
-    else
-    {
-        // Acknowledge the launch update notification and launch the update later
-        le_clk_Time_t interval = {2, 0};
-        LaunchUpdateTimer = le_timer_Create("launch update timer");
-        if (   (LE_OK != le_timer_SetHandler(LaunchUpdateTimer, LaunchUpdateTimerExpiryHandler))
-            || (LE_OK != le_timer_SetContextPtr(LaunchUpdateTimer, (void*)type))
-            || (LE_OK != le_timer_SetInterval(LaunchUpdateTimer, interval))
-            || (LE_OK != le_timer_Start(LaunchUpdateTimer))
-           )
-        {
-            sid = LWM2MCORE_ERR_GENERAL_ERROR;
-        }
-        else
-        {
-            sid = LWM2MCORE_ERR_COMPLETED_OK;
-        }
+        case LWM2MCORE_FW_UPDATE_TYPE:
+            {
+                // Acknowledge the launch update notification and launch the update later
+                le_clk_Time_t interval = {2, 0};
+                LaunchUpdateTimer = le_timer_Create("launch update timer");
+                if (   (LE_OK != le_timer_SetHandler(LaunchUpdateTimer,
+                                                     LaunchUpdateTimerExpiryHandler))
+                    || (LE_OK != le_timer_SetContextPtr(LaunchUpdateTimer, (void*)type))
+                    || (LE_OK != le_timer_SetInterval(LaunchUpdateTimer, interval))
+                    || (LE_OK != le_timer_Start(LaunchUpdateTimer))
+                   )
+                {
+                    sid = LWM2MCORE_ERR_GENERAL_ERROR;
+                }
+                else
+                {
+                    sid = LWM2MCORE_ERR_COMPLETED_OK;
+                }
+            }
+            break;
+
+        case LWM2MCORE_SW_UPDATE_TYPE:
+            if(avcApp_StartInstall(instanceId) == LE_OK)
+            {
+                sid = LWM2MCORE_ERR_COMPLETED_OK;
+            }
+            else
+            {
+                sid = LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            break;
+
+        default:
+            sid = LWM2MCORE_ERR_INVALID_ARG;
+            break;
     }
     LE_DEBUG("LaunchUpdate type %d: %d", type, sid);
     return sid;
@@ -274,8 +281,8 @@ lwm2mcore_sid_t os_portUpdateGetUpdateState
             break;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
-            if (LE_OK == packageDownloader_GetSwUpdateState(
-                                                        (lwm2mcore_swUpdateState_t*)updateStatePtr))
+            if (LE_OK == avcApp_GetUpdateState(instanceId,
+                                               (lwm2mcore_swUpdateState_t*)updateStatePtr))
             {
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
                 LE_DEBUG("updateState : %d", *updateStatePtr);
@@ -338,8 +345,8 @@ lwm2mcore_sid_t os_portUpdateGetUpdateResult
             break;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
-            if (LE_OK == packageDownloader_GetSwUpdateResult(
-                                                    (lwm2mcore_swUpdateResult_t*)updateResultPtr))
+            if (LE_OK == avcApp_GetUpdateResult(instanceId,
+                                                (lwm2mcore_swUpdateResult_t*)updateResultPtr))
             {
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
                 LE_DEBUG("updateState : %d", *updateResultPtr);
@@ -357,10 +364,6 @@ lwm2mcore_sid_t os_portUpdateGetUpdateResult
     LE_DEBUG("GetUpdateResult type %d: %d", type, sid);
     return sid;
 }
-
-/* For test only: will be removed with Legato development*/
-#define APPLICATION "application"
-#define VERSION "version"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -380,15 +383,36 @@ lwm2mcore_sid_t os_portUpdateGetPackageName
 (
     lwm2mcore_updateType_t type,    ///< [IN] Update type
     uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
-    char* bufferPtr,                ///< [INOUT] data buffer
-    uint32_t len                    ///< [IN] length of input buffer
+    char* bufferPtr,                ///< [INOUT] Data buffer
+    uint32_t len                    ///< [IN] Length of input buffer
 )
 {
-    LE_INFO("os_portUpdateGetPackageName len %d", len);
-    memset(bufferPtr, 0, len);
-    snprintf(bufferPtr, len, "%s%d", APPLICATION, instanceId);
-    os_debug_data_dump ("application name", bufferPtr, strlen(bufferPtr));
-    return LWM2MCORE_ERR_COMPLETED_OK;
+    if (bufferPtr == NULL)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    lwm2mcore_sid_t result;
+
+    switch (type)
+    {
+        case LWM2MCORE_SW_UPDATE_TYPE:
+            if (avcApp_GetPackageName(instanceId, bufferPtr, len) == LE_OK)
+            {
+                result = LWM2MCORE_ERR_COMPLETED_OK;
+            }
+            else
+            {
+                result = LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            break;
+
+        default:
+            LE_ERROR("Not supported for package type: %d", type);
+            result = LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+            break;
+    }
+    return result;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -413,11 +437,32 @@ lwm2mcore_sid_t os_portUpdateGetPackageVersion
     uint32_t len                    ///< [IN] length of input buffer
 )
 {
-    LE_INFO("os_portUpdateGetPackageVersion len %d", len);
-    memset(bufferPtr, 0, len);
-    snprintf(bufferPtr, len, "%s%d", VERSION, instanceId);
-    os_debug_data_dump ("application version",bufferPtr, strlen(bufferPtr));
-    return LWM2MCORE_ERR_COMPLETED_OK;
+    if (bufferPtr == NULL)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    lwm2mcore_sid_t result;
+
+    switch (type)
+    {
+        case LWM2MCORE_SW_UPDATE_TYPE:
+            if (avcApp_GetPackageVersion(instanceId, bufferPtr, len) == LE_OK)
+            {
+                result = LWM2MCORE_ERR_COMPLETED_OK;
+            }
+            else
+            {
+                result= LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            break;
+
+        default:
+            LE_ERROR("Not supported for package type: %d", type);
+            result = LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+            break;
+    }
+    return result;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -441,7 +486,6 @@ lwm2mcore_sid_t os_portUpdateSetSwSupportedObjects
 )
 {
     LE_INFO("os_portUpdateSetSwSupportedObjects oiid %d, value %d", instanceId, value);
-    /* TODO: add Legato treatment */
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
@@ -471,7 +515,6 @@ lwm2mcore_sid_t os_portUpdateGetSwSupportedObjects
     }
     else
     {
-        /* TODO: add Legato treatment */
         *valuePtr = true;
         LE_INFO("os_portUpdateGetSwSupportedObjects, oiid %d, value %d", instanceId, *valuePtr);
         return LWM2MCORE_ERR_COMPLETED_OK;
@@ -503,13 +546,21 @@ lwm2mcore_sid_t os_portUpdateGetSwActivationState
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
-    else
+
+    le_result_t result = avcApp_GetActivationState(instanceId, valuePtr);
+
+    if (result == LE_OK)
     {
-        /* TODO: add Legato treatment */
-        *valuePtr = true;
-        LE_INFO("os_portUpdateGetSwActivationState oiid %d, value %d", instanceId, *valuePtr);
         return LWM2MCORE_ERR_COMPLETED_OK;
     }
+
+    if (result == LE_NOT_FOUND)
+    {
+        LE_ERROR("InstanceId: %u not found", instanceId);
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    return LWM2MCORE_ERR_GENERAL_ERROR;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -537,11 +588,16 @@ lwm2mcore_sid_t os_portUpdateLaunchSwUninstall
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
-    else
+
+    // Here we are only delisting the app. The deletion of app will be called when deletion
+    // of object 9 instance is requested.
+
+    if (avcApp_PrepareUninstall(instanceId) == LE_OK)
     {
-        /* TODO: add Legato treatment */
         return LWM2MCORE_ERR_COMPLETED_OK;
     }
+
+    return LWM2MCORE_ERR_GENERAL_ERROR;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -571,11 +627,19 @@ lwm2mcore_sid_t os_portUpdateActivateSoftware
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
+
+    le_result_t result;
+
+    if (activation)
+    {
+        result = avcApp_StartApp(instanceId);
+    }
     else
     {
-        /* TODO: add Legato treatment */
-        return LWM2MCORE_ERR_COMPLETED_OK;
+        result = avcApp_StopApp(instanceId);
     }
+
+    return (result == LE_OK) ? LWM2MCORE_ERR_COMPLETED_OK : LWM2MCORE_ERR_GENERAL_ERROR;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -598,9 +662,17 @@ lwm2mcore_sid_t os_portUpdateSoftwareInstance
     uint16_t instanceId         ///<[IN] Object instance Id to create or delete
 )
 {
-    lwm2mcore_sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
-    /* TODO: add Legato treatment */
-    LE_INFO("os_portUpdateSoftwareInstance create %d, Oiid %d", create, instanceId);
-    return sID;
+    le_result_t result;
+    if (create)
+    {
+        result = avcApp_CreateObj9Instance(instanceId);
+    }
+    else
+    {
+        result = avcApp_StartUninstall(instanceId);
+    }
+
+    LE_INFO("Instance creation result: %s ", LE_RESULT_TXT(result));
+    return (result == LE_OK) ? LWM2MCORE_ERR_COMPLETED_OK : LWM2MCORE_ERR_GENERAL_ERROR;
 }
 
