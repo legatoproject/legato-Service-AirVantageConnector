@@ -37,8 +37,14 @@ static void LaunchUpdateTimerExpiryHandler
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
             LE_DEBUG("Launch FW update");
-            packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING);
-            le_fwupdate_DualSysSwap();
+            if (LE_OK == packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING))
+            {
+                le_fwupdate_DualSysSwap();
+            }
+            else
+            {
+                LE_ERROR("Unable to set FW update state to UPDATING");
+            }
             break;
 
         default:
@@ -95,50 +101,65 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
     size_t len                      ///< [IN] Length of input buffer
 )
 {
-    lwm2mcore_Sid_t sid;
-    LE_DEBUG("URI : len %d", len);
+    LE_DEBUG("URI: len %d", len);
 
     if (0 == len)
     {
-        /* If len is 0, then :
-         * the Update State shall be set to default value
-         * the package URI is deleted from storage file
-         * any active download is suspended
-         */
-        packageDownloader_AbortDownload(type);
-        sid = LWM2MCORE_ERR_COMPLETED_OK;
-    }
-    else
-    {
-        /* Parameter check */
-        if ((!bufferPtr)
-         || (LWM2MCORE_PACKAGE_URI_MAX_LEN < len)
-         || (LWM2MCORE_MAX_UPDATE_TYPE <= type))
+        // If length is 0, then the Update State shall be set to default value,
+        // any active download is suspended and the package URI is deleted from storage file.
+        if (LE_OK != packageDownloader_AbortDownload(type))
         {
-            LE_INFO("lwm2mcore_UpdateWritePackageUri : bad param");
-            sid = LWM2MCORE_ERR_INVALID_ARG;
+            return LWM2MCORE_ERR_GENERAL_ERROR;
         }
-        else
-        {
-            /* Package URI: LWM2MCORE_PACKAGE_URI_MAX_LEN+1 for null byte: string format */
-            uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
-            memset(downloadUri, 0, LWM2MCORE_PACKAGE_URI_MAX_LEN+1);
-            memcpy(downloadUri, bufferPtr, len);
 
-            LE_DEBUG("Request to download firmware update from URL : %s, len %d", downloadUri, len);
-            /* Call API to launch the package download */
-            if (LE_FAULT == packageDownloader_StartDownload(downloadUri, type))
-            {
-                sid = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            else
-            {
-                sid = LWM2MCORE_ERR_COMPLETED_OK;
-            }
-        }
+        return LWM2MCORE_ERR_COMPLETED_OK;
     }
-    LE_DEBUG("SetPackageUri type %d: %d", type, sid);
-    return sid;
+
+    // Parameter check
+    if (   (!bufferPtr)
+        || (LWM2MCORE_PACKAGE_URI_MAX_LEN < len)
+        || (LWM2MCORE_MAX_UPDATE_TYPE <= type))
+    {
+        LE_INFO("lwm2mcore_UpdateSetPackageUri: bad parameter");
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    // Package URI: LWM2MCORE_PACKAGE_URI_MAX_LEN+1 for null byte: string format
+    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
+    memset(downloadUri, 0, LWM2MCORE_PACKAGE_URI_MAX_LEN+1);
+    memcpy(downloadUri, bufferPtr, len);
+    LE_DEBUG("Request to download firmware update from URL : %s, len %d", downloadUri, len);
+
+    // Reset the update state
+    switch (type)
+    {
+        case LWM2MCORE_FW_UPDATE_TYPE:
+            if (LE_OK != packageDownloader_SetFwUpdateResult(
+                                                    LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL))
+            {
+                return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            break;
+
+        case LWM2MCORE_SW_UPDATE_TYPE:
+            if (LE_OK != avcApp_SetDownloadResult(LWM2MCORE_SW_UPDATE_RESULT_INITIAL))
+            {
+                return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            break;
+
+        default:
+            LE_ERROR("Unknown download type");
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    // Call API to launch the package download
+    if (LE_OK != packageDownloader_StartDownload(downloadUri, type, false))
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -265,7 +286,7 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdateState
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    /* Call API to get the update state */
+    // Call API to get the update state
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
@@ -329,7 +350,7 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdateResult
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    /* Call API to get the update result */
+    // Call API to get the update result
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
@@ -748,3 +769,67 @@ lwm2mcore_Sid_t lwm2mcore_GetFirmwareUpdateInstallResult
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Resume a package download if necessary
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
+(
+    void
+)
+{
+    lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
+    lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
+
+    // Check if a download resume should be launched
+    if (   (LE_OK == packageDownloader_GetFwUpdateState(&fwUpdateState))
+        && (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
+        && (LWM2MCORE_FW_UPDATE_STATE_DOWNLOADING == fwUpdateState)
+        && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult)
+       )
+    {
+        uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
+        size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
+        lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
+        memset(downloadUri, 0, uriLen);
+
+        LE_DEBUG("Download to resume");
+
+        // Retrieve resume information
+        if (LE_OK != packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
+        {
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+        }
+
+        if (   (0 == strncmp(downloadUri, "", LWM2MCORE_PACKAGE_URI_MAX_LEN+1))
+            || (LWM2MCORE_MAX_UPDATE_TYPE == updateType)
+           )
+        {
+            LE_ERROR("Download to resume but no URI/updateType stored");
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+        }
+
+        // Call API to launch the package download
+        if (LE_OK != packageDownloader_StartDownload(downloadUri, updateType, true))
+        {
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+        }
+
+        return LWM2MCORE_ERR_COMPLETED_OK;
+    }
+
+    LE_DEBUG("No download to resume (update state %d, update result %d)",
+             fwUpdateState, fwUpdateResult);
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}

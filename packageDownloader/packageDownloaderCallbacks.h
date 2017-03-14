@@ -76,7 +76,6 @@ lwm2mcore_DwlResult_t pkgDwlCb_StoreRange
 (
     uint8_t* bufPtr,
     size_t   bufSize,
-    uint64_t offset,
     void*    ctxPtr
 );
 

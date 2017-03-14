@@ -72,6 +72,7 @@ sources:
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/handlers.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/utils.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader/lwm2mcorePackageDownloader.c
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader/workspace.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/lwm2mcoreCoapHandlers.c
 
 

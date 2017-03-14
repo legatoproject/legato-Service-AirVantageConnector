@@ -21,36 +21,43 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Check system state
+ * Download statuses
  */
 //--------------------------------------------------------------------------------------------------
-static le_result_t CheckSystemState
-(
-    void
-)
-{
-    le_result_t result;
-    bool isSync;
+#define DOWNLOAD_STATUS_IDLE        0x00
+#define DOWNLOAD_STATUS_ACTIVE      0x01
+#define DOWNLOAD_STATUS_ABORT       0x02
 
-    result = le_fwupdate_DualSysSyncState(&isSync);
-    if (result != LE_OK)
-    {
-        LE_ERROR("Sync State check failed. Error %s", LE_RESULT_TXT(result));
-        return LE_FAULT;
-    }
+//--------------------------------------------------------------------------------------------------
+/**
+ * Current download status.
+ */
+//--------------------------------------------------------------------------------------------------
+static uint8_t DownloadStatus = DOWNLOAD_STATUS_IDLE;
 
-    if (false == isSync)
-    {
-        result = le_fwupdate_DualSysSync();
-        if (result != LE_OK)
-        {
-            LE_ERROR("SYNC operation failed. Error %s", LE_RESULT_TXT(result));
-            return LE_FAULT;
-        }
-    }
+//--------------------------------------------------------------------------------------------------
+/**
+ * Mutex to prevent race condition between threads.
+ */
+//--------------------------------------------------------------------------------------------------
+static pthread_mutex_t DownloadStatusMutex = PTHREAD_MUTEX_INITIALIZER;
 
-    return LE_OK;
-}
+//--------------------------------------------------------------------------------------------------
+/**
+ * Macro used to prevent race condition between threads.
+ */
+//--------------------------------------------------------------------------------------------------
+#define LOCK()    LE_FATAL_IF((pthread_mutex_lock(&DownloadStatusMutex)!=0), \
+                               "Could not lock the mutex")
+#define UNLOCK()  LE_FATAL_IF((pthread_mutex_unlock(&DownloadStatusMutex)!=0), \
+                               "Could not unlock the mutex")
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Semaphore to synchronize download abort.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_sem_Ref_t DownloadAbortSemaphore = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -59,11 +66,101 @@ static le_result_t CheckSystemState
 //--------------------------------------------------------------------------------------------------
 static void UpdateStatus
 (
-    void *param1,
-    void *param2
+    void* param1,
+    void* param2
 )
 {
     avcClient_Update();
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set download status
+ */
+//--------------------------------------------------------------------------------------------------
+static void SetDownloadStatus
+(
+    uint8_t newDownloadStatus   ///< New download status to set
+)
+{
+    LOCK();
+    DownloadStatus = newDownloadStatus;
+    UNLOCK();
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get download status
+ */
+//--------------------------------------------------------------------------------------------------
+static uint8_t GetDownloadStatus
+(
+    void
+)
+{
+    uint8_t currentDownloadStatus;
+
+    LOCK();
+    currentDownloadStatus = DownloadStatus;
+    UNLOCK();
+
+    return currentDownloadStatus;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if the current download should be aborted
+ */
+//--------------------------------------------------------------------------------------------------
+bool packageDownloader_CurrentDownloadToAbort
+(
+    void
+)
+{
+    if (DOWNLOAD_STATUS_ABORT == GetDownloadStatus())
+    {
+        return true;
+    }
+
+    return false;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Abort current download
+ */
+//--------------------------------------------------------------------------------------------------
+static void AbortDownload
+(
+    void
+)
+{
+    switch (GetDownloadStatus())
+    {
+        case DOWNLOAD_STATUS_IDLE:
+            // Nothing to abort
+            break;
+
+        case DOWNLOAD_STATUS_ACTIVE:
+            // Abort ongoing download
+            SetDownloadStatus(DOWNLOAD_STATUS_ABORT);
+            break;
+
+        default:
+            LE_ERROR("Unexpected DownloadStatus %d", DownloadStatus);
+            SetDownloadStatus(DOWNLOAD_STATUS_IDLE);
+            break;
+    }
+
+    if (DOWNLOAD_STATUS_IDLE != GetDownloadStatus())
+    {
+        // Wait for download end
+        le_clk_Time_t timeout = {2, 0};
+        if (LE_OK != le_sem_WaitWithTimeOut(DownloadAbortSemaphore, timeout))
+        {
+            LE_ERROR("Error while aborting download");
+        }
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -105,6 +202,121 @@ static le_result_t WritePEMCertificate
     }
 
     close(fd);
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Store package information necessary to resume a download if necessary (URI and package type)
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Incorrect parameter provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t SetResumeInfo
+(
+    char* uriPtr,                   ///< [IN] package URI
+    lwm2mcore_UpdateType_t type     ///< [IN] Update type
+)
+{
+    if (!uriPtr)
+    {
+        return LE_BAD_PARAMETER;
+    }
+
+    le_result_t result;
+    result = WriteFs(PACKAGE_URI_FILENAME, (uint8_t*)uriPtr, strlen(uriPtr));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", PACKAGE_URI_FILENAME, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    result = WriteFs(UPDATE_TYPE_FILENAME, (uint8_t*)&type, sizeof(lwm2mcore_UpdateType_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", UPDATE_TYPE_FILENAME, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete package information necessary to resume a download (URI and package type)
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t DeleteResumeInfo
+(
+    void
+)
+{
+    le_result_t result;
+    result = DeleteFs(PACKAGE_URI_FILENAME);
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to delete %s: %s", PACKAGE_URI_FILENAME, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    result = DeleteFs(UPDATE_TYPE_FILENAME);
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to delete %s: %s", UPDATE_TYPE_FILENAME, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve package information necessary to resume a download (URI and package type)
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Incorrect parameter provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetResumeInfo
+(
+    char* uriPtr,                       ///< [INOUT] package URI
+    size_t* uriLenPtr,                  ///< [INOUT] package URI length
+    lwm2mcore_UpdateType_t* typePtr     ///< [INOUT] Update type
+)
+{
+    if (   (!uriPtr) || (!uriLenPtr) || (!typePtr)
+        || (*uriLenPtr < (LWM2MCORE_PACKAGE_URI_MAX_LEN + 1))
+       )
+    {
+        return LE_BAD_PARAMETER;
+    }
+
+    le_result_t result;
+    result = ReadFs(PACKAGE_URI_FILENAME, (uint8_t*)uriPtr, uriLenPtr);
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to read %s: %s", PACKAGE_URI_FILENAME, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    size_t fileLen = sizeof(lwm2mcore_UpdateType_t);
+    result = ReadFs(UPDATE_TYPE_FILENAME, (uint8_t*)typePtr, &fileLen);
+    if ((LE_OK != result) || (sizeof(lwm2mcore_UpdateType_t) != fileLen))
+    {
+        LE_ERROR("Failed to read %s: %s", UPDATE_TYPE_FILENAME, LE_RESULT_TXT(result));
+        *typePtr = LWM2MCORE_MAX_UPDATE_TYPE;
+        return result;
+    }
 
     return LE_OK;
 }
@@ -166,6 +378,9 @@ le_result_t packageDownloader_Init
     {
         return LE_FAULT;
     }
+
+    // Create a semaphore to coordinate download abort
+    DownloadAbortSemaphore = le_sem_Create("DownloadAbortSem", 0);
 
     return LE_OK;
 }
@@ -319,21 +534,29 @@ le_result_t packageDownloader_GetFwUpdateResult
  * Download package thread function
  */
 //--------------------------------------------------------------------------------------------------
-void *packageDownloader_DownloadPackage
+void* packageDownloader_DownloadPackage
 (
-    void *ctxPtr
+    void* ctxPtr    ///< Context pointer
 )
 {
-    lwm2mcore_PackageDownloader_t *pkgDwlPtr;
-    packageDownloader_DownloadCtx_t *dwlCtxPtr;
+    lwm2mcore_PackageDownloader_t* pkgDwlPtr;
+    packageDownloader_DownloadCtx_t* dwlCtxPtr;
     static int ret = 0;
 
     // Connect to services used by this thread
     secStoreGlobal_ConnectService();
     le_fs_ConnectService();
 
-    pkgDwlPtr = (lwm2mcore_PackageDownloader_t *)ctxPtr;
-    dwlCtxPtr = (packageDownloader_DownloadCtx_t *)pkgDwlPtr->ctxPtr;
+    pkgDwlPtr = (lwm2mcore_PackageDownloader_t*)ctxPtr;
+    dwlCtxPtr = (packageDownloader_DownloadCtx_t*)pkgDwlPtr->ctxPtr;
+
+    // Initialize the package downloader, except for a download resume
+    if (!dwlCtxPtr->resume)
+    {
+        lwm2mcore_PackageDownloaderInit();
+    }
+
+    SetDownloadStatus(DOWNLOAD_STATUS_ACTIVE);
 
     if (lwm2mcore_PackageDownloaderRun(pkgDwlPtr) != DWL_OK)
     {
@@ -341,42 +564,63 @@ void *packageDownloader_DownloadPackage
         ret = -1;
     }
 
-    le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
+    le_sem_Post(DownloadAbortSemaphore);
 
-    return (void *)&ret;
+    // Download finished or aborted: delete stored URI and update type
+    if (LE_OK != DeleteResumeInfo())
+    {
+        ret = -1;
+    }
+
+    // If the download was not aborted, trigger a connection to the server:
+    // the update state and result will be read to determine if the download was successful
+    if (DOWNLOAD_STATUS_ABORT != GetDownloadStatus())
+    {
+        le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
+    }
+
+    SetDownloadStatus(DOWNLOAD_STATUS_IDLE);
+
+    return (void*)&ret;
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Store fw package thread function
+ * Store FW package thread function
  */
 //--------------------------------------------------------------------------------------------------
-void *packageDownloader_StoreFwPackage
+void* packageDownloader_StoreFwPackage
 (
-    void *ctxPtr
+    void* ctxPtr    ///< Context pointer
 )
 {
-    lwm2mcore_PackageDownloader_t *pkgDwlPtr;
-    packageDownloader_DownloadCtx_t *dwlCtxPtr;
+    lwm2mcore_PackageDownloader_t* pkgDwlPtr;
+    packageDownloader_DownloadCtx_t* dwlCtxPtr;
     int fd;
     le_result_t result;
 
-    pkgDwlPtr = (lwm2mcore_PackageDownloader_t *)ctxPtr;
+    pkgDwlPtr = (lwm2mcore_PackageDownloader_t*)ctxPtr;
     dwlCtxPtr = pkgDwlPtr->ctxPtr;
 
+    // Connect to services used by this thread
     le_fwupdate_ConnectService();
+    le_fs_ConnectService();
 
-    if (LE_OK != CheckSystemState())
+    // Initialize the fwupdate process, except for a download resume
+    if (!dwlCtxPtr->resume)
     {
-        LE_ERROR("failed to sync");
-        return (void *)-1;
+        if (LE_OK != le_fwupdate_InitDownload())
+        {
+            LE_ERROR("Failed to initialize fwupdate");
+            return (void *)-1;
+        }
     }
 
     fd = open(dwlCtxPtr->fifoPtr, O_RDONLY | O_NONBLOCK, 0);
     if (-1 == fd)
     {
         LE_ERROR("failed to open fifo %m");
-        return (void *)-1;
+        return (void*)-1;
     }
 
     result = le_fwupdate_Download(fd);
@@ -384,12 +628,37 @@ void *packageDownloader_StoreFwPackage
     {
         LE_ERROR("failed to update firmware %s", LE_RESULT_TXT(result));
         close(fd);
-        return (void *)-1;
+
+        if (DOWNLOAD_STATUS_ABORT != GetDownloadStatus())
+        {
+            lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
+
+            // Abort active download
+            AbortDownload();
+
+            // Set the update result if not already done by LWM2M package downloader
+            if (   (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
+                && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult)
+               )
+            {
+                if (LE_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE))
+                {
+                    LE_ERROR("Error while setting FW Update State");
+                }
+                if (LE_OK != packageDownloader_SetFwUpdateResult(
+                                                   LWM2MCORE_FW_UPDATE_RESULT_UNSUPPORTED_PKG_TYPE))
+                {
+                    LE_ERROR("Error while setting FW Update Result");
+                }
+            }
+        }
+
+        return (void*)-1;
     }
 
     close(fd);
 
-    return (void *)0;
+    return (void*)0;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -399,59 +668,75 @@ void *packageDownloader_StoreFwPackage
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_StartDownload
 (
-    const char              *uriPtr,
-    lwm2mcore_UpdateType_t  type
+    const char*            uriPtr,  ///< Package URI
+    lwm2mcore_UpdateType_t type,    ///< Update type (FW/SW)
+    bool                   resume   ///< Indicates if it is a download resume
 )
 {
     static lwm2mcore_PackageDownloader_t pkgDwl;
     static packageDownloader_DownloadCtx_t dwlCtx;
     lwm2mcore_PackageDownloaderData_t data;
     le_thread_Ref_t dwlRef, storeRef;
-    char *dwlType[2] = {
+    char* dwlType[2] = {
         [0] = "FW_UPDATE",
         [1] = "SW_UPDATE",
     };
 
     LE_DEBUG("downloading a `%s'", dwlType[type]);
 
+    // Store URI and update type to be able to resume the download if necessary
+    if (LE_OK != SetResumeInfo(uriPtr, type))
+    {
+        return LE_FAULT;
+    }
+
+    // Set the package downloader data structure
     memset(data.packageUri, 0, LWM2MCORE_PACKAGE_URI_MAX_LEN + 1);
     memcpy(data.packageUri, uriPtr, strlen(uriPtr));
     data.packageSize = 0;
     data.updateType = type;
+    data.updateOffset = 0;
+    pkgDwl.data = data;
+
+    // Set the package downloader callbacks
+    pkgDwl.initDownload = pkgDwlCb_InitDownload;
+    pkgDwl.getInfo = pkgDwlCb_GetInfo;
+    pkgDwl.setFwUpdateState = packageDownloader_SetFwUpdateState;
+    pkgDwl.setFwUpdateResult = packageDownloader_SetFwUpdateResult;
+    pkgDwl.setSwUpdateState = avcApp_SetDownloadState;
+    pkgDwl.setSwUpdateResult = avcApp_SetDownloadResult;
+    pkgDwl.download = pkgDwlCb_Download;
+    pkgDwl.storeRange = pkgDwlCb_StoreRange;
+    pkgDwl.endDownload = pkgDwlCb_EndDownload;
 
     dwlCtx.fifoPtr = FIFO_PATH;
     dwlCtx.mainRef = le_thread_GetCurrent();
     dwlCtx.certPtr = PEMCERT_PATH;
-    dwlCtx.downloadPackage = (void *)packageDownloader_DownloadPackage;
-
+    dwlCtx.downloadPackage = (void*)packageDownloader_DownloadPackage;
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
-            dwlCtx.storePackage = (void *)packageDownloader_StoreFwPackage;
+            if (resume)
+            {
+                // Get fwupdate offset before launching the download
+                // and the blocking call to le_fwupdate_Download()
+                le_fwupdate_GetResumePosition(&pkgDwl.data.updateOffset);
+                LE_DEBUG("updateOffset: %llu", pkgDwl.data.updateOffset);
+            }
+            dwlCtx.storePackage = (void*)packageDownloader_StoreFwPackage;
             break;
         case LWM2MCORE_SW_UPDATE_TYPE:
-            dwlCtx.storePackage = (void *)avcApp_StoreSwPackage;
+            dwlCtx.storePackage = (void*)avcApp_StoreSwPackage;
             break;
         default:
             LE_ERROR("unknown download type");
             return LE_FAULT;
     }
+    dwlCtx.resume = resume;
+    pkgDwl.ctxPtr = (void*)&dwlCtx;
 
-    pkgDwl.data = data;
-    pkgDwl.initDownload = pkgDwlCb_InitDownload;
-    pkgDwl.getInfo = pkgDwlCb_GetInfo;
-    pkgDwl.setFwUpdateState = pkgDwlCb_SetFwUpdateState;
-    pkgDwl.setFwUpdateResult = pkgDwlCb_SetFwUpdateResult;
-    pkgDwl.setSwUpdateState = avcApp_SetDownloadState;
-    pkgDwl.setSwUpdateResult = avcApp_SetDownloadResult;
-
-    pkgDwl.download = pkgDwlCb_Download;
-    pkgDwl.storeRange = pkgDwlCb_StoreRange;
-    pkgDwl.endDownload = pkgDwlCb_EndDownload;
-    pkgDwl.ctxPtr = (void *)&dwlCtx;
-
-    dwlRef = le_thread_Create("Downloader", (void *)dwlCtx.downloadPackage,
-                (void *)&pkgDwl);
+    dwlRef = le_thread_Create("Downloader", (void*)dwlCtx.downloadPackage,
+                (void*)&pkgDwl);
     le_thread_Start(dwlRef);
 
 
@@ -461,12 +746,12 @@ le_result_t packageDownloader_StartDownload
         // UpdateDaemon requires all its API to be called from same thread. If we spawn thread,
         // both download and installation has to be done from the same thread which will bring
         // unwanted complexity.
-        return avcApp_StoreSwPackage((void *)&pkgDwl);
+        return avcApp_StoreSwPackage((void*)&pkgDwl);
     }
     else
     {
-        storeRef = le_thread_Create("Store", (void *)dwlCtx.storePackage,
-                        (void *)&pkgDwl);
+        storeRef = le_thread_Create("Store", (void*)dwlCtx.storePackage,
+                        (void*)&pkgDwl);
         le_thread_Start(storeRef);
     }
 
@@ -480,23 +765,41 @@ le_result_t packageDownloader_StartDownload
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_AbortDownload
 (
-    lwm2mcore_UpdateType_t  type
+    lwm2mcore_UpdateType_t type     ///< Update type (FW/SW)
 )
 {
-    /* The Update State needs to be set to default value
-     * The package URI needs to be deleted from storage file
-     * Any active download is suspended
-     */
+    le_result_t result;
+
+    LE_DEBUG("Download abort requested");
+
+    // Abort active download
+    AbortDownload();
+
+    // Delete resume information if the files are still present
+    DeleteResumeInfo();
+
+    // Set update state and result to the default values
+    LE_DEBUG("Download aborted");
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
-            packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
+            result = packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
+            if (LE_OK != result)
+            {
+                return result;
+            }
             break;
+
         case LWM2MCORE_SW_UPDATE_TYPE:
-            avcApp_SetDownloadState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
+            result = avcApp_SetDownloadState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
+            if (LE_OK != result)
+            {
+                return result;
+            }
             break;
+
         default:
-            LE_ERROR("unknown download type");
+            LE_ERROR("Unknown download type %d", type);
             return LE_FAULT;
     }
 

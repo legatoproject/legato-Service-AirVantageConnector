@@ -21,12 +21,13 @@
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    const char*      fifoPtr;               ///< store FIFO pointer
-    void*            ctxPtr;                ///< context pointer
-    le_thread_Ref_t  mainRef;               ///< main thread reference
+    const char*      fifoPtr;               ///< Store FIFO pointer
+    void*            ctxPtr;                ///< Context pointer
+    le_thread_Ref_t  mainRef;               ///< Main thread reference
     const char*      certPtr;               ///< PEM certificate path
-    void (*downloadPackage)(void *ctxPtr);  ///< download package callback
-    void (*storePackage)(void *ctxPtr);     ///< store package callback
+    void (*downloadPackage)(void *ctxPtr);  ///< Download package callback
+    void (*storePackage)(void *ctxPtr);     ///< Store package callback
+    bool             resume;                ///< Indicates if it is a download resume
 }
 packageDownloader_DownloadCtx_t;
 
@@ -105,7 +106,7 @@ le_result_t packageDownloader_GetFwUpdateResult
 //--------------------------------------------------------------------------------------------------
 void* packageDownloader_DownloadPackage
 (
-    void* ctxPtr
+    void* ctxPtr    ///< Context pointer
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -115,7 +116,7 @@ void* packageDownloader_DownloadPackage
 //--------------------------------------------------------------------------------------------------
 void* packageDownloader_StoreFwPackage
 (
-    void* ctxPtr
+    void* ctxPtr    ///< Context pointer
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -125,8 +126,9 @@ void* packageDownloader_StoreFwPackage
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_StartDownload
 (
-    const char*            uriPtr,
-    lwm2mcore_UpdateType_t type
+    const char*            uriPtr,  ///< Package URI
+    lwm2mcore_UpdateType_t type,    ///< Update type (FW/SW)
+    bool                   resume   ///< Indicates if it is a download resume
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -136,7 +138,34 @@ le_result_t packageDownloader_StartDownload
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_AbortDownload
 (
-    lwm2mcore_UpdateType_t  type
+    lwm2mcore_UpdateType_t  type    ///< Update type (FW/SW)
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if the current download should be aborted
+ */
+//--------------------------------------------------------------------------------------------------
+bool packageDownloader_CurrentDownloadToAbort
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve package information necessary to resume a download (URI and package type)
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Incorrect parameter provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetResumeInfo
+(
+    char* uriPtr,                       ///< [INOUT] package URI
+    size_t* uriLenPtr,                  ///< [INOUT] package URI length
+    lwm2mcore_UpdateType_t* typePtr     ///< [INOUT] Update type
 );
 
 #endif /*_PACKAGEDOWNLOADER_H */

@@ -101,6 +101,14 @@ static size_t Write
 {
     size_t count = size * nmemb;
 
+    // Check if the download should be aborted
+    if (true == packageDownloader_CurrentDownloadToAbort())
+    {
+        LE_ERROR("Download aborted");
+        return 0;
+    }
+
+    // Process the downloaded data
     if (DWL_OK != lwm2mcore_PackageDownloaderReceiveData(contentsPtr, count))
     {
         LE_ERROR("Data processing stopped by DWL parser");
@@ -372,6 +380,13 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
     }
 
     rc = curl_easy_perform(pkgPtr->curlPtr);
+
+    if (true == packageDownloader_CurrentDownloadToAbort())
+    {
+        // Download is aborted: stop the parser by returning a download error
+        return DWL_FAULT;
+    }
+
     if (   (CURLE_OK != rc)
         && (CURLE_WRITE_ERROR != rc)    // Expected when parsing aborted the download
        )
@@ -392,7 +407,6 @@ lwm2mcore_DwlResult_t pkgDwlCb_StoreRange
 (
     uint8_t* bufPtr,
     size_t   bufSize,
-    uint64_t offset,
     void*    ctxPtr
 )
 {
