@@ -37,7 +37,7 @@ le_result_t avcApp_StoreSwPackage
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Function called to kick off the install of a Legato application.
+ * Start installation of a Legato application.
  *
  * @return
  *      - LE_OK if installation started.
@@ -53,7 +53,7 @@ le_result_t avcApp_StartInstall
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Function called to kick off an application uninstall.
+ * Start an application removal.
  *
  * @return
  *     - LE_OK if successful
@@ -70,10 +70,10 @@ le_result_t avcApp_StartUninstall
 
 //--------------------------------------------------------------------------------------------------
 /**
- *  Function called to prepare for an application uninstall. This function doesn't remove the app
- *  but deletes only the app objects, so that an existing app can stay running during an upgrade
- *  operation. During an uninstall operation the app will be removed after the client receives the
- *  object9 delete command.
+ *  Prepare for an application removal. This function doesn't remove the app but deletes only the
+ *  app objects, so that an existing app can stay running during an upgrade operation. During an
+ *  uninstall operation the app will be removed after the client receives the object9 delete
+ *  command.
  *
  *  @return
  *      - LE_OK if successful
@@ -249,6 +249,7 @@ lwm2mcore_DwlResult_t  avcApp_SetDownloadResult
  *
  * @return:
  *      - LE_OK on success
+ *      - LE_DUPLICATE if already exists an instance
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------

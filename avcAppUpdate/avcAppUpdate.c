@@ -151,7 +151,7 @@ static const char* UpdateStateToStr
     lwm2mcore_swUpdateState_t state  ///< The enumeration value to convert.
 )
 {
-    char* resultPtr;
+    const char* resultPtr;
 
     switch (state)
     {
@@ -189,10 +189,10 @@ static const char* UpdateStateToStr
 //--------------------------------------------------------------------------------------------------
 static const char* UpdateResultToStr
 (
-        lwm2mcore_swUpdateResult_t swUpdateResult  ///< The enumeration value to convert.
+    lwm2mcore_swUpdateResult_t swUpdateResult  ///< The enumeration value to convert.
 )
 {
-    char* resultPtr;
+    const char* resultPtr;
 
     switch (swUpdateResult)
     {
@@ -280,9 +280,7 @@ static bool IsHiddenApp
                 "wifiClientTest",
                 "wifiService",
                 "wifiWebAp",
-                "fsService",
-                "avcUserApp",
-                "lwm2mControl"
+                "fsService"
             };
 
         for (size_t i = 0; i < NUM_ARRAY_MEMBERS(appList); i++)
@@ -327,24 +325,26 @@ static void DownloadHandler
     pkgDwlPtr = (lwm2mcore_PackageDownloader_t *)contextPtr;
     dwlCtxPtr = pkgDwlPtr->ctxPtr;
 
-    LE_INFO("contxtptr: %p", pkgDwlPtr);
+    LE_DEBUG("contextPtr: %p", pkgDwlPtr);
 
     fd = open(dwlCtxPtr->fifoPtr, O_RDONLY, 0);
-    LE_INFO("Opened fifo");
+    LE_DEBUG("Opened fifo");
     if (-1 == fd)
     {
         LE_ERROR("failed to open fifo %m");
         return;
     }
 
-    LE_INFO("Calling update");
+    LE_DEBUG("Calling update");
     result = le_update_Start(fd);
     if (LE_OK != result)
     {
         LE_ERROR("failed to update software %s", LE_RESULT_TXT(result));
-        close(fd);
+        fd_Close(fd);
         return;
     }
+
+    fd_Close(fd);
 
     UpdateStarted = true;
 }
@@ -367,7 +367,7 @@ static void SetObj9State_
 {
     int instanceId;
     assetData_GetInstanceId(instanceRef, &instanceId);
-    LE_INFO("<%s: %zu>: Set object 9 state/result on instance %d: (%d) %s / (%d) %s",
+    LE_DEBUG("<%s: %zu>: Set object 9 state/result on instance %d: (%d) %s / (%d) %s",
              functionNamePtr,
              line,
              instanceId,
@@ -415,12 +415,12 @@ static void SetObject9InstanceForApp
         le_cfg_GoToNode(iterRef, appNamePtr);
         le_cfg_SetInt(iterRef, "oiid", instanceId);
 
-        LE_INFO("Application '%s' mapped to instance %d.", appNamePtr, instanceId);
+        LE_DEBUG("Application '%s' mapped to instance %d.", appNamePtr, instanceId);
     }
     else
     {
         le_cfg_DeleteNode(iterRef, appNamePtr);
-        LE_INFO("Deletion of '%s' from cfgTree %s successful", appNamePtr, CFG_OBJECT_INFO_PATH);
+        LE_DEBUG("Deletion of '%s' from cfgTree %s successful", appNamePtr, CFG_OBJECT_INFO_PATH);
     }
 
     le_cfg_CommitTxn(iterRef);
@@ -437,7 +437,7 @@ static lwm2mcore_swUpdateState_t GetObj9State
 )
 {
     int state;
-    LE_INFO("InstanceRef: %p", instanceRef);
+    LE_DEBUG("InstanceRef: %p", instanceRef);
 
     LE_ASSERT_OK(assetData_client_GetInt(instanceRef, O9F_UPDATE_STATE, &state));
     return (lwm2mcore_swUpdateState_t)state;
@@ -455,7 +455,7 @@ static assetData_InstanceDataRef_t GetObject9InstanceForApp
     bool mapIfNotFound       ///< If an instance was created, should a mapping be created for it?
 )
 {
-    LE_INFO("Getting object 9 instance for application '%s'.", appNamePtr);
+    LE_DEBUG("Getting object 9 instance for application '%s'.", appNamePtr);
 
     // Attempt to read the mapping from the configuration.
     assetData_InstanceDataRef_t instanceRef = NULL;
@@ -467,7 +467,7 @@ static assetData_InstanceDataRef_t GetObject9InstanceForApp
 
     if (instanceId != -1)
     {
-        LE_INFO("Was mapped to instance, %d.", instanceId);
+        LE_DEBUG("Was mapped to instance, %d.", instanceId);
 
         // Looks like there was a mapping. Try to get that instance and make sure it's not taken
         // by another application. If the instance was taken by another application, remap this
@@ -498,7 +498,7 @@ static assetData_InstanceDataRef_t GetObject9InstanceForApp
             }
             else
             {
-                LE_INFO("Instance is existing and has been reused.");
+                LE_INFO("Instance exists and has been reused.");
             }
         }
         else
@@ -576,10 +576,10 @@ static void NotifyAppObjLists
                 LE_RESULT_TXT(result));
 
     int index = 0;
-    char lwm2mObjList[MAX_OBJ9_STR_LIST_BYTES] = "";
-    size_t objListLen = 0;
+    char obj9List[MAX_OBJ9_STR_LIST_BYTES] = "";
+    size_t obj9ListLen = 0;
 
-    LE_INFO("Found app count %d.", foundAppCount);
+    LE_DEBUG("Found app count %d.", foundAppCount);
 
     while (foundAppCount > 0)
     {
@@ -589,32 +589,48 @@ static void NotifyAppObjLists
                                                           index,
                                                           &instanceRef);
 
-        LE_INFO("Index %d.", index);
+        LE_DEBUG("Index %d, result: %s.", index, LE_RESULT_TXT(result));
 
         if (result == LE_OK)
         {
-            objListLen = snprintf(lwm2mObjList, sizeof(lwm2mObjList), "%s</%s/9/%d>", lwm2mObjList,
-                                  LWM2M_NAME,
-                                  index);
+            char obj9Str[MAX_OBJ9_STR] = "";
 
-            LE_ASSERT(objListLen < sizeof(lwm2mObjList));
+            int len = snprintf(obj9Str, sizeof(obj9Str), "</%s/9/%d>", LWM2M_NAME, index);
+
+            if (len >= sizeof(obj9Str))
+            {
+                // Faced string truncation. For more details, please see "RETURN VALUE" section of
+                // manpage: http://man7.org/linux/man-pages/man3/printf.3.html
+                LE_CRIT("Object entry '%s' truncated. Expected size: %zd, returned: %d",
+                        obj9Str,
+                        sizeof(obj9Str),
+                        len);
+                return;
+            }
+
+            if (le_utf8_Append(obj9List, obj9Str, sizeof(obj9List), &obj9ListLen) != LE_OK)
+            {
+                LE_CRIT("Object list '%s' truncated while appending entry '%s'", obj9List, obj9Str);
+                return;
+            }
+
             foundAppCount--;
 
             if (foundAppCount)
             {
                 // Add comma (delimiter) if it is not the last object
-                objListLen = snprintf(lwm2mObjList, sizeof(lwm2mObjList), "%s,", lwm2mObjList);
-
-                LE_ASSERT(objListLen < sizeof(lwm2mObjList));
+                if (le_utf8_Append(obj9List, ",", sizeof(obj9List), &obj9ListLen))
+                {
+                    LE_CRIT("Object list '%s' truncated while appending delimiter ','", obj9List);
+                    return;
+                }
             }
-
         }
-
         index++;
     }
 
-    LE_INFO("ObjListLen; %zd lwm2mObjList: %s", objListLen, lwm2mObjList);
-    avcClient_SendList(lwm2mObjList, objListLen);
+    LE_DEBUG("obj9ListLen; %zd obj9List: %s", obj9ListLen, obj9List);
+    avcClient_SendList(obj9List, obj9ListLen);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -643,7 +659,7 @@ static void PopulateAppInfoObjects
         if (   (result == LE_OK)
             && (false == IsHiddenApp(appName)))
         {
-            LE_INFO("Loading object instance for app, '%s'.", appName);
+            LE_DEBUG("Loading object instance for app, '%s'.", appName);
 
             assetData_InstanceDataRef_t instanceRef = GetObject9InstanceForApp(appName, false);
 
@@ -686,7 +702,7 @@ static void PopulateAppInfoObjects
 
     int index = 0;
 
-    LE_INFO("Found app count %d.", foundAppCount);
+    LE_DEBUG("Found app count %d.", foundAppCount);
 
     // Now cleanup the lwm2m/objectMap config tree
     le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_OBJECT_PATH);
@@ -700,13 +716,13 @@ static void PopulateAppInfoObjects
                                                           LWM2M_OBJ9,
                                                           index,
                                                           &instanceRef);
-        LE_INFO("Index %d.", index);
+        LE_DEBUG("Index %d.", index);
 
         if (result == LE_OK)
         {
             assetData_client_GetString(instanceRef, O9F_PKG_NAME, appName, sizeof(appName));
 
-            LE_INFO("Mapping app '%s'.", appName);
+            LE_DEBUG("Mapping app '%s'.", appName);
 
             SetObject9InstanceForApp(appName, instanceRef);
             foundAppCount--;
@@ -745,7 +761,7 @@ static void AppInstallHandler
 
     assetData_InstanceDataRef_t instanceRef = NULL;
 
-    LE_INFO("AvmsInstall: %d, CurrentObj9: %p", AvmsInstall, CurrentObj9);
+    LE_DEBUG("AvmsInstall: %d, CurrentObj9: %p", AvmsInstall, CurrentObj9);
 
     // If the install was initiated from AVMS use the existing object9 instance.
     if (true == AvmsInstall)
@@ -835,7 +851,7 @@ static void AppUninstallHandler
     }
     else if (CurrentObj9 != NULL)
     {
-        LE_INFO("LWM2M Uninstall of application: %p.", CurrentObj9);
+        LE_DEBUG("LWM2M Uninstall of instanceRef: %p.", CurrentObj9);
 
         assetData_DeleteInstance(CurrentObj9);
         // State already set to initial in PrepareUninstall
@@ -844,7 +860,7 @@ static void AppUninstallHandler
         // If it is not hidden/system app, remove it from lwm2m config tree
         if (false == IsHiddenApp(appNamePtr))
         {
-            LE_INFO("Deleting '%s' instance from cfgTree: %s", appNamePtr, CFG_OBJECT_INFO_PATH);
+            LE_DEBUG("Deleting '%s' instance from cfgTree: %s", appNamePtr, CFG_OBJECT_INFO_PATH);
             SetObject9InstanceForApp(appNamePtr, NULL);
         }
     }
@@ -858,7 +874,7 @@ static void AppUninstallHandler
         {
             assetData_DeleteInstance(objectRef);
             // If it is in assetData, then no need to check config tree.
-            LE_INFO("Deleting '%s' instance from cfgTree: %s", appNamePtr, CFG_OBJECT_INFO_PATH);
+            LE_DEBUG("Deleting '%s' instance from cfgTree: %s", appNamePtr, CFG_OBJECT_INFO_PATH);
             SetObject9InstanceForApp(appNamePtr, NULL);
         }
     }
@@ -887,8 +903,6 @@ static le_result_t GetAppNameAndInstanceRef
                                                       LWM2M_OBJ9,
                                                       instanceId,
                                                       instanceRefPtr);
-    LE_FATAL_IF(result == LE_FAULT, "Internal error, error in getting instanceRef for instance: %d",
-                                    instanceId);
     if (result != LE_OK)
     {
         LE_ERROR("Error: '%s' while getting instanceRef for instance: %d",
@@ -905,8 +919,6 @@ static le_result_t GetAppNameAndInstanceRef
                                         appNamePtr,
                                         len);
 
-    LE_FATAL_IF(result == LE_FAULT, "Internal error, error in getting appName for instance: %d",
-                                     instanceId);
     if (result != LE_OK)
     {
         LE_ERROR("Error: '%s' while getting appName for instance: %d",
@@ -914,7 +926,8 @@ static le_result_t GetAppNameAndInstanceRef
                  instanceId);
 
         return result;
-     }
+    }
+
     return LE_OK;
 }
 
@@ -933,16 +946,33 @@ le_result_t avcApp_StartInstall
     uint16_t instanceId    ///< [IN] Instance id of the app to be installed.
 )
 {
-    LE_INFO("Install application using AirVantage, instanceID: %d.", instanceId);
+    LE_DEBUG("Install application using AirVantage, instanceID: %d.", instanceId);
 
     assetData_InstanceDataRef_t instanceRef = NULL;
-    // Now create an entry into assetData by specifying instanceId
-    LE_ASSERT_OK(assetData_GetInstanceRefById(LWM2M_NAME, LWM2M_OBJ9, instanceId, &instanceRef));
 
-    LE_FATAL_IF(CurrentObj9 != instanceRef, "Internal error. CurrentObj9 = %p, instanceRef = %p",
-                                             CurrentObj9, instanceRef);
+    // Now get entry from assetData by specifying instanceId
+    le_result_t result = assetData_GetInstanceRefById(LWM2M_NAME,
+                                                      LWM2M_OBJ9,
+                                                      instanceId,
+                                                      &instanceRef);
+    if (result != LE_OK)
+    {
+        LE_ERROR("Error in retrieving assetData for instance: %d (%s)",
+                  instanceId,
+                  LE_RESULT_TXT(result));
 
-    le_result_t result = le_update_Install();
+        return LE_FAULT;
+    }
+
+    if(CurrentObj9 != instanceRef)
+    {
+        LE_ERROR("Internal error. Object reference mismatch. CurrentObj9 = %p, instanceRef = %p",
+                 CurrentObj9,
+                 instanceRef);
+        return LE_FAULT;
+    }
+
+    result = le_update_Install();
 
     if (result == LE_OK)
     {
@@ -991,7 +1021,7 @@ le_result_t avcApp_PrepareUninstall
         return result;
     }
 
-    LE_INFO("Application '%s' uninstall requested, instanceID: %d", appName, instanceId);
+    LE_DEBUG("Application '%s' uninstall requested, instanceID: %d", appName, instanceId);
 
     // Just set the state of this object 9 to initial.
     // The server queries for this state and sends us object9 delete, which will kick an uninstall.
@@ -999,7 +1029,7 @@ le_result_t avcApp_PrepareUninstall
                  LWM2MCORE_SW_UPDATE_STATE_INITIAL,
                  LWM2MCORE_SW_UPDATE_RESULT_INITIAL);
 
-    CurrentObj9 = NULL;
+    CurrentObj9 = instanceRef;
 
     return LE_OK;
 }
@@ -1032,21 +1062,20 @@ le_result_t avcApp_StartUninstall
         return result;
     }
 
-    LE_INFO("Application '%s' uninstall requested, instanceID: %d", appName, instanceId);
-    LE_INFO("Send uninstall request.");
-
+    LE_DEBUG("Application '%s' uninstall requested, instanceID: %d", appName, instanceId);
 
     result = le_appRemove_Remove(appName);
 
     if (result == LE_OK)
     {
-        LE_INFO("Uninstall of application completed.");
+        LE_DEBUG("Uninstall of application completed.");
         CurrentObj9 = instanceRef;
     }
     else
     {
-        LE_INFO("Uninstall of application failed.");
+        LE_ERROR("Uninstall of application failed (%s).", LE_RESULT_TXT(result));
     }
+
     return result;
 }
 
@@ -1080,10 +1109,10 @@ le_result_t avcApp_StartApp
         return result;
     }
 
-    LE_INFO("Application '%s' start requested, instanceID: %d, instanceRef: %p",
-            appName,
-            instanceId,
-            instanceRef);
+    LE_DEBUG("Application '%s' start requested, instanceID: %d, instanceRef: %p",
+              appName,
+              instanceId,
+              instanceRef);
 
     if (GetObj9State(instanceRef) != LWM2MCORE_SW_UPDATE_STATE_INSTALLED)
     {
@@ -1091,7 +1120,6 @@ le_result_t avcApp_StartApp
         return LE_UNAVAILABLE;
     }
 
-    LE_INFO("Send start request.");
     return le_appCtrl_Start(appName);
 }
 
@@ -1125,15 +1153,14 @@ le_result_t avcApp_StopApp
         return result;
     }
 
-    LE_INFO("Application '%s' stop requested.", appName);
+    LE_DEBUG("Application '%s' stop requested.", appName);
 
     if (GetObj9State(instanceRef) != LWM2MCORE_SW_UPDATE_STATE_INSTALLED)
     {
-        LE_INFO("Application '%s' not installed.", appName);
+        LE_ERROR("Application '%s' not installed.", appName);
         return LE_UNAVAILABLE;
     }
 
-    LE_INFO("Send stop request.");
     return le_appCtrl_Stop(appName);
 }
 
@@ -1167,7 +1194,7 @@ le_result_t avcApp_GetPackageName
         return result;
     }
 
-    LE_INFO("Application Name: '%s', instanceId: %d.", appNamePtr, instanceId);
+    LE_DEBUG("Application Name: '%s', instanceId: %d.", appNamePtr, instanceId);
     return LE_OK;
 }
 
@@ -1199,13 +1226,11 @@ le_result_t avcApp_GetPackageVersion
                                                       instanceId,
                                                       &instanceRef);
 
-    LE_FATAL_IF(result == LE_FAULT, "Internal error, error in getting instanceRef for instance: %d",
-                                   instanceId);
     if (result != LE_OK)
     {
        LE_ERROR("Error: '%s' while getting instanceRef for instance: %d",
-                LE_RESULT_TXT(result),
-                instanceId);
+                 LE_RESULT_TXT(result),
+                 instanceId);
 
        return result;
     }
@@ -1224,7 +1249,7 @@ le_result_t avcApp_GetPackageVersion
        return result;
     }
 
-    LE_INFO("App version: '%s', instanceId: %d.", versionPtr, instanceId);
+    LE_DEBUG("App version: '%s', instanceId: %d.", versionPtr, instanceId);
     return LE_OK;
 }
 
@@ -1261,13 +1286,13 @@ le_result_t avcApp_GetActivationState
         return result;
     }
 
-    LE_INFO("Application '%s' activation status requested.", appName);
+    LE_DEBUG("Application '%s' activation status requested.", appName);
 
     le_appInfo_State_t state = le_appInfo_GetState(appName);
-    LE_INFO("Read of application state, '%s' was found to be: %d", appName, state);
+
     *valuePtr = (state == LE_APPINFO_RUNNING);
 
-    LE_INFO("App: %s activationState: %d", appName, *valuePtr);
+    LE_DEBUG("App: %s activationState: %d", appName, *valuePtr);
 
     return LE_OK;
 }
@@ -1284,7 +1309,7 @@ static void UpdateProgressHandler
   void* contextPtr                ///< Context for the callback.
 )
 {
-    LE_INFO("UpdateProgressHandler");
+    LE_DEBUG("UpdateProgressHandler");
 
     switch (updateState)
     {
@@ -1330,6 +1355,7 @@ static void UpdateProgressHandler
  *
  * @return:
  *      - LE_OK on success
+ *      - LE_DUPLICATE if already exists an instance
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
@@ -1338,7 +1364,7 @@ le_result_t avcApp_CreateObj9Instance
     uint16_t instanceId            ///< [IN] object 9 instance id
 )
 {
-    LE_INFO("Requested to create instance: %d", instanceId);
+    LE_DEBUG("Requested to create instance: %d", instanceId);
     assetData_InstanceDataRef_t instanceRef = NULL;
     // Now create an entry into assetData by specifying instanceId
     le_result_t result = assetData_CreateInstanceById(LWM2M_NAME,
@@ -1346,19 +1372,15 @@ le_result_t avcApp_CreateObj9Instance
                                                       instanceId,
                                                       &instanceRef);
 
-    LE_ASSERT(result != LE_FAULT);
-
-    // TODO: Should I need to support LE_DUPLICATE or anything other than LE_OK should be an error?
-    if (result == LE_DUPLICATE)
+    if (result != LE_OK)
     {
-        LE_ASSERT_OK(assetData_GetInstanceRefById(LWM2M_NAME,
-                                                  LWM2M_OBJ9,
-                                                  instanceId,
-                                                  &instanceRef));
+        LE_ERROR("Failed to create instance: %d (%s)", instanceId, LE_RESULT_TXT(result));
+
+        return result;
     }
 
     CurrentObj9 = instanceRef;
-    LE_INFO("Instance creation result: %s", LE_RESULT_TXT(result));
+
     return result;
 }
 
@@ -1378,39 +1400,48 @@ le_result_t avcApp_DeleteObj9Instance
     uint16_t instanceId            ///< [IN] object 9 instance id
 )
 {
-    LE_INFO("Requested to Delete instance: %d", instanceId);
+    LE_DEBUG("Requested to Delete instance: %d", instanceId);
     assetData_InstanceDataRef_t instanceRef = NULL;
     char appName[MAX_APP_NAME_BYTES] = "";
 
-    LE_ASSERT_OK(assetData_GetInstanceRefById(LWM2M_NAME,
-                                              LWM2M_OBJ9,
-                                              instanceId,
-                                              &instanceRef));
+    le_result_t result = assetData_GetInstanceRefById(LWM2M_NAME,
+                                                      LWM2M_OBJ9,
+                                                      instanceId,
+                                                      &instanceRef);
 
+    if (result != LE_OK)
+    {
+        LE_ERROR("Error in getting assetData for instance: %d (%s)",
+                  instanceId,
+                  LE_RESULT_TXT(result));
 
-    le_result_t result = assetData_client_GetString(instanceRef,
-                                                    O9F_PKG_NAME,
-                                                    appName,
-                                                    sizeof(appName));
-    LE_ASSERT(result != LE_FAULT);
-    LE_ASSERT(result != LE_OVERFLOW);
-
-    if (result == LE_OK)
-    {
-        // No app installed
-        result = avcApp_StartUninstall(instanceId);
-    }
-    else if (result == LE_NOT_FOUND)
-    {
-        assetData_DeleteInstance(instanceRef);
-        result = LE_OK;
-    }
-    else
-    {
-        LE_FATAL("Internal error");
+        return result;
     }
 
-    LE_INFO("Instance deletion result: %s", LE_RESULT_TXT(result));
+    result = assetData_client_GetString(instanceRef, O9F_PKG_NAME, appName, sizeof(appName));
+
+    switch(result)
+    {
+        case LE_OK:
+            result = avcApp_StartUninstall(instanceId);
+            if (result != LE_OK)
+            {
+                CurrentObj9 = NULL;
+            }
+            break;
+
+        case LE_NOT_FOUND:
+            assetData_DeleteInstance(instanceRef);
+            result = LE_OK;
+            break;
+
+        default:
+            LE_ERROR("Error in deleting instance: %d (%s)",
+                      instanceId,
+                      LE_RESULT_TXT(result));
+            break;
+    }
+
     return result;
 }
 
@@ -1426,10 +1457,8 @@ le_result_t avcApp_StoreSwPackage
 {
     LE_INFO("Initiating Downloading update package");
 
-    LE_INFO("contxt ptr: %p", ctxPtr);
+    LE_DEBUG("contextPtr: %p", ctxPtr);
 
-    // TODO: This is a workaround to avoid delay in opening named fifo. This function need to return
-    // quickly(<2s) to prevent coap retry. Remove it later.
     le_event_Report(DownloadEventId, ctxPtr, sizeof(lwm2mcore_PackageDownloader_t));
 
     return LE_OK;
@@ -1450,25 +1479,29 @@ lwm2mcore_DwlResult_t  avcApp_SetDownloadResult
     lwm2mcore_swUpdateResult_t updateResult
 )
 {
-    LE_INFO("Requested to set result: %d, instance: %p", updateResult, CurrentObj9);
-    LE_ASSERT(CurrentObj9 != NULL);
+    LE_DEBUG("Requested to set result: %d, instance: %p", updateResult, CurrentObj9);
+
+    if (CurrentObj9 == NULL)
+    {
+        return DWL_FAULT;
+    }
 
     switch (updateResult)
     {
         case LWM2MCORE_SW_UPDATE_RESULT_INITIAL:
-            LE_INFO("Initial state");
+            LE_DEBUG("Initial state");
             break;
 
         case LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADING:
-            LE_INFO("Package Downloading");
+            LE_DEBUG("Package Downloading");
             break;
 
         case LWM2MCORE_SW_UPDATE_RESULT_INSTALLED:
-            LE_INFO("Package Installed");
+            LE_DEBUG("Package Installed");
             break;
 
         case LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED:
-            LE_INFO("Package downloaded");
+            LE_DEBUG("Package downloaded");
             break;
 
         default:
@@ -1501,8 +1534,12 @@ lwm2mcore_DwlResult_t  avcApp_SetDownloadState
     lwm2mcore_swUpdateState_t updateState
 )
 {
-    LE_INFO("Requested to set state: %d, instance: %p", updateState, CurrentObj9);
-    LE_ASSERT(CurrentObj9 != NULL);
+    LE_DEBUG("Requested to set state: %d, instance: %p", updateState, CurrentObj9);
+
+    if (CurrentObj9 == NULL)
+    {
+        return DWL_FAULT;
+    }
 
     LE_ASSERT_OK(assetData_client_SetInt(CurrentObj9, O9F_UPDATE_STATE, updateState));
 
@@ -1530,7 +1567,7 @@ le_result_t avcApp_GetUpdateResult
         return LE_FAULT;
     }
 
-    LE_INFO("Requested to get update result for instance id: %d", instanceId);
+    LE_DEBUG("Requested to get update result for instance id: %d", instanceId);
     // Use the assetData api to get the update result
     assetData_InstanceDataRef_t instanceRef;
 
@@ -1545,11 +1582,21 @@ le_result_t avcApp_GetUpdateResult
     }
 
     int updateResult = 0;
-    LE_ASSERT_OK(assetData_client_GetInt(instanceRef, O9F_UPDATE_RESULT, &updateResult));
+
+    result = assetData_client_GetInt(instanceRef, O9F_UPDATE_RESULT, &updateResult);
+
+    if (result != LE_OK)
+    {
+        LE_ERROR("Error in getting UpdateResult of instance: %d (%s)",
+                  instanceId,
+                  LE_RESULT_TXT(result));
+
+        return result;
+    }
 
     *updateResultPtr = (uint8_t)updateResult;
 
-    LE_INFO("UpdateResult: %d, instance id: %d", updateResult, instanceId);
+    LE_DEBUG("UpdateResult: %d, instance id: %d", updateResult, instanceId);
     return LE_OK;
 }
 
@@ -1577,7 +1624,7 @@ le_result_t avcApp_GetUpdateState
     // Use the assetData api to get the update result
     assetData_InstanceDataRef_t instanceRef;
 
-    LE_INFO("Requested to get update state for instance id: %d", instanceId);
+    LE_DEBUG("Requested to get update state for instance id: %d", instanceId);
 
     le_result_t result = assetData_GetInstanceRefById(LWM2M_NAME,
                                                       LWM2M_OBJ9,
@@ -1590,16 +1637,26 @@ le_result_t avcApp_GetUpdateState
     }
 
     int updateState = 0;
-    LE_ASSERT_OK(assetData_client_GetInt(instanceRef, O9F_UPDATE_STATE, &updateState));
+
+    result = assetData_client_GetInt(instanceRef, O9F_UPDATE_STATE, &updateState);
+
+    if (result != LE_OK)
+    {
+        LE_ERROR("Error in getting UpdateState of instance: %d (%s)",
+                  instanceId,
+                  LE_RESULT_TXT(result));
+
+        return result;
+    }
 
     *updateStatePtr = (uint8_t)updateState;
-    LE_INFO("UpdateState: %d, instance id: %d", *updateStatePtr, instanceId);
+    LE_DEBUG("UpdateState: %d, instance id: %d", *updateStatePtr, instanceId);
     return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Initialisation function avcApp. Should be called only once.
+ * Initialization function avcApp. Should be called only once.
  */
 //--------------------------------------------------------------------------------------------------
 void avcApp_Init
