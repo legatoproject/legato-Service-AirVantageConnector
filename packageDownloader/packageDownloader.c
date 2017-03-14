@@ -141,24 +141,6 @@ le_result_t packageDownloader_Init
         return LE_FAULT;
     }
 
-    if (-1 == unlink(FW_STATE_PATH))
-    {
-        if (errno != ENOENT)
-        {
-            LE_ERROR("failed to unlink %s: %m", FW_STATE_PATH);
-            return LE_FAULT;
-        }
-    }
-
-    if (-1 == unlink(FW_RESULT_PATH))
-    {
-        if (errno != ENOENT)
-        {
-            LE_ERROR("failed to unlink %s: %m", FW_RESULT_PATH);
-            return LE_FAULT;
-        }
-    }
-
     result = avc_FsRead(DERCERT_PATH, derKey, &derKeyLen);
     if (LE_OK != result)
     {
@@ -190,39 +172,100 @@ le_result_t packageDownloader_Init
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Set firmware update state
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetFwUpdateState
+(
+    lwm2mcore_fwUpdateState_t fwUpdateState     ///< [IN] New FW update state
+)
+{
+    le_result_t result;
+
+    result = avc_FsWrite(FW_UPDATE_STATE_PATH,
+                         (uint8_t *)&fwUpdateState,
+                         sizeof(lwm2mcore_fwUpdateState_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", FW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set firmware update result
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetFwUpdateResult
+(
+    lwm2mcore_fwUpdateResult_t fwUpdateResult   ///< [IN] New FW update result
+)
+{
+    le_result_t result;
+
+    result = avc_FsWrite(FW_UPDATE_RESULT_PATH,
+                         (uint8_t *)&fwUpdateResult,
+                         sizeof(lwm2mcore_fwUpdateResult_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", FW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Get firmware update state
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetFwUpdateState
 (
-    lwm2mcore_fwUpdateState_t* updateStatePtr
+    lwm2mcore_fwUpdateState_t* fwUpdateStatePtr     ///< [INOUT] FW update state
 )
 {
     lwm2mcore_fwUpdateState_t updateState;
     size_t size;
     le_result_t result;
 
-    if (!updateStatePtr)
+    if (!fwUpdateStatePtr)
     {
-        LE_ERROR("invalid input parameter");
+        LE_ERROR("Invalid input parameter");
         return LE_FAULT;
     }
 
     size = sizeof(lwm2mcore_fwUpdateState_t);
-    result = avc_FsRead(FW_STATE_PATH, (uint8_t *)&updateState, &size);
+    result = avc_FsRead(FW_UPDATE_STATE_PATH, (uint8_t *)&updateState, &size);
     if (LE_OK != result)
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_ERROR("download not started");
-            *updateStatePtr = LWM2MCORE_FW_UPDATE_STATE_IDLE;
+            LE_ERROR("FW update state not found");
+            *fwUpdateStatePtr = LWM2MCORE_FW_UPDATE_STATE_IDLE;
             return LE_OK;
         }
-        LE_ERROR("failed to read %s: %s", FW_STATE_PATH, LE_RESULT_TXT(result));
+        LE_ERROR("Failed to read %s: %s", FW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
         return result;
     }
 
-    *updateStatePtr = updateState;
+    *fwUpdateStatePtr = updateState;
 
     return LE_OK;
 }
@@ -230,38 +273,43 @@ le_result_t packageDownloader_GetFwUpdateState
 //--------------------------------------------------------------------------------------------------
 /**
  * Get firmware update result
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetFwUpdateResult
 (
-    lwm2mcore_fwUpdateResult_t* updateResultPtr
+    lwm2mcore_fwUpdateResult_t* fwUpdateResultPtr   ///< [INOUT] FW update result
 )
 {
     lwm2mcore_fwUpdateResult_t updateResult;
     size_t size;
     le_result_t result;
 
-    if (!updateResultPtr)
+    if (!fwUpdateResultPtr)
     {
-        LE_ERROR("invalid input parameter");
-        return LE_FAULT;
+        LE_ERROR("Invalid input parameter");
+        return LE_BAD_PARAMETER;
     }
 
     size = sizeof(lwm2mcore_fwUpdateResult_t);
-    result = avc_FsRead(FW_RESULT_PATH, (uint8_t *)&updateResult, &size);
+    result = avc_FsRead(FW_UPDATE_RESULT_PATH, (uint8_t *)&updateResult, &size);
     if (LE_OK != result)
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_ERROR("download not started");
-            *updateResultPtr = LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL;
+            LE_ERROR("FW update result not found");
+            *fwUpdateResultPtr = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
             return LE_OK;
         }
-        LE_ERROR("failed to read %s: %s", FW_RESULT_PATH, LE_RESULT_TXT(result));
+        LE_ERROR("Failed to read %s: %s", FW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
         return result;
     }
 
-    *updateResultPtr = updateResult;
+    *fwUpdateResultPtr = updateResult;
 
     return LE_OK;
 }
@@ -442,7 +490,7 @@ le_result_t packageDownloader_AbortDownload
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
-            pkgDwlCb_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
+            packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
             break;
         case LWM2MCORE_SW_UPDATE_TYPE:
             avcApp_SetDownloadState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);

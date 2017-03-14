@@ -42,42 +42,60 @@ le_result_t packageDownloader_Init
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetFwUpdateState temporary callback function definition
+ * Set firmware update state
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateStateModified
+le_result_t packageDownloader_SetFwUpdateState
 (
-    lwm2mcore_fwUpdateState_t updateState
+    lwm2mcore_fwUpdateState_t fwUpdateState     ///< [IN] New FW update state
 );
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetFwUpdateResult temporary callback function definition
+ * Set firmware update result
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResultModified
+le_result_t packageDownloader_SetFwUpdateResult
 (
-    lwm2mcore_fwUpdateResult_t updateResult
+    lwm2mcore_fwUpdateResult_t fwUpdateResult   ///< [IN] New FW update result
 );
 
 //--------------------------------------------------------------------------------------------------
 /**
  * Get firmware update state
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetFwUpdateState
 (
-    lwm2mcore_fwUpdateState_t *updateStatePtr
+    lwm2mcore_fwUpdateState_t* fwUpdateStatePtr     ///< [INOUT] FW update state
 );
 
 //--------------------------------------------------------------------------------------------------
 /**
  * Get firmware update result
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetFwUpdateResult
 (
-    lwm2mcore_fwUpdateResult_t* updateResultPtr
+    lwm2mcore_fwUpdateResult_t* fwUpdateResultPtr   ///< [INOUT] FW update result
 );
 
 //--------------------------------------------------------------------------------------------------

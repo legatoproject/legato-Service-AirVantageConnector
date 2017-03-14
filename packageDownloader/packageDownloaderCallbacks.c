@@ -302,7 +302,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetUpdateState callback function definition
+ * SetFwUpdateState callback function definition
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
@@ -312,11 +312,9 @@ lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
 {
     le_result_t result;
 
-    result = avc_FsWrite(FW_STATE_PATH, (uint8_t *)&updateState,
-                    sizeof(lwm2mcore_fwUpdateState_t));
+    result = packageDownloader_SetFwUpdateState(updateState);
     if (LE_OK != result)
     {
-        LE_ERROR("updating %s: %s", FW_STATE_PATH, LE_RESULT_TXT(result));
         return DWL_FAULT;
     }
 
@@ -325,7 +323,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetUpdateResult callback function definition
+ * SetFwUpdateResult callback function definition
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateResult
@@ -335,11 +333,9 @@ lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateResult
 {
     le_result_t result;
 
-    result = avc_FsWrite(FW_RESULT_PATH, (uint8_t *)&updateResult,
-                    sizeof(lwm2mcore_fwUpdateResult_t));
+    result = packageDownloader_SetFwUpdateResult(updateResult);
     if (LE_OK != result)
     {
-        LE_ERROR("updating %s: %s", FW_RESULT_PATH, LE_RESULT_TXT(result));
         return DWL_FAULT;
     }
 

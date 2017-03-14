@@ -37,7 +37,7 @@ static void LaunchUpdateTimerExpiryHandler
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
             LE_DEBUG("Launch FW update");
-            pkgDwlCb_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING);
+            packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING);
             le_fwupdate_DualSysSwap();
             break;
 
@@ -675,5 +675,75 @@ lwm2mcore_sid_t os_portUpdateSoftwareInstance
 
     LE_INFO("Instance creation result: %s ", LE_RESULT_TXT(result));
     return (result == LE_OK) ? LWM2MCORE_ERR_COMPLETED_OK : LWM2MCORE_ERR_GENERAL_ERROR;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if the update state/result should be changed after a FW install
+ * and update them if necessary
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_sid_t os_portUpdateFirmwareInstallResult
+(
+    void
+)
+{
+    lwm2mcore_fwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
+    lwm2mcore_fwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
+
+    // Check if a FW update was ongoing
+    if (   (LE_OK == packageDownloader_GetFwUpdateState(&fwUpdateState))
+        && (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
+        && (LWM2MCORE_FW_UPDATE_STATE_UPDATING == fwUpdateState)
+        && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult)
+       )
+    {
+        // Retrieve FW update result
+        le_fwupdate_UpdateStatus_t fwUpdateStatus;
+        lwm2mcore_fwUpdateResult_t newFwUpdateResult;
+        char statusStr[LE_FWUPDATE_STATUS_LABEL_LENGTH_MAX];
+
+        if (LE_OK != le_fwupdate_GetUpdateStatus(&fwUpdateStatus, statusStr, sizeof(statusStr)))
+        {
+            LE_ERROR("Error while reading the FW update status");
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+        }
+
+        LE_DEBUG("Update status: %s (%d)", statusStr, fwUpdateStatus);
+
+        // Set the update state to IDLE in all cases
+        if (LE_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE))
+        {
+            LE_ERROR("Error while setting FW update state");
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+        }
+
+        // Set the update result according to the FW update status
+        if (LE_FWUPDATE_UPDATE_STATUS_OK == fwUpdateStatus)
+        {
+            newFwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL;
+        }
+        else
+        {
+            newFwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_INSTALL_FAILURE;
+        }
+        LE_DEBUG("Set FW update result to %d", newFwUpdateResult);
+        if (LE_OK != packageDownloader_SetFwUpdateResult(newFwUpdateResult))
+        {
+            LE_ERROR("Error while setting FW update result");
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+        }
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
