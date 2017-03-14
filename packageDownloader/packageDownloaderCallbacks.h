@@ -41,7 +41,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
  * Set update status callback definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateState
+lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
 (
     lwm2mcore_fwUpdateState_t updateState
 );
@@ -51,7 +51,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateState
  * Set update result callback definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateResult
+lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateResult
 (
     lwm2mcore_fwUpdateResult_t updateResult
 );

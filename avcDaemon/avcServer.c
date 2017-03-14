@@ -18,6 +18,7 @@
 
 #include "le_print.h"
 #include "avcAppUpdate.h"
+#include "packageDownloader.h"
 
 //--------------------------------------------------------------------------------------------------
 // Definitions
@@ -2030,6 +2031,11 @@ COMPONENT_INIT
     le_timer_SetHandler(DownloadDeferTimer, DownloadTimerExpiryHandler);
 
     // Initialize the sub-components
+    if (LE_OK != packageDownloader_Init())
+    {
+        LE_ERROR("failed to initialize package downloader");
+    }
+
     assetData_Init();
     avData_Init();
     avcApp_Init();

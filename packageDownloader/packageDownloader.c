@@ -21,266 +21,6 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Package download temporary directory
- */
-//--------------------------------------------------------------------------------------------------
-#define PKGDWL_PATH         "/tmp/pkgdwl"
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Fifo file name
- */
-//--------------------------------------------------------------------------------------------------
-#define FIFO_NAME           "fifo"
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Fifo file path
- */
-//--------------------------------------------------------------------------------------------------
-#define FIFO_PATH           PKGDWL_PATH "/" FIFO_NAME
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Firmware download state path
- */
-//--------------------------------------------------------------------------------------------------
-#define FW_STATE_PATH       PKGDWL_PATH "/" "fwstate"
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Firmware result state path
- */
-//--------------------------------------------------------------------------------------------------
-#define FW_RESULT_PATH      PKGDWL_PATH "/" "fwresult"
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Package download directory mode
- */
-//--------------------------------------------------------------------------------------------------
-#define PKGDWL_DIR_MODE     0700
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Fifo mode
- */
-//--------------------------------------------------------------------------------------------------
-#define FIFO_MODE           0600
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Update state and update result buffer size
- */
-//--------------------------------------------------------------------------------------------------
-#define BUFSIZE             3
-
-//--------------------------------------------------------------------------------------------------
-/**
- * PEM certificate file path
- */
-//--------------------------------------------------------------------------------------------------
-#define PEMCERT_PATH         PKGDWL_PATH "/" "cert.pem"
-
-//--------------------------------------------------------------------------------------------------
-/**
- * PEM or DER certificate max length
- */
-//--------------------------------------------------------------------------------------------------
-#define MAX_CERT_LEN        4096
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Write PEM key to default certificate file path
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t WritePEMCertificate
-(
-    const char*     certPtr,
-    unsigned char*  pemKeyPtr,
-    int             pemKeyLen
-)
-{
-    int fd;
-    ssize_t count;
-    mode_t mode = 0;
-
-    mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    fd = open(certPtr, O_WRONLY | O_CREAT | O_TRUNC, mode);
-    if (!fd)
-    {
-        LE_ERROR("failed to open %s: %m", certPtr);
-        return LE_FAULT;
-    }
-
-    count = write(fd, pemKeyPtr, pemKeyLen);
-    if (count == -1)
-    {
-        LE_ERROR("failed to write PEM cert: %m");
-        close(fd);
-        return LE_FAULT;
-    }
-    if (count < pemKeyLen)
-    {
-        LE_ERROR("failed to write PEM cert: wrote %zd", count);
-        close(fd);
-        return LE_FAULT;
-    }
-
-    close(fd);
-
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * SetUpdateState temporary callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateStateModified
-(
-    lwm2mcore_fwUpdateState_t updateState
-)
-{
-    FILE *file;
-    char buf[BUFSIZE];
-
-    file = fopen(FW_STATE_PATH, "w");
-    if (!file)
-    {
-        LE_ERROR("failed to open %s: %m", FW_STATE_PATH);
-        return DWL_FAULT;
-    }
-
-    snprintf(buf, BUFSIZE, "%d", (int)updateState);
-
-    fwrite(buf, strlen(buf), 1, file);
-
-    fclose(file);
-
-    return DWL_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * SetFwUpdateResult temporary callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResultModified
-(
-    lwm2mcore_fwUpdateResult_t updateResult
-)
-{
-    FILE *file;
-    char buf[BUFSIZE];
-
-    file = fopen(FW_RESULT_PATH, "w");
-
-    if (!file)
-    {
-        LE_ERROR("failed to open %s: %m", FW_RESULT_PATH);
-        return DWL_FAULT;
-    }
-
-    snprintf(buf, BUFSIZE, "%d", (int)updateResult);
-
-    fwrite(buf, strlen(buf), 1, file);
-
-    fclose(file);
-
-    return DWL_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get firmware update state
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetFwUpdateState
-(
-    lwm2mcore_fwUpdateState_t* updateStatePtr
-)
-{
-    FILE *file;
-    char buf[BUFSIZE];
-
-    if (!updateStatePtr)
-    {
-        LE_ERROR("invalid input parameter");
-        return LE_FAULT;
-    }
-
-    file = fopen(FW_STATE_PATH, "r");
-    if (!file)
-    {
-        if (ENOENT == errno)
-        {
-            LE_ERROR("download not started");
-            *updateStatePtr = LWM2MCORE_FW_UPDATE_STATE_IDLE;
-            return LE_OK;
-        }
-        LE_ERROR("failed to open %s: %m", FW_STATE_PATH);
-        return LE_FAULT;
-    }
-
-    memset(buf, 0, BUFSIZE);
-    fread(buf, BUFSIZE, 1, file);
-
-    fclose(file);
-
-    LE_DEBUG("update state %s", buf);
-
-    *updateStatePtr = (int)strtol(buf, NULL, 10);
-
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get firmware update result
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetFwUpdateResult
-(
-    lwm2mcore_fwUpdateResult_t* updateResultPtr
-)
-{
-    FILE *file;
-    char buf[BUFSIZE];
-
-    if (!updateResultPtr)
-    {
-        LE_ERROR("invalid input parameter");
-        return LE_FAULT;
-    }
-
-    file = fopen(FW_RESULT_PATH, "r");
-    if (!file)
-    {
-        if (ENOENT == errno)
-        {
-            LE_ERROR("download not started");
-            *updateResultPtr = LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL;
-            return LE_OK;
-        }
-        LE_ERROR("failed to open %s: %m", FW_RESULT_PATH);
-        return LE_FAULT;
-    }
-
-    memset(buf, 0, BUFSIZE);
-    fread(buf, BUFSIZE, 1, file);
-
-    fclose(file);
-
-    LE_DEBUG("update result %s", buf);
-
-    *updateResultPtr = (int)strtol(buf, NULL, 10);
-
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Check system state
  */
 //--------------------------------------------------------------------------------------------------
@@ -328,6 +68,206 @@ static void UpdateStatus
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Write PEM key to default certificate file path
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t WritePEMCertificate
+(
+    const char*     certPtr,
+    unsigned char*  pemKeyPtr,
+    int             pemKeyLen
+)
+{
+    int fd;
+    ssize_t count;
+    mode_t mode = 0;
+
+    mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+    fd = open(certPtr, O_WRONLY | O_CREAT | O_TRUNC, mode);
+    if (!fd)
+    {
+        LE_ERROR("failed to open %s: %m", certPtr);
+        return LE_FAULT;
+    }
+
+    count = write(fd, pemKeyPtr, pemKeyLen);
+    if (count == -1)
+    {
+        LE_ERROR("failed to write PEM cert: %m");
+        close(fd);
+        return LE_FAULT;
+    }
+    if (count < pemKeyLen)
+    {
+        LE_ERROR("failed to write PEM cert: wrote %zd", count);
+        close(fd);
+        return LE_FAULT;
+    }
+
+    close(fd);
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Setup temporary files
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_Init
+(
+    void
+)
+{
+    unsigned char pemKeyPtr[MAX_CERT_LEN] = "\0";
+    struct stat st;
+    uint8_t derKey[MAX_CERT_LEN] = "\0";
+    size_t derKeyLen;
+    int pemKeyLen = MAX_CERT_LEN;
+    le_result_t result;
+
+    if (-1 == stat(PKGDWL_TMP_PATH, &st))
+    {
+        if (-1 == mkdir(PKGDWL_TMP_PATH, S_IRWXU))
+        {
+            LE_ERROR("failed to create pkgdwl directory %m");
+            return LE_FAULT;
+        }
+    }
+
+    if ( (-1 == mkfifo(FIFO_PATH, S_IRUSR | S_IWUSR)) && (EEXIST != errno) )
+    {
+        LE_ERROR("failed to create fifo: %m");
+        return LE_FAULT;
+    }
+
+    if (-1 == unlink(FW_STATE_PATH))
+    {
+        if (errno != ENOENT)
+        {
+            LE_ERROR("failed to unlink %s: %m", FW_STATE_PATH);
+            return LE_FAULT;
+        }
+    }
+
+    if (-1 == unlink(FW_RESULT_PATH))
+    {
+        if (errno != ENOENT)
+        {
+            LE_ERROR("failed to unlink %s: %m", FW_RESULT_PATH);
+            return LE_FAULT;
+        }
+    }
+
+    result = avc_FsRead(DERCERT_PATH, derKey, &derKeyLen);
+    if (LE_OK != result)
+    {
+        LE_ERROR("using default DER key");
+        if (MAX_CERT_LEN < DEFAULT_DER_KEY_LEN)
+        {
+            LE_ERROR("Not enough space to hold the default key");
+            return LE_FAULT;
+        }
+        memcpy(derKey, DefaultDerKey, DEFAULT_DER_KEY_LEN);
+        derKeyLen = DEFAULT_DER_KEY_LEN;
+    }
+
+    result = os_portSecurityConvertDERToPEM((unsigned char *)derKey, derKeyLen,
+                                pemKeyPtr, &pemKeyLen);
+    if (LE_OK != result)
+    {
+        return LE_FAULT;
+    }
+
+    result = WritePEMCertificate(PEMCERT_PATH, pemKeyPtr, pemKeyLen);
+    if (LE_OK != result)
+    {
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get firmware update state
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetFwUpdateState
+(
+    lwm2mcore_fwUpdateState_t* updateStatePtr
+)
+{
+    lwm2mcore_fwUpdateState_t updateState;
+    size_t size;
+    le_result_t result;
+
+    if (!updateStatePtr)
+    {
+        LE_ERROR("invalid input parameter");
+        return LE_FAULT;
+    }
+
+    size = sizeof(lwm2mcore_fwUpdateState_t);
+    result = avc_FsRead(FW_STATE_PATH, (uint8_t *)&updateState, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("download not started");
+            *updateStatePtr = LWM2MCORE_FW_UPDATE_STATE_IDLE;
+            return LE_OK;
+        }
+        LE_ERROR("failed to read %s: %s", FW_STATE_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    *updateStatePtr = updateState;
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get firmware update result
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetFwUpdateResult
+(
+    lwm2mcore_fwUpdateResult_t* updateResultPtr
+)
+{
+    lwm2mcore_fwUpdateResult_t updateResult;
+    size_t size;
+    le_result_t result;
+
+    if (!updateResultPtr)
+    {
+        LE_ERROR("invalid input parameter");
+        return LE_FAULT;
+    }
+
+    size = sizeof(lwm2mcore_fwUpdateResult_t);
+    result = avc_FsRead(FW_RESULT_PATH, (uint8_t *)&updateResult, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("download not started");
+            *updateResultPtr = LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL;
+            return LE_OK;
+        }
+        LE_ERROR("failed to read %s: %s", FW_RESULT_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    *updateResultPtr = updateResult;
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Download package thread function
  */
 //--------------------------------------------------------------------------------------------------
@@ -342,6 +282,7 @@ void *packageDownloader_DownloadPackage
 
     // Connect to services used by this thread
     secStoreGlobal_ConnectService();
+    le_fs_ConnectService();
 
     pkgDwlPtr = (lwm2mcore_PackageDownloader_t *)ctxPtr;
     dwlCtxPtr = (packageDownloader_DownloadCtx_t *)pkgDwlPtr->ctxPtr;
@@ -416,14 +357,8 @@ le_result_t packageDownloader_StartDownload
 {
     static lwm2mcore_PackageDownloader_t pkgDwl;
     static packageDownloader_DownloadCtx_t dwlCtx;
-    static unsigned char pemKeyPtr[MAX_CERT_LEN] = "\0";
     lwm2mcore_PackageDownloaderData_t data;
     le_thread_Ref_t dwlRef, storeRef;
-    struct stat st;
-    uint8_t derKey[MAX_CERT_LEN] = "\0";
-    size_t derKeyLen;
-    int pemKeyLen = MAX_CERT_LEN;
-    le_result_t result;
     char *dwlType[2] = {
         [0] = "FW_UPDATE",
         [1] = "SW_UPDATE",
@@ -435,65 +370,6 @@ le_result_t packageDownloader_StartDownload
     memcpy(data.packageUri, uriPtr, strlen(uriPtr));
     data.packageSize = 0;
     data.updateType = type;
-
-    if (-1 == stat(PKGDWL_PATH, &st))
-    {
-        if (-1 == mkdir(PKGDWL_PATH, PKGDWL_DIR_MODE))
-        {
-            LE_ERROR("failed to create pkgdwl directory %m");
-            return LE_FAULT;
-        }
-    }
-
-    if ( (-1 == mkfifo(FIFO_PATH, FIFO_MODE)) && (EEXIST != errno) )
-    {
-        LE_ERROR("failed to create fifo: %m");
-        return LE_FAULT;
-    }
-
-    if (-1 == unlink(FW_STATE_PATH))
-    {
-        if (errno != ENOENT)
-        {
-            LE_ERROR("failed to unlink %s: %m", FW_STATE_PATH);
-            return LE_FAULT;
-        }
-    }
-
-    if (-1 == unlink(FW_RESULT_PATH))
-    {
-        if (errno != ENOENT)
-        {
-            LE_ERROR("failed to unlink %s: %m", FW_RESULT_PATH);
-            return LE_FAULT;
-        }
-    }
-
-    result = avc_FsRead(DERCERT_PATH, derKey, &derKeyLen);
-    if (LE_OK != result)
-    {
-        LE_ERROR("using default DER key");
-        if (MAX_CERT_LEN < DEFAULT_DER_KEY_LEN)
-        {
-            LE_ERROR("Not enough space to hold the default key");
-            return LE_FAULT;
-        }
-        memcpy(derKey, DefaultDerKey, DEFAULT_DER_KEY_LEN);
-        derKeyLen = DEFAULT_DER_KEY_LEN;
-    }
-
-    result = os_portSecurityConvertDERToPEM((unsigned char *)derKey, derKeyLen,
-                                pemKeyPtr, &pemKeyLen);
-    if (LE_OK != result)
-    {
-        return LE_FAULT;
-    }
-
-    result = WritePEMCertificate(PEMCERT_PATH, pemKeyPtr, pemKeyLen);
-    if (LE_OK != result)
-    {
-        return LE_FAULT;
-    }
 
     dwlCtx.fifoPtr = FIFO_PATH;
     dwlCtx.mainRef = le_thread_GetCurrent();
@@ -516,8 +392,8 @@ le_result_t packageDownloader_StartDownload
     pkgDwl.data = data;
     pkgDwl.initDownload = pkgDwlCb_InitDownload;
     pkgDwl.getInfo = pkgDwlCb_GetInfo;
-    pkgDwl.setFwUpdateState = packageDownloader_SetFwUpdateStateModified;
-    pkgDwl.setFwUpdateResult = packageDownloader_SetFwUpdateResultModified;
+    pkgDwl.setFwUpdateState = pkgDwlCb_SetFwUpdateState;
+    pkgDwl.setFwUpdateResult = pkgDwlCb_SetFwUpdateResult;
     pkgDwl.setSwUpdateState = avcApp_SetDownloadState;
     pkgDwl.setSwUpdateResult = avcApp_SetDownloadResult;
 
@@ -566,7 +442,7 @@ le_result_t packageDownloader_AbortDownload
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
-            packageDownloader_SetFwUpdateStateModified(LWM2MCORE_FW_UPDATE_STATE_IDLE);
+            pkgDwlCb_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
             break;
         case LWM2MCORE_SW_UPDATE_TYPE:
             avcApp_SetDownloadState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);

@@ -1,10 +1,36 @@
-
 provides:
 {
     api:
     {
         airVantage/le_avc.api
         airVantage/le_avdata.api
+    }
+}
+
+requires:
+{
+    api:
+    {
+        le_instStat.api
+        le_appRemove.api
+        le_appCtrl.api
+        le_cfg.api
+        le_data.api
+        modemServices/le_info.api
+        modemServices/le_rtc.api
+        modemServices/le_sim.api
+        positioning/le_pos.api
+        le_appInfo.api
+        le_fwupdate.api
+        le_update.api
+        secStoreGlobal = le_secStore.api
+        le_fs.api
+    }
+
+    component:
+    {
+        $LEGATO_AVC_PA_DEFAULT // TODO: Remove unneeded PA AVC
+        $LEGATO_ROOT/framework/c/src/appCfg
     }
 }
 
@@ -20,10 +46,16 @@ sources:
     ../avcClient/osPortSecurity.c
     ../avcClient/osPortDevice.c
     ../avcClient/osPortUpdate.c
+    ../avcAppUpdate/avcAppUpdate.c
+    ../packageDownloader/packageDownloaderCallbacks.c
+    ../packageDownloader/packageDownloader.c
 
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcAppUpdate/avcAppUpdate.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloaderCallbacks.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloader.c
+    // LWM2MCore: Adaptation layer
+    ../avcClient/os/legato/osDebug.c
+    ../avcClient/os/legato/osPlatform.c
+    ../avcClient/os/legato/osTime.c
+    ../avcClient/os/legato/osTimer.c
+    ../avcClient/os/legato/osUdp.c
 
     // LWM2MCore
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/dtlsConnection.c
@@ -34,13 +66,6 @@ sources:
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader/lwm2mcorePackageDownloader.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/lwm2mcoreCoapHandlers.c
 
-
-    // LWM2MCore: Adaptation layer
-    ../avcClient/os/legato/osDebug.c
-    ../avcClient/os/legato/osPlatform.c
-    ../avcClient/os/legato/osTime.c
-    ../avcClient/os/legato/osTimer.c
-    ../avcClient/os/legato/osUdp.c
 
     // Wakaama
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/er-coap-13/er-coap-13.c
@@ -117,29 +142,3 @@ ldflags:
     -ltinycbor
 }
 
-requires:
-{
-    api:
-    {
-        le_instStat.api
-        le_appRemove.api
-        le_appCtrl.api
-        le_cfg.api
-        le_data.api
-        modemServices/le_info.api
-        modemServices/le_rtc.api
-        modemServices/le_sim.api
-        positioning/le_pos.api
-        le_appInfo.api
-        le_fwupdate.api
-        le_update.api
-        secStoreGlobal = le_secStore.api
-        le_fs.api
-    }
-
-    component:
-    {
-        $LEGATO_AVC_PA_DEFAULT // TODO: Remove unneeded PA AVC
-        $LEGATO_ROOT/framework/c/src/appCfg
-    }
-}

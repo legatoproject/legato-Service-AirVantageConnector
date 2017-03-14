@@ -12,8 +12,10 @@
 #include <osPortUpdate.h>
 #include <lwm2mcorePackageDownloader.h>
 #include <interfaces.h>
-#include "packageDownloaderCallbacks.h"
+#include <avcFs.h>
+#include <avcFsConfig.h>
 #include "packageDownloader.h"
+#include "packageDownloaderCallbacks.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -303,11 +305,21 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
  * SetUpdateState callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateState
+lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
 (
     lwm2mcore_fwUpdateState_t updateState
 )
 {
+    le_result_t result;
+
+    result = avc_FsWrite(FW_STATE_PATH, (uint8_t *)&updateState,
+                    sizeof(lwm2mcore_fwUpdateState_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("updating %s: %s", FW_STATE_PATH, LE_RESULT_TXT(result));
+        return DWL_FAULT;
+    }
+
     return DWL_OK;
 }
 
@@ -316,11 +328,21 @@ lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateState
  * SetUpdateResult callback function definition
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_SetUpdateResult
+lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateResult
 (
     lwm2mcore_fwUpdateResult_t updateResult
 )
 {
+    le_result_t result;
+
+    result = avc_FsWrite(FW_RESULT_PATH, (uint8_t *)&updateResult,
+                    sizeof(lwm2mcore_fwUpdateResult_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("updating %s: %s", FW_RESULT_PATH, LE_RESULT_TXT(result));
+        return DWL_FAULT;
+    }
+
     return DWL_OK;
 }
 

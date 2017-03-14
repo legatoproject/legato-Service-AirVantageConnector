@@ -11,6 +11,7 @@
 #include "interfaces.h"
 #include "osPortUpdate.h"
 #include <packageDownloader.h>
+#include <packageDownloaderCallbacks.h>
 #include "avcAppUpdate.h"
 
 //--------------------------------------------------------------------------------------------------
@@ -36,7 +37,7 @@ static void LaunchUpdateTimerExpiryHandler
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
             LE_DEBUG("Launch FW update");
-            packageDownloader_SetFwUpdateStateModified(LWM2MCORE_FW_UPDATE_STATE_UPDATING);
+            pkgDwlCb_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING);
             le_fwupdate_DualSysSwap();
             break;
 
