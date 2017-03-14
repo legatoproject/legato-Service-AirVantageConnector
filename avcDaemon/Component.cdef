@@ -14,6 +14,7 @@ sources:
     avData.c
     avcServer.c
     timeseriesData.c
+    avcFs.c
     // AVC
     ../avcClient/avcClient.c
     ../avcClient/osPortSecurity.c
@@ -123,7 +124,6 @@ requires:
         le_instStat.api
         le_appRemove.api
         le_appCtrl.api
-
         le_cfg.api
         le_data.api
         modemServices/le_info.api
@@ -134,6 +134,7 @@ requires:
         le_fwupdate.api
         le_update.api
         secStoreGlobal = le_secStore.api
+        le_fs.api
     }
 
     component:
