@@ -1823,7 +1823,7 @@ le_avc_SessionType_t le_avc_GetSessionType
     void
 )
 {
-    return LE_AVC_SESSION_INVALID;
+    return avcClient_GetSessionType();
 }
 
 

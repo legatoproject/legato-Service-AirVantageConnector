@@ -509,3 +509,28 @@ int avcClient_GetContext
 {
     return Context;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * LWM2M client entry point to get session status
+ *
+ * @return
+ *      - LE_AVC_DM_SESSION when the device is connected to the DM server
+ *      - LE_AVC_BOOTSTRAP_SESSION when the device is connected to the BS server
+ *      - LE_AVC_SESSION_INVALID in other cases
+ */
+//--------------------------------------------------------------------------------------------------
+le_avc_SessionType_t avcClient_GetSessionType
+(
+    void
+)
+{
+    bool isDeviceManagement = false;
+
+    if (lwm2mcore_connectionGetType(Context, &isDeviceManagement))
+    {
+        return (isDeviceManagement ? LE_AVC_DM_SESSION : LE_AVC_BOOTSTRAP_SESSION);
+    }
+    return LE_AVC_SESSION_INVALID;
+}
+
