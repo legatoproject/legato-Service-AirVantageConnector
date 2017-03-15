@@ -147,11 +147,16 @@ void PushInt_04()
 
     le_avdata_RecordRef_t recRef = le_avdata_CreateRecord();
 
+    // int1,2,3,6,7 only have one value
     LE_ASSERT(le_avdata_RecordInt(recRef, "intValue", 0, 1412320402000) == LE_OK);
     LE_ASSERT(le_avdata_RecordInt(recRef, "intValue2", 1, 1412320403000) == LE_OK);
     LE_ASSERT(le_avdata_RecordInt(recRef, "intValue3", 1, 1412320404000) == LE_OK);
+    // int4 & 5 multiple values
     LE_ASSERT(le_avdata_RecordInt(recRef, "intValue4", 2, 1412320405000) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "intValue4", 4, 1412320406000) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "intValue4", 8, 1412320407000) == LE_OK);
     LE_ASSERT(le_avdata_RecordInt(recRef, "intValue5", 3, 1412320406000) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "intValue5", 9, 1412320407000) == LE_OK);
     LE_ASSERT(le_avdata_RecordInt(recRef, "intValue6", 5, 1412320407000) == LE_OK);
     LE_ASSERT(le_avdata_RecordInt(recRef, "intValue7", 8, 1412320408000) == LE_OK);
 

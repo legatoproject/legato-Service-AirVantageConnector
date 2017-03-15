@@ -176,56 +176,14 @@ ResourceData_t;
  * Supported data types
  */
 //--------------------------------------------------------------------------------------------------
-typedef struct
+typedef union
 {
-    union
-    {
-        int intValue;
-        double floatValue;
-        bool boolValue;
-        char* strValuePtr;
-    };
+    int intValue;
+    double floatValue;
+    bool boolValue;
+    char* strValuePtr;
 }
 Data_t;
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Double hashing function. Can be used as a parameter to le_hashmap_Create() if the key to
- * the table is a double.
- *
- * @return  Returns the hash value of the double pointed to by doubleToHashPtr.
- *
- */
-//--------------------------------------------------------------------------------------------------
-size_t HashmapHashDouble
-(
-    const void* doubleToHashPtr    ///< [in] Pointer to the double to be hashed
-)
-{
-    double d = *((double *)doubleToHashPtr);
-    return (size_t)d;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Double equality function. Can be used as a parameter to le_hashmap_Create() if the key to
- * the table is a double.
- *
- * @return  Returns true if the numbers are equal, false otherwise.
- *
- */
-//--------------------------------------------------------------------------------------------------
-bool HashmapEqualsDouble
-(
-    const void* firstIntPtr,    ///< [in] Pointer to the first double for comparing.
-    const void* secondIntPtr    ///< [in] Pointer to the second double for comparing.
-)
-{
-    double a = *((double*) firstIntPtr);
-    double b = *((double*) secondIntPtr);
-    return a == b;
-}
 
 
 //--------------------------------------------------------------------------------------------------
@@ -694,9 +652,7 @@ static le_result_t EncodeFactorToCborArray
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Encode a default value if none exist
- *
- * TODO: Replace default values with NULL value when it is supported on the server side
+ * Encode a null value if none exist
  *
  * @return:
  *      - LE_OK on success
@@ -705,34 +661,13 @@ static le_result_t EncodeFactorToCborArray
 //--------------------------------------------------------------------------------------------------
 static le_result_t EncodeResourceDefaultValue
 (
-    timeSeries_RecordRef_t recRef,
-    ResourceData_t* resourceDataPtr
+    timeSeries_RecordRef_t recRef
 )
 {
     CborError err;
 
-    switch (resourceDataPtr->type)
-    {
-        case DATA_TYPE_INT:
-            err = cbor_encode_int(&recRef->sampleArray, 0);
-            RETURN_IF_CBOR_ERROR(err);
-            break;
-        case DATA_TYPE_FLOAT:
-            err = cbor_encode_double(&recRef->sampleArray, 0);
-            RETURN_IF_CBOR_ERROR(err);
-            break;
-        case DATA_TYPE_BOOL:
-            err = cbor_encode_boolean(&recRef->sampleArray, false);
-            RETURN_IF_CBOR_ERROR(err);
-            break;
-        case DATA_TYPE_STRING:
-            err = cbor_encode_text_string(&recRef->sampleArray, "", 0);
-            RETURN_IF_CBOR_ERROR(err);
-            break;
-        default:
-            LE_INFO("Invalid type");
-            break;
-    }
+    err = cbor_encode_null(&recRef->sampleArray);
+    RETURN_IF_CBOR_ERROR(err);
 
     return LE_OK;
 }
@@ -897,7 +832,7 @@ static le_result_t EncodeResourceDataToCborArray
 
             if (!le_hashmap_ContainsKey(resourceDataPtr->data, timestampPtr->timestamp))
             {
-                result = EncodeResourceDefaultValue(recRef, resourceDataPtr);
+                result = EncodeResourceDefaultValue(recRef);
             }
             else
             {
@@ -1163,8 +1098,8 @@ static le_result_t CreateResourceData
     resourceDataPtr->link = LE_DLS_LINK_INIT;
     resourceDataPtr->data = le_hashmap_Create("Resource data table",
                                               1024,
-                                              HashmapHashDouble,
-                                              HashmapEqualsDouble);
+                                              le_hashmap_HashUInt64,
+                                              le_hashmap_EqualsUInt64);
 
     if ((type == DATA_TYPE_STRING) || (type == DATA_TYPE_BOOL))
     {
