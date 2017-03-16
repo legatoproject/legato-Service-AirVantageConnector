@@ -107,6 +107,13 @@
 
 //--------------------------------------------------------------------------------------------------
  /**
+ *  Path to the file that stores the user FS version number string.
+ */
+//--------------------------------------------------------------------------------------------------
+#define UFS_VERSION_FILE "/opt/userfsver.txt"
+
+//--------------------------------------------------------------------------------------------------
+ /**
  *  String to be check in file which stores the LK version
  */
 //--------------------------------------------------------------------------------------------------
@@ -135,7 +142,7 @@ typedef size_t (*getVersion_t)
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Struture to get a component version and its corresponding tag for the FW version string
+ * Structure to get a component version and its corresponding tag for the FW version string
  */
 //--------------------------------------------------------------------------------------------------
 typedef struct
@@ -352,8 +359,35 @@ size_t GetUfsVersion
     size_t returnedLen = 0;
     if (NULL != versionBufferPtr)
     {
-        snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
-        returnedLen = strlen(versionBufferPtr);
+        char tmpUfsBufferPtr[FW_BUFFER_LENGTH];
+        FILE* fpPtr;
+        fpPtr = fopen(UFS_VERSION_FILE, "r");
+        if ((NULL != fpPtr)
+         && (NULL != fgets(tmpUfsBufferPtr, FW_BUFFER_LENGTH, fpPtr)))
+        {
+            char* savePtr;
+            char* tmpBufferPtr = strtok_r(tmpUfsBufferPtr, SPACE, &savePtr);
+            if (NULL != tmpBufferPtr)
+            {
+                snprintf(versionBufferPtr, len, "%s", tmpBufferPtr);
+                returnedLen = strlen(versionBufferPtr);
+            }
+            else
+            {
+                snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+                returnedLen = strlen(versionBufferPtr);
+            }
+        }
+        else
+        {
+            snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = strlen(versionBufferPtr);
+        }
+
+        if (NULL != fpPtr)
+        {
+            fclose(fpPtr);
+        }
         LE_INFO("UfsVersion %s, len %d", versionBufferPtr, returnedLen);
     }
     return returnedLen;
@@ -452,28 +486,6 @@ size_t GetPriVersion
 
 //--------------------------------------------------------------------------------------------------
 /**
- *  Components on which version needs to be retrieved
- */
-//--------------------------------------------------------------------------------------------------
-const ComponentVersion_t VersionInfo[] =
-{
-  { MODEM_TAG,      GetModemVersion },
-  { LK_TAG,         GetLkVersion },
-  { LINUX_TAG,      GetOsVersion },
-  { ROOT_FS_TAG,    GetRfsVersion },
-  { USER_FS_TAG,    GetUfsVersion },
-  { LEGATO_TAG,     GetLegatoVersion },
-  { PRI_TAG,        GetPriVersion }
-};
-
-//--------------------------------------------------------------------------------------------------
-/**
- *                  OBJECT 3: DEVICE
- */
-//--------------------------------------------------------------------------------------------------
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Retrieve the device manufacturer
  * This API treatment needs to have a procedural treatment
  *
@@ -485,43 +497,43 @@ const ComponentVersion_t VersionInfo[] =
  *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_sid_t os_portDeviceManufacturer
 (
-    char *bufferPtr,                        ///< [INOUT] data buffer
-    size_t *lenPtr                          ///< [INOUT] length of input buffer and length of the
-                                            ///< returned data
+    char*   bufferPtr,  ///< [INOUT] data buffer
+    size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
-    lwm2mcore_sid_t result;
+    lwm2mcore_sid_t sID;
+    le_result_t result;
 
-    if ((bufferPtr == NULL) || (lenPtr == NULL))
+    if ((!bufferPtr) || (!lenPtr))
     {
-        result = LWM2MCORE_ERR_INVALID_ARG;
+        return LWM2MCORE_ERR_INVALID_ARG;
     }
-    else
+
+    result = le_info_GetManufacturerName((char*)bufferPtr, (uint32_t)*lenPtr);
+
+    switch (result)
     {
-        le_result_t leresult = le_info_GetManufacturerName((char*)bufferPtr, (uint32_t) *lenPtr);
+        case LE_OK:
+            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
 
-        switch (leresult)
-        {
-            case LE_OK:
-                result = LWM2MCORE_ERR_COMPLETED_OK;
-                break;
+        case LE_OVERFLOW:
+            sID = LWM2MCORE_ERR_OVERFLOW;
+            break;
 
-            case LE_OVERFLOW:
-                result = LWM2MCORE_ERR_OVERFLOW;
-                break;
-
-            case LE_FAULT:
-            default:
-                result = LWM2MCORE_ERR_GENERAL_ERROR;
-                break;
-        }
+        case LE_FAULT:
+        default:
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
     }
-    LE_INFO("os_portDeviceManufacturer result %d", result);
-    return result;
+
+    LE_DEBUG("os_portDeviceManufacturer result: %d", sID);
+    return sID;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -537,42 +549,43 @@ lwm2mcore_sid_t os_portDeviceManufacturer
  *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_sid_t os_portDeviceModelNumber
 (
-    char *bufferPtr,                        ///< [INOUT] data buffer
-    size_t *lenPtr                          ///< [INOUT] length of input buffer and length of the
-                                            ///< returned data
+    char*   bufferPtr,  ///< [INOUT] data buffer
+    size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
-    lwm2mcore_sid_t result;
+    lwm2mcore_sid_t sID;
+    le_result_t result;
 
-    if ((bufferPtr == NULL) || (lenPtr == NULL))
+    if ((!bufferPtr) || (!lenPtr))
     {
-        result = LWM2MCORE_ERR_INVALID_ARG;
+        return LWM2MCORE_ERR_INVALID_ARG;
     }
-    else
+
+    result = le_info_GetDeviceModel((char*)bufferPtr, (uint32_t)*lenPtr);
+
+    switch (result)
     {
-        le_result_t leresult = le_info_GetDeviceModel((char*)bufferPtr, (uint32_t) *lenPtr);
+        case LE_OVERFLOW:
+            sID = LWM2MCORE_ERR_OVERFLOW;
+            break;
 
-        switch (leresult)
-        {
-            case LE_OVERFLOW:
-                result = LWM2MCORE_ERR_OVERFLOW;
-                break;
+        case LE_OK:
+            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
 
-            case LE_OK:
-                result = LWM2MCORE_ERR_COMPLETED_OK;
-                break;
-
-            case LE_FAULT:
-            default:
-                result = LWM2MCORE_ERR_GENERAL_ERROR;
-                break;
-        }
+        case LE_FAULT:
+        default:
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
     }
-    return result;
+
+    LE_DEBUG("os_portDeviceModelNumber result: %d", sID);
+    return sID;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -588,42 +601,43 @@ lwm2mcore_sid_t os_portDeviceModelNumber
  *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_sid_t os_portDeviceSerialNumber
 (
-    char* bufferPtr,            ///< [INOUT] data buffer
-    size_t* lenPtr              ///< [INOUT] length of input buffer and length of the returned data
+    char*   bufferPtr,  ///< [INOUT] data buffer
+    size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
-    lwm2mcore_sid_t result;
+    lwm2mcore_sid_t sID;
+    le_result_t result;
 
-    if ((bufferPtr == NULL) || (lenPtr == NULL))
+    if ((!bufferPtr) || (!lenPtr))
     {
-        result = LWM2MCORE_ERR_INVALID_ARG;
+        return LWM2MCORE_ERR_INVALID_ARG;
     }
-    else
+
+    result = le_info_GetPlatformSerialNumber((char*)bufferPtr, (uint32_t)*lenPtr);
+
+    switch (result)
     {
-        le_result_t leresult = le_info_GetPlatformSerialNumber((char*)bufferPtr,
-                                                               (uint32_t) *lenPtr);
+        case LE_OVERFLOW:
+            sID = LWM2MCORE_ERR_OVERFLOW;
+            break;
 
-        switch (leresult)
-        {
-            case LE_OVERFLOW:
-                result = LWM2MCORE_ERR_OVERFLOW;
-                break;
+        case LE_OK:
+            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
 
-            case LE_OK:
-                result = LWM2MCORE_ERR_COMPLETED_OK;
-                break;
-
-            case LE_FAULT:
-            default:
-                result = LWM2MCORE_ERR_GENERAL_ERROR;
-                break;
-        }
+        case LE_FAULT:
+        default:
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
     }
-    return result;
+
+    LE_DEBUG("os_portDeviceSerialNumber result: %d", sID);
+    return sID;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -644,61 +658,96 @@ lwm2mcore_sid_t os_portDeviceSerialNumber
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_sid_t os_portDeviceFirmwareVersion
 (
-    char* bufferPtr,            ///< [INOUT] data buffer
-    size_t* lenPtr              ///< [INOUT] length of input buffer and length of the returned data
+    char*   bufferPtr,  ///< [INOUT] data buffer
+    size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
-    lwm2mcore_sid_t result;
-    if ((bufferPtr == NULL) || (lenPtr == NULL))
+    char tmpBufferPtr[FW_BUFFER_LENGTH];
+    uint32_t remainingLen = *lenPtr;
+    size_t len;
+    uint32_t i = 0;
+    ComponentVersion_t versionInfo[] =
     {
-        result = LWM2MCORE_ERR_INVALID_ARG;
+      { MODEM_TAG,      GetModemVersion  },
+      { LK_TAG,         GetLkVersion     },
+      { LINUX_TAG,      GetOsVersion     },
+      { ROOT_FS_TAG,    GetRfsVersion    },
+      { USER_FS_TAG,    GetUfsVersion    },
+      { LEGATO_TAG,     GetLegatoVersion },
+      { PRI_TAG,        GetPriVersion    }
+    };
+
+    if ((!bufferPtr) || (!lenPtr))
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
     }
-    else
+
+    LE_DEBUG("remainingLen %d", remainingLen);
+
+    for (i = 0; i < NUM_ARRAY_MEMBERS(versionInfo); i++)
     {
-        char tmpBufferPtr[FW_BUFFER_LENGTH];
-        uint32_t remainingLen = *lenPtr;
-        size_t len;
-        uint32_t i = 0;
-
-        LE_INFO("remainingLen %d", remainingLen);
-
-        for (i = 0; i < NUM_ARRAY_MEMBERS(VersionInfo); i++)
+        if (NULL != versionInfo[i].funcPtr)
         {
-            if (NULL != VersionInfo[i].funcPtr)
+            len = versionInfo[i].funcPtr(tmpBufferPtr, FW_BUFFER_LENGTH);
+            LE_DEBUG("len %d - remainingLen %d", len, remainingLen);
+            /* len doesn't contain the final \0
+             * remainingLen contains the final \0
+             * So we have to keep one byte for \0
+             */
+            if (len > (remainingLen - 1))
             {
-                len = VersionInfo[i].funcPtr(tmpBufferPtr, FW_BUFFER_LENGTH);
-                LE_INFO("len %d - remainingLen %d", len, remainingLen);
-                /* len doesn't contain the final \0
-                 * remainingLen contains the final \0
-                 * So we have to keep one byte for \0
-                 */
-                if (len > (remainingLen - 1))
-                {
-                    *lenPtr = 0;
-                    bufferPtr[*lenPtr] = '\0';
-                    return LWM2MCORE_ERR_OVERFLOW;
-                }
-                else
-                {
-                    snprintf(bufferPtr + strlen(bufferPtr),
-                             remainingLen,
-                             "%s%s",
-                             VersionInfo[i].tagPtr,
-                             tmpBufferPtr);
-                    remainingLen -= len;
-                    LE_INFO("remainingLen %d", remainingLen);
-                }
+                *lenPtr = 0;
+                bufferPtr[*lenPtr] = '\0';
+                return LWM2MCORE_ERR_OVERFLOW;
+            }
+            else
+            {
+                snprintf(bufferPtr + strlen(bufferPtr),
+                         remainingLen,
+                         "%s%s",
+                         versionInfo[i].tagPtr,
+                         tmpBufferPtr);
+                remainingLen -= len;
+                LE_DEBUG("remainingLen %d", remainingLen);
             }
         }
-        *lenPtr = strlen(bufferPtr);
-        result = LWM2MCORE_ERR_COMPLETED_OK;
     }
-    return result;
+
+    *lenPtr = strlen(bufferPtr);
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Retrieve the device time
+ * Retrieve the battery level (percentage)
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_sid_t os_portDeviceBatteryLevel
+(
+    uint8_t* valuePtr  ///< [INOUT] data buffer
+)
+{
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the device time (UNIX time in seconds)
  * This API treatment needs to have a procedural treatment
  *
  * @return
@@ -713,30 +762,25 @@ lwm2mcore_sid_t os_portDeviceFirmwareVersion
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_sid_t os_portDeviceCurrentTime
 (
-    uint64_t* valuePtr                      ///< [INOUT] data buffer
+    uint64_t* valuePtr  ///< [INOUT] data buffer
 )
 {
-    lwm2mcore_sid_t result;
+    le_clk_Time_t t;
 
-    if (valuePtr == NULL)
+    if (!valuePtr)
     {
-        result = LWM2MCORE_ERR_INVALID_ARG;
+        return LWM2MCORE_ERR_INVALID_ARG;
     }
-    else
+
+    t = le_clk_GetAbsoluteTime();
+    *valuePtr = t.sec;
+    LE_DEBUG("time %d", t.sec);
+
+    if (0 == t.sec)
     {
-        le_clk_Time_t t = le_clk_GetAbsoluteTime();
-        *valuePtr = 0;
-        LE_INFO("time %d", t.sec);
-        if (0 == t.sec)
-        {
-            result = LWM2MCORE_ERR_GENERAL_ERROR;
-        }
-        else
-        {
-            *valuePtr = t.sec;
-            result = LWM2MCORE_ERR_COMPLETED_OK;
-        }
+        return LWM2MCORE_ERR_GENERAL_ERROR;
     }
-    return result;
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
