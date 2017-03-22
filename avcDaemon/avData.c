@@ -9,11 +9,10 @@
  *
  */
 
-
+#include <lwm2mcore/coapHandlers.h>
 #include "tinycbor/cbor.h"
 #include "legato.h"
 #include "interfaces.h"
-#include "lwm2mcoreCoapHandlers.h"
 #include "timeseriesData.h"
 
 
@@ -126,7 +125,7 @@ static int AVCClientSessionContext;
  * AV server request ref.
  */
 //--------------------------------------------------------------------------------------------------
-static lwm2mcore_coapRequestRef_t AVServerReqRef;
+static lwm2mcore_CoapRequestRef_t AVServerReqRef;
 
 
 //--------------------------------------------------------------------------------------------------
@@ -134,7 +133,7 @@ static lwm2mcore_coapRequestRef_t AVServerReqRef;
  * AV server response.
  */
 //--------------------------------------------------------------------------------------------------
-static lwm2mcore_coapResponse_t AVServerResponse;
+static lwm2mcore_CoapResponse_t AVServerResponse;
 
 
 //--------------------------------------------------------------------------------------------------
@@ -1456,7 +1455,7 @@ static void ProcessAvServerExecRequest
 //--------------------------------------------------------------------------------------------------
 static void AvServerRequestHandler
 (
-    lwm2mcore_coapRequestRef_t serverReqRef
+    lwm2mcore_CoapRequestRef_t serverReqRef
 )
 {
     // Save the session context and server request ref, so when reply function such as

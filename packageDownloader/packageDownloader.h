@@ -10,9 +10,9 @@
 #ifndef _PACKAGEDOWNLOADER_H
 #define _PACKAGEDOWNLOADER_H
 
-#include <legato.h>
-#include <osPortUpdate.h>
+#include <lwm2mcore/update.h>
 #include <lwm2mcorePackageDownloader.h>
+#include <legato.h>
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -51,7 +51,7 @@ le_result_t packageDownloader_Init
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_SetFwUpdateState
 (
-    lwm2mcore_fwUpdateState_t fwUpdateState     ///< [IN] New FW update state
+    lwm2mcore_FwUpdateState_t fwUpdateState     ///< [IN] New FW update state
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -65,7 +65,7 @@ le_result_t packageDownloader_SetFwUpdateState
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_SetFwUpdateResult
 (
-    lwm2mcore_fwUpdateResult_t fwUpdateResult   ///< [IN] New FW update result
+    lwm2mcore_FwUpdateResult_t fwUpdateResult   ///< [IN] New FW update result
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -80,7 +80,7 @@ le_result_t packageDownloader_SetFwUpdateResult
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetFwUpdateState
 (
-    lwm2mcore_fwUpdateState_t* fwUpdateStatePtr     ///< [INOUT] FW update state
+    lwm2mcore_FwUpdateState_t* fwUpdateStatePtr     ///< [INOUT] FW update state
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -95,7 +95,7 @@ le_result_t packageDownloader_GetFwUpdateState
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetFwUpdateResult
 (
-    lwm2mcore_fwUpdateResult_t* fwUpdateResultPtr   ///< [INOUT] FW update result
+    lwm2mcore_FwUpdateResult_t* fwUpdateResultPtr   ///< [INOUT] FW update result
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -126,7 +126,7 @@ void* packageDownloader_StoreFwPackage
 le_result_t packageDownloader_StartDownload
 (
     const char*            uriPtr,
-    lwm2mcore_updateType_t type
+    lwm2mcore_UpdateType_t type
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -136,7 +136,7 @@ le_result_t packageDownloader_StartDownload
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_AbortDownload
 (
-    lwm2mcore_updateType_t  type
+    lwm2mcore_UpdateType_t  type
 );
 
 #endif /*_PACKAGEDOWNLOADER_H */

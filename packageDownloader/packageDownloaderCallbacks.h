@@ -10,9 +10,9 @@
 #ifndef _PACKAGEDOWNLOADERCALLBACKS_H
 #define _PACKAGEDOWNLOADERCALLBACKS_H
 
-#include <legato.h>
-#include <osPortUpdate.h>
+#include <lwm2mcore/update.h>
 #include <lwm2mcorePackageDownloader.h>
+#include <legato.h>
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -43,7 +43,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
 (
-    lwm2mcore_fwUpdateState_t updateState
+    lwm2mcore_FwUpdateState_t updateState
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -53,7 +53,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateResult
 (
-    lwm2mcore_fwUpdateResult_t updateResult
+    lwm2mcore_FwUpdateResult_t updateResult
 );
 
 //--------------------------------------------------------------------------------------------------

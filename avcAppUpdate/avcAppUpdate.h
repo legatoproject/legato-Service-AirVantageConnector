@@ -9,7 +9,7 @@
 #ifndef LEGATO_AVC_APP_UPDATE_DEFS_INCLUDE_GUARD
 #define LEGATO_AVC_APP_UPDATE_DEFS_INCLUDE_GUARD
 
-#include <osPortUpdate.h>
+#include <lwm2mcore/update.h>
 #include <lwm2mcorePackageDownloader.h>
 
 //--------------------------------------------------------------------------------------------------
@@ -206,7 +206,7 @@ le_result_t avcApp_GetPackageVersion
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t  avcApp_SetDownloadState
 (
-    lwm2mcore_swUpdateState_t updateState
+    lwm2mcore_SwUpdateState_t updateState
 );
 
 
@@ -222,7 +222,7 @@ lwm2mcore_DwlResult_t  avcApp_SetDownloadState
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t  avcApp_SetDownloadResult
 (
-    lwm2mcore_swUpdateResult_t updateResult
+    lwm2mcore_SwUpdateResult_t updateResult
 );
 
 

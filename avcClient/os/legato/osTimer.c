@@ -10,10 +10,10 @@
  */
 
 
+#include <stdbool.h>
+#include <lwm2mcore/timer.h>
 #include "legato.h"
 #include "interfaces.h"
-#include <stdbool.h>
-#include "osTimer.h"
 
 static le_timer_Ref_t Lwm2mStepTimerRef = NULL;
 
@@ -26,25 +26,25 @@ static le_timer_Ref_t Lwm2mStepTimerRef = NULL;
  *      - false on failure
  */
 //--------------------------------------------------------------------------------------------------
-bool os_timerSet
+bool lwm2mcore_TimerSet
 (
-    os_timerType_t timer,   ///< [IN] Timer Id
-    uint32_t time,          ///< [IN] Timer value in seconds
-    os_timerCallback_t cb   ///< [IN] Timer callback
+    lwm2mcore_TimerType_t timer,    ///< [IN] Timer Id
+    uint32_t time,                  ///< [IN] Timer value in seconds
+    lwm2mcore_TimerCallback_t cb    ///< [IN] Timer callback
 )
 {
     le_result_t start = LE_FAULT;
     bool result = false;
     le_clk_Time_t timerInterval;
 
-    LE_INFO ("os_timerSet %d time %d sec", timer, time);
-    if (timer < OS_TIMER_MAX)
+    LE_INFO ("lwm2mcore_TimerSet %d time %d sec", timer, time);
+    if (timer < LWM2MCORE_TIMER_MAX)
     {
         switch (timer)
         {
-            case OS_TIMER_STEP:
+            case LWM2MCORE_TIMER_STEP:
             {
-                LE_INFO ("OS_TIMER_STEP");
+                LE_INFO ("LWM2MCORE_TIMER_STEP");
                 if (Lwm2mStepTimerRef == NULL)
                 {
                     timerInterval.sec = time;
@@ -98,19 +98,19 @@ bool os_timerSet
  *      - false on failure
  */
 //--------------------------------------------------------------------------------------------------
-bool os_timerStop
+bool lwm2mcore_TimerStop
 (
-    os_timerType_t timer    ///< [IN] Timer Id
+    lwm2mcore_TimerType_t timer    ///< [IN] Timer Id
 )
 {
     le_result_t stop = false;
     bool result = false;
 
-    if (timer < OS_TIMER_MAX)
+    if (timer < LWM2MCORE_TIMER_MAX)
     {
         switch (timer)
         {
-            case OS_TIMER_STEP:
+            case LWM2MCORE_TIMER_STEP:
             {
                 if (Lwm2mStepTimerRef != NULL)
                 {
@@ -141,18 +141,18 @@ bool os_timerStop
  *      - false if the timer is stopped
  */
 //--------------------------------------------------------------------------------------------------
-bool os_timerIsRunning
+bool lwm2mcore_TimerIsRunning
 (
-    os_timerType_t timer    ///< [IN] Timer Id
+    lwm2mcore_TimerType_t timer    ///< [IN] Timer Id
 )
 {
     bool isRunning = false;
 
-    if (timer < OS_TIMER_MAX)
+    if (timer < LWM2MCORE_TIMER_MAX)
     {
         switch (timer)
         {
-            case OS_TIMER_STEP:
+            case LWM2MCORE_TIMER_STEP:
             {
                 if (Lwm2mStepTimerRef != NULL)
                 {
@@ -165,7 +165,7 @@ bool os_timerIsRunning
             break;
         }
     }
-    LE_INFO ("OS_TIMER_STEP timer is running %d", isRunning);
+    LE_INFO ("LWM2MCORE_TIMER_STEP timer is running %d", isRunning);
     return isRunning;
 }
 

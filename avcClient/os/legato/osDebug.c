@@ -31,7 +31,7 @@
  * Function for assert
  */
 //--------------------------------------------------------------------------------------------------
-void os_assert
+void lwm2mcore_Assert
 (
     bool condition,             /// [IN] Condition to be checked
     const char* functionPtr,    /// [IN] Function name which calls the assert function
@@ -56,7 +56,8 @@ void os_assert
  * Adaptation function for log
  */
 //--------------------------------------------------------------------------------------------------
-void lwm2m_printf(
+void lwm2m_printf
+(
     const char * format,
     ...
 )
@@ -89,7 +90,8 @@ void lwm2m_printf(
  * Adaptation function for log: dump data
  */
 //--------------------------------------------------------------------------------------------------
-void os_debug_data_dump(
+void lwm2mcore_DataDump
+(
     char *descPtr,                  ///< [IN] data description
     void *addrPtr,                  ///< [IN] Data address to be dumped
     int len                         ///< [IN] Data length

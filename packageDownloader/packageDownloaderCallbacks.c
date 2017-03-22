@@ -9,7 +9,7 @@
 
 #include <legato.h>
 #include <curl/curl.h>
-#include <osPortUpdate.h>
+#include <lwm2mcore/update.h>
 #include <lwm2mcorePackageDownloader.h>
 #include <interfaces.h>
 #include <avcFs.h>
@@ -307,7 +307,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
 (
-    lwm2mcore_fwUpdateState_t updateState
+    lwm2mcore_FwUpdateState_t updateState
 )
 {
     le_result_t result;
@@ -328,7 +328,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateResult
 (
-    lwm2mcore_fwUpdateResult_t updateResult
+    lwm2mcore_FwUpdateResult_t updateResult
 )
 {
     le_result_t result;

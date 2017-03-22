@@ -10,9 +10,9 @@
  */
 
 
+#include <liblwm2m.h>
 #include "legato.h"
 #include "interfaces.h"
-#include "osTime.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -43,4 +43,3 @@ time_t lwm2m_gettime
 
     return tv.tv_sec;
 }
-

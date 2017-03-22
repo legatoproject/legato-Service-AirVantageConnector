@@ -111,10 +111,10 @@ cflags:
     -I$CURDIR/../avcAppUpdate
     -I$CURDIR/../avcClient
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader
-    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/inc
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/platform-specific/linux
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager
-    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/os
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core

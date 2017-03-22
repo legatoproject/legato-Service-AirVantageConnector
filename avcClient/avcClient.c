@@ -10,13 +10,12 @@
 /* include files */
 #include <stdbool.h>
 #include <stdint.h>
+#include <lwm2mcore/lwm2mcore.h>
+#include <lwm2mcore/timer.h>
+#include <lwm2mcore/security.h>
+
 #include "legato.h"
 #include "interfaces.h"
-#include "lwm2mcore.h"
-#include "osTimer.h"
-#include "osPortSecurity.h"
-#include "osPortTypes.h"
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -90,7 +89,7 @@ static void BearerEventCb
             }
             else
             {
-                result = lwm2mcore_connect(Context);
+                result = lwm2mcore_Connect(Context);
                 if (result != true)
                 {
                     LE_ERROR("connect error");
@@ -103,7 +102,7 @@ static void BearerEventCb
         if (Context)
         {
             /* The data connection is closed */
-            lwm2mcore_free(Context);
+            lwm2mcore_Free(Context);
             Context = 0;
 
             /* Remove the data handler */
@@ -155,7 +154,7 @@ static void ConnectionStateHandler
 //--------------------------------------------------------------------------------------------------
 static int PackageEventHandler
 (
-    lwm2mcore_status_t status              ///< [IN] event status
+    lwm2mcore_Status_t status              ///< [IN] event status
 )
 {
     int result = 0;
@@ -319,7 +318,7 @@ static int PackageEventHandler
 //--------------------------------------------------------------------------------------------------
 static int EventHandler
 (
-    lwm2mcore_status_t status              ///< [IN] event status
+    lwm2mcore_Status_t status              ///< [IN] event status
 )
 {
     int result = 0;
@@ -402,7 +401,7 @@ le_result_t avcClient_Connect
 
     if (!Context)
     {
-        Context = lwm2mcore_init(EventHandler);
+        Context = lwm2mcore_Init(EventHandler);
 
         /* Initialize the bearer */
         /* Open a data connection */
@@ -436,10 +435,10 @@ le_result_t avcClient_Disconnect
 {
     LE_DEBUG("Disconnect");
 
-    /* If the OS_TIMER_STEP timer is running, this means that a connection is active */
-    if (true == os_timerIsRunning(OS_TIMER_STEP))
+    /* If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active */
+    if (true == lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
     {
-        if (true == lwm2mcore_disconnect(Context))
+        if (true == lwm2mcore_Disconnect(Context))
         {
             /* stop the bearer */
             /* Check that a data connection was opened */
@@ -449,7 +448,7 @@ le_result_t avcClient_Disconnect
                 le_data_Release(DataRef);
             }
             /* The data connection is closed */
-            lwm2mcore_free(Context);
+            lwm2mcore_Free(Context);
             Context = 0;
 
             /* Remove the data handler */
@@ -479,7 +478,7 @@ le_result_t avcClient_Update
 {
     LE_DEBUG("Registration update");
 
-    if (true == lwm2mcore_update(Context))
+    if (true == lwm2mcore_Update(Context))
     {
         return LE_OK;
     }
@@ -508,7 +507,7 @@ le_result_t avcClient_Push
 {
     LE_DEBUG("Push data");
 
-    if (true == lwm2mcore_push(Context, payload, payloadLength, callback))
+    if (true == lwm2mcore_Push(Context, payload, payloadLength, callback))
     {
         LE_DEBUG("Push success");
         return LE_OK;
@@ -532,7 +531,7 @@ void avcClient_SendList
     size_t objListLen           ///< [IN] List length
 )
 {
-    lwm2mcore_updateSwList(Context, lwm2mObjListPtr, objListLen);
+    lwm2mcore_UpdateSwList(Context, lwm2mObjListPtr, objListLen);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -565,7 +564,7 @@ le_avc_SessionType_t avcClient_GetSessionType
 {
     bool isDeviceManagement = false;
 
-    if (lwm2mcore_connectionGetType(Context, &isDeviceManagement))
+    if (lwm2mcore_ConnectionGetType(Context, &isDeviceManagement))
     {
         return (isDeviceManagement ? LE_AVC_DM_SESSION : LE_AVC_BOOTSTRAP_SESSION);
     }
@@ -582,7 +581,7 @@ void BsFailureHandler
     void* reportPtr
 )
 {
-    lwm2mcore_disconnect(Context);
+    lwm2mcore_Disconnect(Context);
 }
 
 //--------------------------------------------------------------------------------------------------

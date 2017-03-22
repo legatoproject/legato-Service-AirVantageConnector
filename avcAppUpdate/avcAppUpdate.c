@@ -7,13 +7,13 @@
  */
 //--------------------------------------------------------------------------------------------------
 
+#include <lwm2mcore/update.h>
 #include "legato.h"
 #include "interfaces.h"
 #include "le_print.h"
 #include "appCfg.h"
 #include "assetData.h"
 #include "avcServer.h"
-#include "osPortUpdate.h"
 #include "lwm2mcorePackageDownloader.h"
 #include "packageDownloader.h"
 #include "avcAppUpdate.h"
@@ -148,7 +148,7 @@ static le_event_Id_t DownloadEventId;
 //--------------------------------------------------------------------------------------------------
 static const char* UpdateStateToStr
 (
-    lwm2mcore_swUpdateState_t state  ///< The enumeration value to convert.
+    lwm2mcore_SwUpdateState_t state  ///< The enumeration value to convert.
 )
 {
     const char* resultPtr;
@@ -189,7 +189,7 @@ static const char* UpdateStateToStr
 //--------------------------------------------------------------------------------------------------
 static const char* UpdateResultToStr
 (
-    lwm2mcore_swUpdateResult_t swUpdateResult  ///< The enumeration value to convert.
+    lwm2mcore_SwUpdateResult_t swUpdateResult  ///< The enumeration value to convert.
 )
 {
     const char* resultPtr;
@@ -316,8 +316,8 @@ void UpdateEndHandler
 static void SetObj9State_
 (
     assetData_InstanceDataRef_t instanceRef,  ///< The instance to update.
-    lwm2mcore_swUpdateState_t state,          ///< The new state.
-    lwm2mcore_swUpdateResult_t result,        ///< The new result.
+    lwm2mcore_SwUpdateState_t state,          ///< The new state.
+    lwm2mcore_SwUpdateResult_t result,        ///< The new result.
     const char* functionNamePtr,              ///< Name of the function that called this one.
     size_t line                               ///< The line of this file this function was called
                                               ///< from.
@@ -438,7 +438,7 @@ static void SetObject9InstanceForApp
  *  Read the current state of the given object 9 instance.
  */
 //--------------------------------------------------------------------------------------------------
-static lwm2mcore_swUpdateState_t GetObj9State
+static lwm2mcore_SwUpdateState_t GetObj9State
 (
     assetData_InstanceDataRef_t instanceRef  ///< The object instance to read.
 )
@@ -447,7 +447,7 @@ static lwm2mcore_swUpdateState_t GetObj9State
     LE_DEBUG("InstanceRef: %p", instanceRef);
 
     LE_ASSERT_OK(assetData_client_GetInt(instanceRef, O9F_UPDATE_STATE, &state));
-    return (lwm2mcore_swUpdateState_t)state;
+    return (lwm2mcore_SwUpdateState_t)state;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1506,7 +1506,7 @@ le_result_t avcApp_StoreSwPackage
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t  avcApp_SetDownloadResult
 (
-    lwm2mcore_swUpdateResult_t updateResult
+    lwm2mcore_SwUpdateResult_t updateResult
 )
 {
     LE_DEBUG("Requested to set result: %d, instance: %p", updateResult, CurrentObj9);
@@ -1561,7 +1561,7 @@ lwm2mcore_DwlResult_t  avcApp_SetDownloadResult
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t  avcApp_SetDownloadState
 (
-    lwm2mcore_swUpdateState_t updateState
+    lwm2mcore_SwUpdateState_t updateState
 )
 {
     LE_DEBUG("Requested to set state: %d, instance: %p", updateState, CurrentObj9);

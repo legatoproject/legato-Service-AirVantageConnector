@@ -7,9 +7,9 @@
  *
  */
 
+#include <lwm2mcore/device.h>
 #include "legato.h"
 #include "interfaces.h"
-#include "osPortDevice.h"
 #include "assetData.h"
 #include <sys/utsname.h>
 #include "avcAppUpdate.h"
@@ -500,13 +500,13 @@ size_t GetPriVersion
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_sid_t os_portDeviceManufacturer
+lwm2mcore_Sid_t lwm2mcore_DeviceManufacturer
 (
     char*   bufferPtr,  ///< [INOUT] data buffer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
-    lwm2mcore_sid_t sID;
+    lwm2mcore_Sid_t sID;
     le_result_t result;
 
     if ((!bufferPtr) || (!lenPtr))
@@ -532,7 +532,7 @@ lwm2mcore_sid_t os_portDeviceManufacturer
             break;
     }
 
-    LE_DEBUG("os_portDeviceManufacturer result: %d", sID);
+    LE_DEBUG("lwm2mcore_DeviceManufacturer result: %d", sID);
     return sID;
 }
 
@@ -552,13 +552,13 @@ lwm2mcore_sid_t os_portDeviceManufacturer
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_sid_t os_portDeviceModelNumber
+lwm2mcore_Sid_t lwm2mcore_DeviceModelNumber
 (
     char*   bufferPtr,  ///< [INOUT] data buffer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
-    lwm2mcore_sid_t sID;
+    lwm2mcore_Sid_t sID;
     le_result_t result;
 
     if ((!bufferPtr) || (!lenPtr))
@@ -584,7 +584,7 @@ lwm2mcore_sid_t os_portDeviceModelNumber
             break;
     }
 
-    LE_DEBUG("os_portDeviceModelNumber result: %d", sID);
+    LE_DEBUG("lwm2mcore_DeviceModelNumber result: %d", sID);
     return sID;
 }
 
@@ -604,13 +604,13 @@ lwm2mcore_sid_t os_portDeviceModelNumber
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_sid_t os_portDeviceSerialNumber
+lwm2mcore_Sid_t lwm2mcore_DeviceSerialNumber
 (
     char*   bufferPtr,  ///< [INOUT] data buffer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
-    lwm2mcore_sid_t sID;
+    lwm2mcore_Sid_t sID;
     le_result_t result;
 
     if ((!bufferPtr) || (!lenPtr))
@@ -636,7 +636,7 @@ lwm2mcore_sid_t os_portDeviceSerialNumber
             break;
     }
 
-    LE_DEBUG("os_portDeviceSerialNumber result: %d", sID);
+    LE_DEBUG("lwm2mcore_DeviceSerialNumber result: %d", sID);
     return sID;
 }
 
@@ -656,7 +656,7 @@ lwm2mcore_sid_t os_portDeviceSerialNumber
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_sid_t os_portDeviceFirmwareVersion
+lwm2mcore_Sid_t lwm2mcore_DeviceFirmwareVersion
 (
     char*   bufferPtr,  ///< [INOUT] data buffer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
@@ -732,7 +732,7 @@ lwm2mcore_sid_t os_portDeviceFirmwareVersion
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_sid_t os_portDeviceBatteryLevel
+lwm2mcore_Sid_t lwm2mcore_DeviceBatteryLevel
 (
     uint8_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -760,7 +760,7 @@ lwm2mcore_sid_t os_portDeviceBatteryLevel
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_sid_t os_portDeviceCurrentTime
+lwm2mcore_Sid_t lwm2mcore_DeviceCurrentTime
 (
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )

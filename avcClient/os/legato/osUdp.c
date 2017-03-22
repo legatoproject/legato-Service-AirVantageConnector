@@ -9,27 +9,24 @@
  *
  */
 
-#include "legato.h"
-#include "interfaces.h"
-
 #include <sys/socket.h>
 #include <netinet/in.h>
-
-#include "osUdp.h"
-#include "osDebug.h"
-
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <sys/stat.h>
-
 #include <netdb.h>
+#include <lwm2mcore/lwm2mcore.h>
+#include <lwm2mcore/udp.h>
+#include "legato.h"
+#include "interfaces.h"
+
 
 //--------------------------------------------------------------------------------------------------
 /**
  *  Define the File Descriptor Monitor reference for socket
  */
 //--------------------------------------------------------------------------------------------------
-le_fdMonitor_Ref_t lwm2mMonitorRef;
+le_fdMonitor_Ref_t Lwm2mMonitorRef;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -38,9 +35,9 @@ le_fdMonitor_Ref_t lwm2mMonitorRef;
 //--------------------------------------------------------------------------------------------------
 const char * localPortPtr = "56830";
 
-os_socketConfig_t SocketConfig;
+lwm2mcore_SocketConfig_t SocketConfig;
 
-static os_udpCb_t udpCb = NULL;
+static lwm2mcore_UdpCb_t udpCb = NULL;
 
 #define OS_SOCK_AF  AF_INET
 #define OS_SOCK_PROTO SOCK_DGRAM
@@ -60,7 +57,7 @@ static void Lwm2mClientReceive
     // POLLOUT i.e. this routine should be called when POLLOUT or POLLOUT|POLLERR event fire.
     // LE_ASSERT((events == POLLOUT) || (events == (POLLOUT | POLLERR)));
 
-    uint8_t buffer[OS_UDP_MAX_PACKET_SIZE];
+    uint8_t buffer[LWM2MCORE_UDP_MAX_PACKET_SIZE];
     int numBytes;
 
     LE_INFO("Lwm2mClientReceive events %d", events);
@@ -74,7 +71,7 @@ static void Lwm2mClientReceive
         addrLen = sizeof(addr);
 
         // We retrieve the data received
-        numBytes = recvfrom (readfs, buffer, OS_UDP_MAX_PACKET_SIZE,
+        numBytes = recvfrom (readfs, buffer, LWM2MCORE_UDP_MAX_PACKET_SIZE,
                             0, (struct sockaddr *)&addr, &addrLen);
 
         if (0 > numBytes)
@@ -102,7 +99,7 @@ static void Lwm2mClientReceive
             }
 
             LE_WARN("%d bytes received from [%s]:%hu.", numBytes, s, ntohs(port));
-            //os_debug_data_dump ("received bytes", buffer, numBytes);
+            //lwm2mcore_DataDump ("received bytes", buffer, numBytes);
 
             if (udpCb != NULL)
             {
@@ -126,7 +123,7 @@ static void Lwm2mClientReceive
 static int createSocket
 (
     const char * portStr,
-    os_socketConfig_t config
+    lwm2mcore_SocketConfig_t config
 )
 {
     int s = -1;
@@ -174,11 +171,11 @@ static int createSocket
  *
  */
 //--------------------------------------------------------------------------------------------------
-bool os_udpOpen
+bool lwm2mcore_UdpOpen
 (
-    int context,                    ///< [IN] LWM2M context
-    os_udpCb_t callback,            ///< [IN] callback for data receipt
-    os_socketConfig_t* configPtr    ///< [INOUT] socket configuration
+    int context,                            ///< [IN] LWM2M context
+    lwm2mcore_UdpCb_t callback,             ///< [IN] callback for data receipt
+    lwm2mcore_SocketConfig_t* configPtr     ///< [INOUT] socket configuration
 )
 {
     bool result = false;
@@ -186,11 +183,11 @@ bool os_udpOpen
     /* IP v4 */
     SocketConfig.context = context;
     SocketConfig.af = OS_SOCK_AF;
-    SocketConfig.type = OS_SOCK_UDP;
+    SocketConfig.type = LWM2MCORE_SOCK_UDP;
     SocketConfig.proto = OS_SOCK_PROTO;
     SocketConfig.sock = createSocket (localPortPtr, SocketConfig);
     LE_INFO ("sock %d", SocketConfig.sock);
-    memcpy (configPtr, &SocketConfig, sizeof (os_socketConfig_t));
+    memcpy (configPtr, &SocketConfig, sizeof (lwm2mcore_SocketConfig_t));
 
     if (SocketConfig.sock < 0)
     {
@@ -198,11 +195,11 @@ bool os_udpOpen
     }
     else
     {
-        lwm2mMonitorRef = le_fdMonitor_Create ("LWM2M Client",
+        Lwm2mMonitorRef = le_fdMonitor_Create ("LWM2M Client",
                                                 SocketConfig.sock,
                                                 Lwm2mClientReceive,
                                                 POLLIN);
-        if (lwm2mMonitorRef != NULL)
+        if (Lwm2mMonitorRef != NULL)
         {
             result = true;
             // Register the callback
@@ -210,7 +207,7 @@ bool os_udpOpen
         }
     }
 
-    LE_INFO ("os_udpOpen %d", result);
+    LE_INFO ("lwm2mcore_UdpOpen %d", result);
     return result;
 }
 
@@ -226,9 +223,9 @@ bool os_udpOpen
  *
  */
 //--------------------------------------------------------------------------------------------------
-bool os_udpClose
+bool lwm2mcore_UdpClose
 (
-    os_socketConfig_t config        ///< [INOUT] socket configuration
+    lwm2mcore_SocketConfig_t config        ///< [INOUT] socket configuration
 )
 {
     bool result = false;
@@ -241,7 +238,7 @@ bool os_udpClose
         result = true;
     }
 
-    LE_INFO ("os_udpClose %d", result);
+    LE_INFO ("lwm2mcore_UdpClose %d", result);
     return result;
 }
 
@@ -257,7 +254,7 @@ bool os_udpClose
  *
  */
 //--------------------------------------------------------------------------------------------------
-ssize_t os_udpSend
+ssize_t lwm2mcore_UdpSend
 (
     int sockfd,
     const void *bufferPtr,

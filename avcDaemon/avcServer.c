@@ -9,12 +9,12 @@
  *
  */
 
+#include <lwm2mcore/lwm2mcore.h>
 #include "legato.h"
 #include "interfaces.h"
 #include "pa_avc.h"
 #include "avcServer.h"
 #include "avData.h"
-#include "lwm2mcore.h"
 
 #include "le_print.h"
 #include "avcAppUpdate.h"
