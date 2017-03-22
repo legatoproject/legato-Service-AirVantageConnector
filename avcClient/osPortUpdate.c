@@ -229,7 +229,7 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
     uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
     memset(downloadUri, 0, LWM2MCORE_PACKAGE_URI_MAX_LEN+1);
     memcpy(downloadUri, bufferPtr, len);
-    LE_DEBUG("Request to download firmware update from URL : %s, len %d", downloadUri, len);
+    LE_DEBUG("Request to download update package from URL : %s, len %d", downloadUri, len);
 
     // Reset the update state
     switch (type)

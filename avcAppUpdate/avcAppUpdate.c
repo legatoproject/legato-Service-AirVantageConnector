@@ -482,18 +482,33 @@ static void SetObject9InstanceForApp
 //--------------------------------------------------------------------------------------------------
 /**
  *  Read the current state of the given object 9 instance.
+ *
+ *  returns
+ *      - LE_OK if successful
+ *      - LE_FAULT if there is an error.
  */
 //--------------------------------------------------------------------------------------------------
-static lwm2mcore_SwUpdateState_t GetObj9State
+static le_result_t GetObj9State
 (
-    assetData_InstanceDataRef_t instanceRef  ///< The object instance to read.
+    assetData_InstanceDataRef_t instanceRef,   ///< [IN] The object instance to read.
+    lwm2mcore_SwUpdateState_t* obj9statePtr       ///< [OUT] lwm2m object instance state
 )
 {
     int state;
+
     LE_DEBUG("InstanceRef: %p", instanceRef);
 
-    LE_ASSERT_OK(assetData_client_GetInt(instanceRef, O9F_UPDATE_STATE, &state));
-    return (lwm2mcore_SwUpdateState_t)state;
+    le_result_t result = assetData_client_GetInt(instanceRef, O9F_UPDATE_STATE, &state);
+
+    if (result != LE_OK)
+    {
+        LE_ERROR("Failed to get obj9 state: %s", LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    *obj9statePtr = (lwm2mcore_SwUpdateState_t)state;
+
+    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -778,12 +793,17 @@ static void AppInstallHandler
 
             // Use the current instance and check if the object instance exists
             LE_INFO("AVMS install, use existing object9 instance.");
-            LE_ASSERT_OK(assetData_client_SetString(instanceRef, O9F_PKG_NAME, appNamePtr));
+            if (LE_OK != assetData_client_SetString(instanceRef, O9F_PKG_NAME, appNamePtr))
+            {
+                LE_CRIT("Failed to set object9 package name (%s)", appNamePtr);
+                return;
+            }
             SetObject9InstanceForApp(appNamePtr, instanceRef);
         }
         else
         {
-            LE_ASSERT("Valid Object9 instance expected for AVMS install.");
+            LE_CRIT("Valid Object9 instance expected for AVMS install.");
+            return;
         }
 
         // Sync file system and mark object 9 status as install completed
@@ -2248,7 +2268,16 @@ le_result_t avcApp_StartApp
               instanceId,
               instanceRef);
 
-    if (GetObj9State(instanceRef) != LWM2MCORE_SW_UPDATE_STATE_INSTALLED)
+    lwm2mcore_SwUpdateState_t state;
+
+    result = GetObj9State(instanceRef, &state);
+
+    if (result != LE_OK)
+    {
+        return LE_FAULT;
+    }
+
+    if (state != LWM2MCORE_SW_UPDATE_STATE_INSTALLED)
     {
         LE_ERROR("Application '%s' not installed.", appName);
         return LE_UNAVAILABLE;
@@ -2298,7 +2327,16 @@ le_result_t avcApp_StopApp
 
     LE_DEBUG("Application '%s' stop requested.", appName);
 
-    if (GetObj9State(instanceRef) != LWM2MCORE_SW_UPDATE_STATE_INSTALLED)
+    lwm2mcore_SwUpdateState_t state;
+
+    result = GetObj9State(instanceRef, &state);
+
+    if (result != LE_OK)
+    {
+        return LE_FAULT;
+    }
+
+    if (state != LWM2MCORE_SW_UPDATE_STATE_INSTALLED)
     {
         LE_ERROR("Application '%s' not installed.", appName);
         return LE_UNAVAILABLE;
@@ -2711,7 +2749,7 @@ le_result_t avcApp_GetResumePosition
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t  avcApp_SetSwUpdateResult
+le_result_t avcApp_SetSwUpdateResult
 (
     lwm2mcore_SwUpdateResult_t updateResult
 )
@@ -2720,7 +2758,8 @@ lwm2mcore_DwlResult_t  avcApp_SetSwUpdateResult
 
     if (CurrentObj9 == NULL)
     {
-        return DWL_FAULT;
+        LE_CRIT("Bad object 9 instance(null)");
+        return LE_NOT_FOUND;
     }
 
     switch (updateResult)
@@ -2745,6 +2784,7 @@ lwm2mcore_DwlResult_t  avcApp_SetSwUpdateResult
             LE_ERROR("Error status: %d", updateResult);
             if (UpdateStarted)
             {
+                LE_ERROR("Aborting the ongoing update");
                 UpdateStarted = false;
                 le_event_Report(UpdateEndEventId, NULL, 0);
             }
@@ -2752,12 +2792,17 @@ lwm2mcore_DwlResult_t  avcApp_SetSwUpdateResult
 
     }
 
-    // Set result in asset data
-    LE_ASSERT_OK(assetData_client_SetInt(CurrentObj9, O9F_UPDATE_RESULT, updateResult));
+    le_result_t result = assetData_client_SetInt(CurrentObj9, O9F_UPDATE_RESULT, updateResult);
+
+    if (LE_OK != result)
+    {
+        LE_ERROR("Error (%s) while setting object 9 update result", LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
 
     // Save result in workspace for resume operation
     SetSwUpdateResult(updateResult);
-    return DWL_OK;
+    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2770,7 +2815,7 @@ lwm2mcore_DwlResult_t  avcApp_SetSwUpdateResult
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t  avcApp_SetSwUpdateState
+le_result_t avcApp_SetSwUpdateState
 (
     lwm2mcore_SwUpdateState_t updateState
 )
@@ -2779,16 +2824,22 @@ lwm2mcore_DwlResult_t  avcApp_SetSwUpdateState
 
     if (CurrentObj9 == NULL)
     {
-        return DWL_FAULT;
+        LE_CRIT("Bad object 9 instance(null)");
+        return LE_NOT_FOUND;
     }
 
-    // Set state in asset data
-    LE_ASSERT_OK(assetData_client_SetInt(CurrentObj9, O9F_UPDATE_STATE, updateState));
+    le_result_t result = assetData_client_SetInt(CurrentObj9, O9F_UPDATE_STATE, updateState);
+
+    if (LE_OK != result)
+    {
+        LE_ERROR("Error (%s) while setting object 9 update state", LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
 
     // Save state in workspace for resume operation
     SetSwUpdateState(updateState);
 
-    return DWL_OK;
+    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------

@@ -30,7 +30,7 @@ uint16_t pkgDwlCb_GetHttpStatus
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Initialize download callback definition
+ * Initialize download callback function
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
@@ -41,7 +41,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get package information callback definition
+ * Get package information callback function
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
@@ -52,7 +52,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set update status callback definition
+ * Set update status callback function for firmware
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
@@ -62,7 +62,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set update result callback definition
+ * Set update result callback function for firmware
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateResult
@@ -72,7 +72,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Download callback definition
+ * Download callback function
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_Download
@@ -83,7 +83,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Store range callback definition
+ * Store range callback function
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_StoreRange
@@ -95,7 +95,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_StoreRange
 
 //--------------------------------------------------------------------------------------------------
 /**
- * End download callback definition
+ * End download callback function
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_EndDownload

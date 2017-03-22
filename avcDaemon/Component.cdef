@@ -35,7 +35,7 @@ requires:
 
     component:
     {
-        $LEGATO_AVC_PA_DEFAULT // TODO: Remove unneeded PA AVC
+        $LEGATO_AVC_PA_DEFAULT
         ${LEGATO_ROOT}/components/3rdParty/tinydtls
         $LEGATO_ROOT/framework/c/src/appCfg
     }
@@ -50,27 +50,27 @@ sources:
     push.c
     avcFs.c
     // AVC
-    ../avcClient/avcClient.c
-    ../avcClient/osPortConnectivity.c
-    ../avcClient/osPortDevice.c
-    ../avcClient/osPortLocation.c
-    ../avcClient/osPortSecurity.c
-    ../avcClient/osPortUpdate.c
-    ../avcClient/osPortParamStorage.c
-    ../avcAppUpdate/avcAppUpdate.c
-    ../packageDownloader/sslUtilities.c
-    ../packageDownloader/packageDownloaderCallbacks.c
-    ../packageDownloader/packageDownloader.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/avcClient.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortConnectivity.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortDevice.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortLocation.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortSecurity.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortUpdate.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortParamStorage.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcAppUpdate/avcAppUpdate.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/sslUtilities.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloaderCallbacks.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloader.c
 
     // LWM2MCore: Adaptation layer
-    ../avcClient/os/legato/osDebug.c
-    ../avcClient/os/legato/osPlatform.c
-    ../avcClient/os/legato/osTime.c
-    ../avcClient/os/legato/osTimer.c
-    ../avcClient/os/legato/osUdp.c
-    ../avcClient/os/legato/osSem.c
-    ../avcClient/os/legato/osMutex.c
-    ../avcClient/os/legato/osConfig.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osDebug.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osPlatform.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osTime.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osTimer.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osUdp.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osSem.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osMutex.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osConfig.c
 
     // LWM2MCore
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/dtlsConnection.c
@@ -121,13 +121,12 @@ sources:
 
 cflags:
 {
-    -I$CURDIR/../platformAdaptor/inc
-    -I${LEGATO_ROOT}/components/airVantage/platformAdaptor/inc // TODO: Remove unneeded PA AVC
-    -I${LEGATO_ROOT}/framework/c/src    // TODO: Remove this encapsulation breakage.
-    -I${LEGATO_ROOT}/framework/c/src/appCfg    // TODO: Remove this encapsulation breakage.
-    -I$CURDIR/../avcDaemon
-    -I$CURDIR/../avcAppUpdate
-    -I$CURDIR/../avcClient
+    -I${LEGATO_ROOT}/components/airVantage/platformAdaptor/inc
+    -I${LEGATO_ROOT}/framework/c/src
+    -I${LEGATO_ROOT}/framework/c/src/appCfg
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcAppUpdate
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/platform-specific/linux

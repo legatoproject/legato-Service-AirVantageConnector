@@ -332,7 +332,7 @@ le_result_t avcApp_GetPackageVersion
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t  avcApp_SetSwUpdateState
+le_result_t  avcApp_SetSwUpdateState
 (
     lwm2mcore_SwUpdateState_t updateState
 );
@@ -348,7 +348,7 @@ lwm2mcore_DwlResult_t  avcApp_SetSwUpdateState
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t  avcApp_SetSwUpdateResult
+le_result_t  avcApp_SetSwUpdateResult
 (
     lwm2mcore_SwUpdateResult_t updateResult
 );
