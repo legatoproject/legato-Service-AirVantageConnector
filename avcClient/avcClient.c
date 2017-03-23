@@ -27,6 +27,13 @@ static int Context = 0;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Static data connection state for agent
+ */
+//--------------------------------------------------------------------------------------------------
+static bool DataConnected = false;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Static data reference
  */
 //--------------------------------------------------------------------------------------------------
@@ -86,9 +93,15 @@ static void BearerEventCb
     }
     else
     {
-        /* The data connection is closed */
-        lwm2mcore_free(Context);
-        Context = 0;
+        if (Context)
+        {
+            /* The data connection is closed */
+            lwm2mcore_free(Context);
+            Context = 0;
+
+            /* Remove the data handler */
+            le_data_RemoveConnectionStateHandler(DataHandler);
+        }
     }
 }
 
@@ -107,13 +120,20 @@ static void ConnectionStateHandler
     if (connected)
     {
         LE_DEBUG("Connected through interface '%s'", intfNamePtr);
+        DataConnected = true;
+        /* Call the callback */
+        BearerEventCb(connected, contextPtr);
     }
     else
     {
-        LE_WARN("Disconnected from data connection service");
+        LE_WARN("Disconnected from data connection service, current state %d", DataConnected);
+        if (DataConnected)
+        {
+            /* Call the callback */
+            BearerEventCb(connected, contextPtr);
+            DataConnected = false;
+        }
     }
-    /* Call the callback */
-    BearerEventCb(connected, contextPtr);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -417,6 +437,13 @@ le_result_t avcClient_Disconnect
                 /* Close the data connection */
                 le_data_Release(DataRef);
             }
+            /* The data connection is closed */
+            lwm2mcore_free(Context);
+            Context = 0;
+
+            /* Remove the data handler */
+            le_data_RemoveConnectionStateHandler(DataHandler);
+
             return LE_OK;
         }
         return LE_FAULT;
