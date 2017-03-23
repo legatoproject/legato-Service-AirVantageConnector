@@ -162,7 +162,7 @@ TimestampData_t;
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    char name[LE_AVDATA_PATH_NAME_LEN];     ///< The name of the resource
+    char name[LE_AVDATA_PATH_NAME_BYTES];     ///< The name of the resource
     DataTypes_t type;                       ///< The type of the resource
     le_hashmap_Ref_t data;                  ///< Table of data accumulated over time
     double factor;                          ///< Factor of data
@@ -1088,7 +1088,7 @@ static le_result_t CreateResourceData
 
     ResourceData_t* resourceDataPtr = le_mem_ForceAlloc(ResourceDataPoolRef);
 
-    if (le_utf8_Copy(resourceDataPtr->name, path, LE_AVDATA_PATH_NAME_LEN, NULL) == LE_OVERFLOW)
+    if (le_utf8_Copy(resourceDataPtr->name, path, LE_AVDATA_PATH_NAME_BYTES, NULL) == LE_OVERFLOW)
     {
         return LE_OVERFLOW;
         le_mem_Release(resourceDataPtr);
@@ -1272,7 +1272,7 @@ static le_result_t AddStringResourceData
         Data_t* dataPtr = le_mem_ForceAlloc(DataValuePoolRef);
         dataPtr->strValuePtr = le_mem_ForceAlloc(StringValuePoolRef);
         // TODO: handle case when string value is too long
-        le_utf8_Copy(dataPtr->strValuePtr, value, LE_AVDATA_STRING_VALUE_LEN, NULL);
+        le_utf8_Copy(dataPtr->strValuePtr, value, LE_AVDATA_STRING_VALUE_BYTES, NULL);
         le_hashmap_Put(rdataPtr->data, timestampPtr->timestamp, dataPtr);
 
         // new entry, we need re-encode
@@ -1574,7 +1574,7 @@ le_result_t timeSeries_Init
     ResourceDataPoolRef = le_mem_CreatePool("Resource pool", sizeof(ResourceData_t));
     TimestampKeyPoolRef = le_mem_CreatePool("Timestamp key pool", sizeof(uint64_t));
     DataValuePoolRef = le_mem_CreatePool("Data value pool", sizeof(Data_t));
-    StringValuePoolRef = le_mem_CreatePool("String pool", LE_AVDATA_STRING_VALUE_LEN);
+    StringValuePoolRef = le_mem_CreatePool("String pool", LE_AVDATA_STRING_VALUE_BYTES);
 
     CborBufferPoolRef = le_mem_CreatePool("CBOR buffer pool", MAX_CBOR_BUFFER_NUMBYTES);
 

@@ -1,7 +1,7 @@
 /**
  * @file avData.c
  *
- * This implements the avdata API.
+ * Implementation of the avdata API.
  *
  * <hr>
  *
@@ -23,6 +23,14 @@
  */
 //--------------------------------------------------------------------------------------------------
 #define MAX_EXPECTED_ASSETDATA 256
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Buffer size in bytes for a CBOR decoder.
+ */
+//--------------------------------------------------------------------------------------------------
+#define CBOR_DECODER_BUFFER_BYTES 1024
 
 
 //--------------------------------------------------------------------------------------------------
@@ -107,6 +115,38 @@ static const char* InvalidFirstLevelPathNames[] =
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * AVC client session context.
+ */
+//--------------------------------------------------------------------------------------------------
+static int AVCClientSessionContext;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * AV server request ref.
+ */
+//--------------------------------------------------------------------------------------------------
+static lwm2mcore_coapRequestRef_t AVServerReqRef;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * AV server response.
+ */
+//--------------------------------------------------------------------------------------------------
+static lwm2mcore_coapResponse_t AVServerResponse;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Argument list ref (for command exec).
+ */
+//--------------------------------------------------------------------------------------------------
+static le_avdata_ArgumentListRef_t ArgListRef;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Structure representing an asset value - a union of the possible types.
  */
 //--------------------------------------------------------------------------------------------------
@@ -127,7 +167,8 @@ AssetValue_t;
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    le_avdata_AccessType_t access;  ///< Permitted access to this asset data.
+    le_avdata_AccessType_t serverAccess;  ///< Permitted server access to this asset data.
+    le_avdata_AccessType_t clientAccess;  ///< Permitted client access to this asset data.
     le_avdata_DataType_t dataType;  ///< Data type of the Asset Value.
     AssetValue_t value;             ///< Asset Value.
     le_avdata_ResourceHandlerFunc_t handlerPtr; ///< Registered handler when asset data is accessed.
@@ -259,10 +300,10 @@ static const char* GetDataTypeStr
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Converts asset data access mode to bit mask of access types.
+ * Converts asset data access mode to bit mask of access types for server access.
  */
 //--------------------------------------------------------------------------------------------------
-static le_result_t ConvertAccessModeToMask
+static le_result_t ConvertAccessModeToServerAccess
 (
     le_avdata_AccessMode_t accessMode,       ///< [IN] access mode.
     le_avdata_AccessType_t* accessBitMaskPtr ///< [OUT] bitmask of access types.
@@ -278,6 +319,42 @@ static le_result_t ConvertAccessModeToMask
 
         case LE_AVDATA_ACCESS_SETTING:
             mask = LE_AVDATA_ACCESS_READ | LE_AVDATA_ACCESS_WRITE;
+            break;
+
+        case LE_AVDATA_ACCESS_COMMAND:
+            mask = LE_AVDATA_ACCESS_EXEC;
+            break;
+
+        default:
+            return LE_FAULT;
+    }
+
+    *accessBitMaskPtr = mask;
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Converts asset data access mode to bit mask of access types for client access.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t ConvertAccessModeToClientAccess
+(
+    le_avdata_AccessMode_t accessMode,       ///< [IN] access mode.
+    le_avdata_AccessType_t* accessBitMaskPtr ///< [OUT] bitmask of access types.
+)
+{
+    le_avdata_AccessType_t mask = 0;
+
+    switch (accessMode)
+    {
+        case LE_AVDATA_ACCESS_VARIABLE:
+            mask = LE_AVDATA_ACCESS_READ | LE_AVDATA_ACCESS_WRITE;
+            break;
+
+        case LE_AVDATA_ACCESS_SETTING:
+            mask = LE_AVDATA_ACCESS_READ;
             break;
 
         case LE_AVDATA_ACCESS_COMMAND:
@@ -323,7 +400,7 @@ static bool IsAssetDataPathValid
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Return true if the provided path is a parent to any of the asset data paths in the hashmap.
+ * Return true if the provided path is a parent path to any of the asset data paths in the hashmap.
  */
 //--------------------------------------------------------------------------------------------------
 static bool IsPathParent
@@ -342,6 +419,83 @@ static bool IsPathParent
     }
 
     return false;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Return true if the provided path is a child path to any of the asset data paths in the hashmap.
+ */
+//--------------------------------------------------------------------------------------------------
+static bool IsPathChild
+(
+    const char* path ///< [IN] Asset data path
+)
+{
+    le_hashmap_It_Ref_t iter = le_hashmap_GetIterator(AssetDataMap);
+
+    while (le_hashmap_NextNode(iter) == LE_OK)
+    {
+        if (le_path_IsSubpath(le_hashmap_GetKey(iter), path, "/"))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Dumping an argument list for debugging purposes.
+ */
+//--------------------------------------------------------------------------------------------------
+static void DumpArgList
+(
+    le_dls_List_t* argListPtr
+)
+{
+    LE_INFO("#### DUMPING  ARUGMENT LIST ########################################################");
+
+    Argument_t* argPtr = NULL;
+    le_dls_Link_t* argLinkPtr = le_dls_Peek(argListPtr);
+
+    while (argLinkPtr != NULL)
+    {
+        argPtr = CONTAINER_OF(argLinkPtr, Argument_t, link);
+
+        LE_INFO("- arg name:       [%s]", argPtr->argumentName);
+
+        switch (argPtr->argValType)
+        {
+            case LE_AVDATA_DATA_TYPE_NONE:
+                LE_INFO("none");
+                break;
+
+            case LE_AVDATA_DATA_TYPE_INT:
+                LE_INFO("<int> arg val:    [%d]", argPtr->argValue.intValue);
+                break;
+
+            case LE_AVDATA_DATA_TYPE_FLOAT:
+                LE_INFO("<float> arg val:  [%g]", argPtr->argValue.floatValue);
+                break;
+
+            case LE_AVDATA_DATA_TYPE_BOOL:
+                LE_INFO("<bool> arg val:   [%d]", argPtr->argValue.boolValue);
+                break;
+
+            case LE_AVDATA_DATA_TYPE_STRING:
+                LE_INFO("<string> arg val: [%s]", argPtr->argValue.strValuePtr);
+                break;
+
+            default:
+                LE_INFO("invalid");
+        }
+
+        argLinkPtr = le_dls_PeekNext(argListPtr, argLinkPtr);
+    }
+    LE_INFO("#### END OF DUMPING  ARUGMENT LIST #################################################");
 }
 
 
@@ -437,28 +591,29 @@ static le_result_t GetVal
     }
 
     // Check access permission
-    if (!isClient && ((assetDataPtr->access & LE_AVDATA_ACCESS_READ) != LE_AVDATA_ACCESS_READ))
+    if ((!isClient && ((assetDataPtr->serverAccess & LE_AVDATA_ACCESS_READ) !=
+                      LE_AVDATA_ACCESS_READ)) ||
+        (isClient && ((assetDataPtr->clientAccess & LE_AVDATA_ACCESS_READ) !=
+                     LE_AVDATA_ACCESS_READ)))
     {
-        LE_ERROR("Asset (%s) does not have read permission.", path);
+        char* str = isClient ? "client" : "server";
+        LE_ERROR("Asset (%s) does not have read permission for %s access.", path, str);
         return LE_NOT_PERMITTED;
     }
 
-    // Call registered handler, which must be done before reading the value, so the handler
-    // function has a chance to get the updated value from hardware.
+    // Call registered handler.
     if ((!isClient) && (assetDataPtr->handlerPtr != NULL))
     {
         le_avdata_ArgumentListRef_t argListRef
              = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
 
-        le_result_t commandResult = LE_OK;
-
         assetDataPtr->handlerPtr(path, LE_AVDATA_ACCESS_READ,
-                                 argListRef, &commandResult, assetDataPtr->contextPtr);
+                                 argListRef, assetDataPtr->contextPtr);
 
         le_ref_DeleteRef(ArgListRefMap, argListRef);
     }
 
-    // Must be done after handler is called.
+    // Get the value.
     *valuePtr = assetDataPtr->value;
     *dataTypePtr = assetDataPtr->dataType;
 
@@ -492,9 +647,13 @@ static le_result_t SetVal
     }
 
     // Check access permission
-    if (!isClient && ((assetDataPtr->access & LE_AVDATA_ACCESS_WRITE) != LE_AVDATA_ACCESS_WRITE))
+    if ((!isClient && ((assetDataPtr->serverAccess & LE_AVDATA_ACCESS_WRITE) !=
+                      LE_AVDATA_ACCESS_WRITE)) ||
+        (isClient && ((assetDataPtr->clientAccess & LE_AVDATA_ACCESS_WRITE) !=
+                     LE_AVDATA_ACCESS_WRITE)))
     {
-        LE_ERROR("Asset (%s) does not have write permission.", path);
+        char* str = isClient ? "client" : "server";
+        LE_ERROR("Asset (%s) does not have write permission for %s access.", path, str);
         return LE_NOT_PERMITTED;
     }
 
@@ -505,28 +664,158 @@ static le_result_t SetVal
         le_mem_Release(assetDataPtr->value.strValuePtr);
     }
 
-    // Must be done before handler is called.
+    // Set the value.
     assetDataPtr->value = value;
     assetDataPtr->dataType = dataType;
 
-    // Call registered handler, which must be done after writing the value, so the handler
-    // function can update the hardware with the latest value.
+    // Call registered handler.
     if ((!isClient) && (assetDataPtr->handlerPtr != NULL))
     {
-
         le_avdata_ArgumentListRef_t argListRef
              = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
 
-        le_result_t commandResult = LE_OK;
-
         assetDataPtr->handlerPtr(path, LE_AVDATA_ACCESS_WRITE,
-                                 argListRef, &commandResult, assetDataPtr->contextPtr);
+                                 argListRef, assetDataPtr->contextPtr);
 
         le_ref_DeleteRef(ArgListRefMap, argListRef);
-
     }
 
     return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Encode the Asset Data value with the provided CBOR encoder.
+ */
+//--------------------------------------------------------------------------------------------------
+static void EncodeAssetData
+(
+    le_avdata_DataType_t type, ///< [IN]
+    AssetValue_t assetValue,   ///< [IN]
+    CborEncoder* encoder       ///< [IN]
+)
+{
+    switch (type)
+    {
+        case LE_AVDATA_DATA_TYPE_NONE:
+            LE_ASSERT(CborNoError == cbor_encode_text_string(encoder, "(null)", 6));
+            break;
+
+        case LE_AVDATA_DATA_TYPE_INT:
+            LE_ASSERT(CborNoError == cbor_encode_int(encoder, assetValue.intValue));
+            break;
+
+        case LE_AVDATA_DATA_TYPE_FLOAT:
+            LE_ASSERT(CborNoError == cbor_encode_double(encoder, assetValue.floatValue));
+            break;
+
+        case LE_AVDATA_DATA_TYPE_BOOL:
+            LE_ASSERT(CborNoError == cbor_encode_boolean(encoder, assetValue.boolValue));
+            break;
+
+        case LE_AVDATA_DATA_TYPE_STRING:
+        {
+            size_t strValLen = strlen(assetValue.strValuePtr);
+
+            LE_ASSERT(strValLen <= (LE_AVDATA_STRING_VALUE_BYTES - 1));
+
+            LE_ASSERT(CborNoError == cbor_encode_text_string(encoder,
+                                                             assetValue.strValuePtr,
+                                                             strValLen));
+            break;
+        }
+        default:
+            LE_ERROR("Unexpected data type: %d", type);
+            LE_ASSERT(CborNoError == cbor_encode_text_string(encoder, "(null)", 6));
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Perform cbor_value_copy_text_string only if the provided buffer is large enough. Otherwise put
+ * "(null)" in the provided buffer.
+ *
+ * @return:
+ *      - LE_FAULT if the provided buffer is too small.
+ *      - LE_OK if success.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t CborSafeCopyString
+(
+    CborValue* valuePtr,
+    char* str,
+    size_t* strSizePtr
+)
+{
+    size_t incomingStrSize;
+
+    cbor_value_calculate_string_length(valuePtr, &incomingStrSize);
+
+    // need to reserve one byte for the null terminating byte.
+    if (incomingStrSize > (*strSizePtr-1))
+    {
+        LE_ERROR("Encoded string (%d bytes) too big. Max %d bytes expected.",
+                 incomingStrSize, (*strSizePtr-1));
+        strncpy(str, "(null)", 6);
+        return LE_FAULT;
+    }
+    else
+    {
+        LE_ASSERT(CborNoError == cbor_value_copy_text_string(valuePtr, str, strSizePtr, NULL));
+        return LE_OK;
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Decode the CBOR value and return the value and type.
+ */
+//--------------------------------------------------------------------------------------------------
+static void DecodeAssetData
+(
+    le_avdata_DataType_t* typePtr, ///< [OUT]
+    AssetValue_t* assetValuePtr,   ///< [OUT]
+    CborValue* valuePtr            ///< [IN]
+)
+{
+    CborType type = cbor_value_get_type(valuePtr);
+
+    switch (type)
+    {
+        case CborTextStringType:
+        {
+            LE_DEBUG(">>>>> decoding string");
+            size_t strSize = LE_AVDATA_STRING_VALUE_BYTES;
+            assetValuePtr->strValuePtr = le_mem_ForceAlloc(StringPool);
+            CborSafeCopyString(valuePtr, assetValuePtr->strValuePtr, &strSize);
+            *typePtr = LE_AVDATA_DATA_TYPE_STRING;
+            break;
+        }
+        case CborIntegerType:
+            LE_DEBUG(">>>>> decoding int");
+            LE_ASSERT(CborNoError == cbor_value_get_int(valuePtr, &(assetValuePtr->intValue)));
+            *typePtr = LE_AVDATA_DATA_TYPE_INT;
+            break;
+
+        case CborBooleanType:
+            LE_DEBUG(">>>>> decoding bool");
+            LE_ASSERT(CborNoError == cbor_value_get_boolean(valuePtr, &(assetValuePtr->boolValue)));
+            *typePtr = LE_AVDATA_DATA_TYPE_BOOL;
+            break;
+
+        case CborDoubleType:
+            LE_DEBUG(">>>>> decoding float");
+            LE_ASSERT(CborNoError == cbor_value_get_double(valuePtr, &(assetValuePtr->floatValue)));
+            *typePtr = LE_AVDATA_DATA_TYPE_FLOAT;
+            break;
+
+        default:
+            LE_ERROR("Unexpected CBOR type: %d", type);
+            *typePtr = LE_AVDATA_DATA_TYPE_NONE;
+    }
 }
 
 
@@ -548,34 +837,29 @@ static int CompareStrings
 //--------------------------------------------------------------------------------------------------
 /**
  * Given a list of asset data paths, look up the associated asset value, and encode them in CBOR
- * format with the provided CBOR encoder.
+ * format with the provided CBOR encoder. In the initial call, the "level" parameter controls the
+ * path depth the encoding begins at.
  *
- * Notes:
- *
- * 1. The list of paths is assumed to be grouped at each level. They don't need to be sorted, but a
- *    sorted list achieves the same goal.
- *
- * 2. At each level, a recursive call is made on a range of paths of the same node name at that
- *    level. A CBOR "map" is created for such range of paths.
- *
- * 3. Recursion ends when the non-existing child node of a leaf node is reached. It can't end at a
- *    leaf node because it might still have peer branch nodes to be processed. A leaf node certainly
- *    does not have any peer nodes of the same name, so the next rescursive call will certainly have
- *    a range of 1, where we can safely end the recursion
+ * Note: The list of paths MUST be grouped at each level. They don't need to be sorted, but a sorted
+ * list achieves the same goal.
  */
 //--------------------------------------------------------------------------------------------------
 static void EncodeMultiData
 (
-    char* list[], ///< [IN] List of asset data paths
+    char* list[], ///< [IN] List of asset data paths. MUST be grouped at each level.
     CborEncoder* parentCborEncoder, ///< [OUT] Parent CBOR encoder
     int minIndex, ///< [IN] Min index of the list to start with in the current recursion
     int maxIndex, ///< [IN] Max index of the list to end with in the current recursion
     int level     ///< [IN] Path depth for the current recursion
 )
 {
-    char* currToken = "";
-    char* savedToken = "";
-    char* peekToken = "";
+    // Each range of paths is enclosed in a CBOR map.
+    CborEncoder mapNode;
+    cbor_encoder_create_map(parentCborEncoder, &mapNode, CborIndefiniteLength);
+
+    char* savedToken = ""; // initialized to an empty string.
+    char* currToken = NULL;
+    char* peekToken = NULL;
 
     int minCurrRange = minIndex;
     int maxCurrRange = minIndex;
@@ -585,16 +869,11 @@ static void EncodeMultiData
     {
         char* currStrCopy = strdup(list[i]);
 
+        // Getting the token of the current path level.
         currToken = strtok(currStrCopy, "/");
         for (j = 1; j < level; j++)
         {
             currToken = strtok(NULL, "/");
-        }
-
-        // Ending condition
-        if (currToken == NULL)
-        {
-            return;
         }
 
         peekToken = strtok(NULL, "/");
@@ -606,72 +885,23 @@ static void EncodeMultiData
             if (strcmp(savedToken, "") != 0)
             {
                 maxCurrRange = i - 1;
-
-                CborEncoder someEncoder1;
-                cbor_encode_text_stringz(parentCborEncoder, savedToken);
-                cbor_encoder_create_map(parentCborEncoder, &someEncoder1, CborIndefiniteLength);
-
-                // recursive call
-                EncodeMultiData(list, &someEncoder1, minCurrRange, maxCurrRange, level+1);
-
-                cbor_encoder_close_container(parentCborEncoder, &someEncoder1);
+                cbor_encode_text_stringz(&mapNode, savedToken); // Map name of the next recursion
+                EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange, level+1);
             }
 
-            // CBOR encoding for the leaf node itself.
-            cbor_encode_text_stringz(parentCborEncoder, currToken);
+            /* CBOR encoding for the leaf node itself. */
+
+            // Value name.
+            cbor_encode_text_stringz(&mapNode, currToken);
 
             // Use the path to look up its asset data, and do the corresponding encoding.
             AssetValue_t assetValue;
             le_avdata_DataType_t type;
+            LE_ASSERT(LE_OK == GetVal(list[i], &assetValue, &type, false));
 
-            le_result_t result = GetVal(list[i], &assetValue, &type, false);
-            LE_ASSERT(result == LE_OK);
+            EncodeAssetData(type, assetValue, &mapNode);
 
-            switch (type)
-            {
-                case LE_AVDATA_DATA_TYPE_NONE:
-
-                    // TODO: TBD.
-                    // data type is none if the asset data has not been accessed.
-                    // so it contains no value anyway.
-                    // Should we return some sort of default like 0, or reply with error?
-                    // If the former, then when asset data is created, the type needs to be known
-                    // already.
-
-                    // My preference is to return nothing (instead of a default value of 0). Since
-                    // 0 could mean something. However at this point we are already half way into
-                    // encoding... unless we exclude paths with data type of none.
-
-                    break;
-
-                case LE_AVDATA_DATA_TYPE_INT:
-                    cbor_encode_int(parentCborEncoder, assetValue.intValue);
-                    break;
-
-                case LE_AVDATA_DATA_TYPE_FLOAT:
-                    cbor_encode_double(parentCborEncoder, assetValue.floatValue);
-                    break;
-
-                case LE_AVDATA_DATA_TYPE_BOOL:
-                    cbor_encode_boolean(parentCborEncoder, assetValue.boolValue);
-                    break;
-
-                case LE_AVDATA_DATA_TYPE_STRING:
-                    // TODO: maybe stringz is also ok?
-                    cbor_encode_text_string(parentCborEncoder,
-                                            assetValue.strValuePtr, strlen(assetValue.strValuePtr));
-                    break;
-
-                default:
-                    // TODO: TBD
-                    LE_ERROR("unexpected data type");
-            }
-
-            // recursive call on a phantom child in order to end the recursion
-            CborEncoder someEncoder;
-            EncodeMultiData(list, &someEncoder, i, i, level+1);
-
-            //TODO: necessary?
+            // Reset savedToken
             if (strcmp(savedToken, "") != 0)
             {
                 free(savedToken);
@@ -684,250 +914,541 @@ static void EncodeMultiData
             if (strcmp(savedToken, "") != 0)
             {
                 maxCurrRange = i - 1;
-
-                CborEncoder someEncoder;
-                cbor_encode_text_stringz(parentCborEncoder, savedToken);
-                cbor_encoder_create_map(parentCborEncoder, &someEncoder, CborIndefiniteLength);
-
-                // recursive call
-                EncodeMultiData(list, &someEncoder, minCurrRange, maxCurrRange, level+1);
-
-                cbor_encoder_close_container(parentCborEncoder, &someEncoder);
+                cbor_encode_text_stringz(&mapNode, savedToken); // Map name of the next recursion
+                EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange, level+1);
             }
 
             minCurrRange = i;
             maxCurrRange = i;
 
-            //TODO: necessary?
+            // Save the current token
             if (strcmp(savedToken, "") != 0)
             {
                 free(savedToken);
             }
             savedToken = strdup(currToken);
         }
+        else
+        {
+            // Do nothing. We've encountered the same branch node.
+        }
 
         free(currStrCopy);
     }
 
+    // This is to finish up the final range of branch nodes, in case the last path is not a leaf
+    // node at the current level.
     if (peekToken != NULL)
     {
         maxCurrRange = i - 1;
-
-        CborEncoder someEncoder;
-        cbor_encode_text_stringz(parentCborEncoder, savedToken);
-        cbor_encoder_create_map(parentCborEncoder, &someEncoder, CborIndefiniteLength);
-
-        // recursive call
-        EncodeMultiData(list, &someEncoder, minCurrRange, maxCurrRange, level+1);
-
-        cbor_encoder_close_container(parentCborEncoder, &someEncoder);
+        cbor_encode_text_stringz(&mapNode, savedToken); // Map name of the next recursion
+        EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange, level+1);
     }
+
+    cbor_encoder_close_container(parentCborEncoder, &mapNode);
 }
 
 
-// TODO: error handling - return LE status code? and log CBOR error codes?
-//       also add similar error detection in EncodeMultiData?
 //--------------------------------------------------------------------------------------------------
 /**
  * Decode the CBOR data and with the provided path as the base path, set the asset data values for
  * asset data paths.
+ *
+ * @return:
+ *      - LE_FAULT on any error.
+ *      - LE_OK if success.
  */
 //--------------------------------------------------------------------------------------------------
-static CborError DecodeMultiData
+static le_result_t DecodeMultiData
 (
-    CborValue* it,
-    char* path
+    CborValue* valuePtr, ///< [OUT] CBOR value. Expected to be a map. Iterator is advanced after the
+                         ///<       function call.
+    char* path           ///< [IN] base path
 )
 {
+    // Entering a CBOR map.
+    CborValue map;
+    LE_ASSERT(CborNoError == cbor_value_enter_container(valuePtr, &map));
+
     size_t endingPathSegLen = 0;
     bool labelProcessed = false;
+    le_result_t decodeResult = LE_OK;
 
-    while (!cbor_value_at_end(it))
+    while (!cbor_value_at_end(&map))
     {
-        CborError err;
-        CborType type = cbor_value_get_type(it);
-
-        if (type != CborTextStringType)
+        // The first item should be a text label.
+        // If label is not yet processed, then we are expecting a text string, and that text
+        // string should be a label.
+        if (!labelProcessed)
         {
-            labelProcessed = false;
-        }
+            LE_ASSERT(CborTextStringType == cbor_value_get_type(&map));
 
-        switch (type)
-        {
-            case CborMapType:
+            char buf[LE_AVDATA_STRING_VALUE_BYTES] = {0};
+            size_t strSize = LE_AVDATA_STRING_VALUE_BYTES;
+
+            if (LE_OK != CborSafeCopyString(&map, buf, &strSize))
             {
-                // recursive type
-                CborValue recursed;
-                assert(cbor_value_is_container(it));
+                decodeResult = LE_FAULT;
+            }
 
-                err = cbor_value_enter_container(it, &recursed);
-                if (err)
-                    return err;       // parse error
+            endingPathSegLen = strlen(buf);
 
-                char pathDup[512] = {0};
-                strncpy(pathDup, path, 512);
-                err = DecodeMultiData(&recursed, pathDup);
-                if (err)
-                    return err;       // parse error
+            strcat(path, "/");
+            strcat(path, buf);
+
+            labelProcessed = true;
+        }
+        else
+        {
+            // The value is a map
+            if (cbor_value_is_map(&map))
+            {
+                le_result_t result = DecodeMultiData(&map, path);
+                if (result != LE_OK)
+                {
+                    decodeResult = LE_FAULT;
+                }
 
                 path[strlen(path) - (endingPathSegLen + 1)] = '\0';
 
-                err = cbor_value_leave_container(it, &recursed);
-                if (err)
-                    return err;       // parse error
+                labelProcessed = false;
 
+                // Skipping cbor_value_advance since cbor_value_leave_container advances the
+                // iterator.
                 continue;
             }
 
-            case CborTextStringType:
+            // The value is data
+
+            le_result_t setValresult;
+            le_avdata_DataType_t type;
+            AssetValue_t assetValue;
+
+            DecodeAssetData(&type, &assetValue, &map);
+
+            setValresult = (type == LE_AVDATA_DATA_TYPE_NONE) ?
+                           LE_UNSUPPORTED : SetVal(path, assetValue, type, false);
+
+            if (setValresult != LE_OK)
             {
-                char *buf;
-                size_t n;
-                err = cbor_value_dup_text_string(it, &buf, &n, it);
-                if (err)
-                    return err;     // parse error
+                LE_ERROR("Fail to change asset data at [%s]. Result [%s]",
+                         path, LE_RESULT_TXT(setValresult));
 
-                if (!labelProcessed)
+                decodeResult = LE_FAULT;
+            }
+
+            path[strlen(path) - (endingPathSegLen + 1)] = '\0';
+
+            labelProcessed = false;
+        }
+
+        cbor_value_advance(&map);
+    }
+
+    cbor_value_leave_container(valuePtr, &map);
+    return decodeResult;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Create an argument list from a CBOR-encoded buffer.
+ *
+ * @return:
+ *      - LE_BAD_PARAMETER if buffer is invalid.
+ *      - LE_OK if success.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t CreateArgList
+(
+    uint8_t* payload,           ///< [IN]
+    size_t payloadLen,          ///< [IN]
+    le_dls_List_t* argListRef   ///< [OUT]
+)
+{
+    CborParser parser;
+    CborValue value, recursed;
+
+    cbor_parser_init(payload, payloadLen, 0, &parser, &value);
+
+    if (!cbor_value_is_map(&value))
+    {
+        return LE_BAD_PARAMETER;
+    }
+
+    // Decode data in payload, and construct the argument list.
+    cbor_value_enter_container(&value, &recursed);
+
+    bool labelProcessed = false;
+    Argument_t* argPtr = NULL;
+
+    while (!cbor_value_at_end(&recursed))
+    {
+        // The first item should be a text label (argument name).
+        // If label is not yet processed, then we are expecting a text string, and that text
+        // string should be a label.
+        if (!labelProcessed)
+        {
+            LE_ASSERT(CborTextStringType == cbor_value_get_type(&recursed));
+
+            char buf[LE_AVDATA_STRING_VALUE_BYTES] = {0};
+            size_t strSize = LE_AVDATA_STRING_VALUE_BYTES;
+
+            if (LE_OK != CborSafeCopyString(&recursed, buf, &strSize))
+            {
+                return LE_BAD_PARAMETER;
+            }
+
+            // If the argument name doesn't exist in the list, create one.
+            // Otherwise, save the node ref.
+            le_dls_Link_t* argLinkPtr = le_dls_Peek(argListRef);
+
+            while (argLinkPtr != NULL)
+            {
+                argPtr = CONTAINER_OF(argLinkPtr, Argument_t, link);
+
+                if (strcmp(argPtr->argumentName, buf) == 0)
                 {
-                    endingPathSegLen = strlen(buf);
-
-                    strcat(path, "/");
-                    strcat(path, buf);
-
-                    labelProcessed = true;
+                    break;
                 }
                 else
                 {
-                    AssetValue_t assetValue;
-                    assetValue.strValuePtr = le_mem_ForceAlloc(StringPool);
-                    strncpy(assetValue.strValuePtr, buf, LE_AVDATA_STRING_VALUE_LEN);
-                    le_result_t result = SetVal(path, assetValue,
-                                                LE_AVDATA_DATA_TYPE_STRING, false);
-                    // TODO: return error
-                    LE_ASSERT(result == LE_OK);
-
-                    path[strlen(path) - endingPathSegLen] = '\0';
-
-                    labelProcessed = false;
+                    argPtr = NULL;
                 }
 
-                free(buf);
-
-                continue;
+                argLinkPtr = le_dls_PeekNext(argListRef, argLinkPtr);
             }
 
-            case CborIntegerType:
+            if (argPtr == NULL)
             {
-                int val;
-                cbor_value_get_int(it, &val);     // can't fail
+                Argument_t* argumentPtr = le_mem_ForceAlloc(ArgumentPool);
+                argumentPtr->link = LE_DLS_LINK_INIT;
 
-                AssetValue_t assetValue;
-                assetValue.intValue = val;
-                le_result_t result = SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_INT, false);
-                // TODO: return error
-                LE_ASSERT(result == LE_OK);
+                argumentPtr->argumentName = le_mem_ForceAlloc(StringPool);
+                strncpy(argumentPtr->argumentName, buf, LE_AVDATA_STRING_VALUE_BYTES);
 
-                path[strlen(path) - endingPathSegLen] = '\0';
+                le_dls_Queue(argListRef, &(argumentPtr->link));
 
-                break;
+                argPtr = argumentPtr;
             }
 
-            case CborBooleanType:
+            labelProcessed = true;
+        }
+        else
+        {
+            DecodeAssetData(&(argPtr->argValType), &(argPtr->argValue), &recursed);
+
+            if (argPtr->argValType == LE_AVDATA_DATA_TYPE_NONE)
             {
-                bool val;
-                cbor_value_get_boolean(it, &val);       // can't fail
-
-                AssetValue_t assetValue;
-                assetValue.boolValue = val;
-                le_result_t result = SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_BOOL, false);
-                // TODO: return error
-                LE_ASSERT(result == LE_OK);
-
-                path[strlen(path) - endingPathSegLen] = '\0';
-
-                break;
+                LE_ERROR("Server attempts to execute a command, but payload \
+                         contains unexpected CBOR type");
+                return LE_BAD_PARAMETER;
             }
 
-            case CborDoubleType:
-            {
-                double val;
-                cbor_value_get_double(it, &val);
-
-                AssetValue_t assetValue;
-                assetValue.floatValue = val;
-                le_result_t result = SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_FLOAT, false);
-                // TODO: return error
-                LE_ASSERT(result == LE_OK);
-
-                path[strlen(path) - endingPathSegLen] = '\0';
-
-                break;
-            }
-
-            default:
-                LE_ERROR("Server payload contains unexpected CBOR type: %d", type);
+            labelProcessed = false;
+            argPtr = NULL;
         }
 
-        err = cbor_value_advance_fixed(it);
-        if (err)
-            return err;
+        cbor_value_advance(&recursed);
     }
-    return CborNoError;
+
+    cbor_value_leave_container(&value, &recursed);
+
+    return LE_OK;
 }
 
 
-// DEBUG purposes only
-static void DumpArgList
+//--------------------------------------------------------------------------------------------------
+/**
+ * Responding to AV server after an asset data request has been handled.
+ * Note that the AVServerResponse is expected to be partially filled with token, tokenLength, and
+ * contentType.
+ */
+//--------------------------------------------------------------------------------------------------
+static void RespondToAvServer
 (
-    le_dls_List_t* argListPtr
+    CoapResponseCode_t code,
+    uint8_t* payload,
+    size_t payloadLength
 )
 {
-    LE_INFO("#### DUMPING  ARUGMENT LIST ########################################################");
+    AVServerResponse.code = code;
+    AVServerResponse.payload = payload;
+    AVServerResponse.payloadLength = payloadLength;
 
-    Argument_t* argPtr = NULL;
-    le_dls_Link_t* argLinkPtr = le_dls_Peek(argListPtr);
-
-    while (argLinkPtr != NULL)
-    {
-        argPtr = CONTAINER_OF(argLinkPtr, Argument_t, link);
-
-        LE_INFO("arg name: %s", argPtr->argumentName);
-
-        switch (argPtr->argValType)
-        {
-            case LE_AVDATA_DATA_TYPE_NONE:
-                LE_INFO("none");
-                break;
-
-            case LE_AVDATA_DATA_TYPE_INT:
-                LE_INFO("int arg val:    [%d]", argPtr->argValue.intValue);
-                break;
-
-            case LE_AVDATA_DATA_TYPE_FLOAT:
-                LE_INFO("float arg val:  [%g]", argPtr->argValue.floatValue);
-                break;
-
-            case LE_AVDATA_DATA_TYPE_BOOL:
-                LE_INFO("bool arg val:   [%d]", argPtr->argValue.boolValue);
-                break;
-
-            case LE_AVDATA_DATA_TYPE_STRING:
-                LE_INFO("string arg val: [%s]", argPtr->argValue.strValuePtr);
-                break;
-
-            default:
-                LE_INFO("invalid");
-        }
-
-        argLinkPtr = le_dls_PeekNext(argListPtr, argLinkPtr);
-    }
-    LE_INFO("#### END OF DUMPING  ARUGMENT LIST #################################################");
-
+    lwm2mcore_SendAsyncResponse(AVCClientSessionContext, AVServerReqRef, &AVServerResponse);
 }
 
 
-// TODO: REVIEWERS - this function is messy and needs refactoring.  Also debug messages are needed
-//       for now to troubleshoot some issues.
+//--------------------------------------------------------------------------------------------------
+/**
+ * Processes read request from AV server.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ProcessAvServerReadRequest
+(
+    const char* path
+)
+{
+    LE_DEBUG(">>>>> COAP_GET - Server reads from device");
+
+    AssetValue_t assetValue;
+    le_avdata_DataType_t type;
+
+    le_result_t result = GetVal(path, &assetValue, &type, false);
+
+    if (result == LE_OK)
+    {
+        LE_DEBUG(">>>>> Reading single data point.");
+
+        // Encode the asset data value.
+        uint8_t buf[CBOR_DECODER_BUFFER_BYTES] = {0};
+        CborEncoder encoder;
+        cbor_encoder_init(&encoder, (uint8_t*)&buf, sizeof(buf), 0);
+
+        EncodeAssetData(type, assetValue, &encoder);
+
+        RespondToAvServer(COAP_CONTENT_AVAILABLE, buf, cbor_encoder_get_buffer_size(&encoder, buf));
+    }
+    else if (result == LE_NOT_PERMITTED)
+    {
+        LE_DEBUG(">>>>> no permission.");
+
+        RespondToAvServer(COAP_METHOD_UNAUTHORIZED, NULL, 0);
+    }
+    else if (result == LE_NOT_FOUND)
+    {
+        // The path contain children nodes, so there might be multiple asset data under it.
+        if (IsPathParent(path))
+        {
+            LE_DEBUG(">>>>> path not found, but is parent path. Encoding all children nodes.");
+
+            // Gather all eligible paths in a path array.
+            AssetData_t* assetDataPtr;
+            char* pathArray[le_hashmap_Size(AssetDataMap)];
+            memset(pathArray, 0, sizeof(pathArray));
+            int pathArrayIdx = 0;
+
+            le_hashmap_It_Ref_t iter = le_hashmap_GetIterator(AssetDataMap);
+            char* currentPath;
+
+            while (le_hashmap_NextNode(iter) == LE_OK)
+            {
+                currentPath = le_hashmap_GetKey(iter);
+                assetDataPtr = le_hashmap_GetValue(iter);
+
+                if ((le_path_IsSubpath(path, currentPath, "/")) &&
+                    ((assetDataPtr->serverAccess & LE_AVDATA_ACCESS_READ) == LE_AVDATA_ACCESS_READ))
+                {
+                    // Put the currentPath in the path array.
+                    pathArray[pathArrayIdx] = currentPath;
+                    pathArrayIdx++;
+                }
+            }
+
+            // Sort the path array. Note that the paths just need to be grouped at each level.
+            qsort(pathArray, pathArrayIdx, sizeof(*pathArray), CompareStrings);
+
+            // Determine the path depth the encoding should start at.
+            int levelCount = 0;
+            int i;
+            for (i = 0; path[i] != '\0'; i++)
+            {
+                if ('/' == path[i])
+                {
+                    levelCount++;
+                }
+            }
+
+            // compose the CBOR buffer
+            uint8_t buf[CBOR_DECODER_BUFFER_BYTES] = {0};
+            CborEncoder rootNode;
+
+            cbor_encoder_init(&rootNode, (uint8_t*)&buf, sizeof(buf), 0);
+
+            EncodeMultiData(pathArray, &rootNode, 0, (pathArrayIdx - 1), (levelCount + 1));
+
+            RespondToAvServer(COAP_CONTENT_AVAILABLE,
+                              buf, cbor_encoder_get_buffer_size(&rootNode, buf));
+        }
+        // The path contains no children nodes.
+        else
+        {
+            LE_DEBUG(">>>>> path not found and isn't parent path. Replying 'not found'");
+
+            RespondToAvServer(COAP_RESOURCE_NOT_FOUND, NULL, 0);
+        }
+    }
+    else
+    {
+        LE_FATAL("Unexpected result status: %s", LE_RESULT_TXT(result));
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Processes write request from AV server.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ProcessAvServerWriteRequest
+(
+    const char* path,
+    uint8_t* payload,
+    size_t payloadLen
+)
+{
+    LE_DEBUG(">>>>> COAP_PUT - Server writes to device");
+
+    CborParser parser;
+    CborValue value;
+
+    cbor_parser_init(payload, payloadLen, 0, &parser, &value);
+
+    // The payload would either contain a value for a single data point, or a map.
+    if (cbor_value_is_map(&value))
+    {
+        LE_DEBUG(">>>>> AV server sent a map.");
+
+        AssetData_t* assetDataPtr = GetAssetData(path);
+
+        // Check if path exists. If it does, then it's impossible to have children nodes.
+        // Therefore return error.
+        if (assetDataPtr != NULL)
+        {
+            LE_DEBUG(">>>>> Server writes to an existing path. Replying COAP_BAD_REQUEST.");
+
+            RespondToAvServer(COAP_BAD_REQUEST, NULL, 0);
+        }
+        else
+        {
+            LE_DEBUG(">>>>> Server writes to a non-existing path.");
+
+            if (IsPathParent(path))
+            {
+                LE_DEBUG(">>>>> path is parent. Attempting to write the multi-value.");
+
+                // If the path is a parent path, decode everything under that path.
+                le_result_t result = DecodeMultiData(&value, path);
+
+                RespondToAvServer(
+                    (result == LE_OK) ? COAP_RESOURCE_CHANGED : COAP_BAD_REQUEST, NULL, 0);
+            }
+            else
+            {
+                LE_DEBUG(">>>>> path is not parent. Replying COAP_BAD_REQUEST.");
+
+                // If the path doesn't exist, check if it's a parent path. If it isn't,
+                // then return error. (note that resource creation from server isn't
+                // supported)
+
+                RespondToAvServer(COAP_BAD_REQUEST, NULL, 0);
+            }
+        }
+    }
+    // Assume this is the case with a value for a single data point.
+    else
+    {
+        LE_DEBUG(">>>>> AV server sent a single value.");
+
+        // Decode the value and call SetVal. Reply to AV Server according to the result.
+        le_result_t result;
+        le_avdata_DataType_t type;
+        AssetValue_t assetValue;
+        CoapResponseCode_t code;
+
+        DecodeAssetData(&type, &assetValue, &value);
+
+        result = (type == LE_AVDATA_DATA_TYPE_NONE) ?
+                 LE_UNSUPPORTED : SetVal(path, assetValue, type, false);
+
+        switch (result)
+        {
+            case LE_OK:
+                code = COAP_RESOURCE_CHANGED;
+                break;
+            case LE_NOT_PERMITTED:
+                code = COAP_METHOD_UNAUTHORIZED;
+                break;
+            case LE_NOT_FOUND:
+                code = COAP_RESOURCE_NOT_FOUND;
+                break;
+            case LE_UNSUPPORTED:
+                code = COAP_BAD_REQUEST;
+                break;
+            default:
+                LE_ERROR("Unexpected result.");
+                code = COAP_INTERNAL_ERROR;
+        }
+
+        RespondToAvServer(code, NULL, 0);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Processes exec request from AV server.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ProcessAvServerExecRequest
+(
+    const char* path,
+    uint8_t* payload,
+    size_t payloadLen
+)
+{
+    LE_DEBUG(">>>>> COAP_POST - Server executes a command on device");
+
+    AssetData_t* assetDataPtr = GetAssetData(path);
+
+    if (assetDataPtr != NULL)
+    {
+        // Server attempts to execute a path that's not executable.
+        if ((assetDataPtr->serverAccess & LE_AVDATA_ACCESS_EXEC) != LE_AVDATA_ACCESS_EXEC)
+        {
+            LE_ERROR("Server attempts to execute on an asset data without execute permission.");
+
+            RespondToAvServer(COAP_METHOD_UNAUTHORIZED, NULL, 0);
+        }
+        else
+        {
+            le_result_t result = CreateArgList(payload, payloadLen, &assetDataPtr->arguments);
+
+            if (result == LE_OK)
+            {
+                // Dump argument list (for debug)
+                #if 0
+                DumpArgList(&assetDataPtr->arguments);
+                #endif
+
+                // Create a safe ref with the argument list, and pass that to the handler.
+                ArgListRef = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
+
+                // Execute the command with the argument list collected earlier.
+                assetDataPtr->handlerPtr(path, LE_AVDATA_ACCESS_EXEC, ArgListRef,
+                                         assetDataPtr->contextPtr);
+
+                // Note that we are not repsonding to AV server yet. The response happens when the
+                // client app finishes command execution and calls le_avdata_ReplyExecResult.
+            }
+            else
+            {
+                LE_ERROR("Server attempts to execute a command but argument list is invalid");
+
+                RespondToAvServer(COAP_BAD_REQUEST, NULL, 0);
+            }
+        }
+    }
+    else
+    {
+        LE_ERROR("Server attempts to execute a command but the asset data doesn't exist");
+
+        RespondToAvServer(COAP_RESOURCE_NOT_FOUND, NULL, 0);
+    }
+}
+
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Handles requests from an AV server to read, write, or execute on an asset data.
@@ -938,720 +1459,48 @@ static void AvServerRequestHandler
     lwm2mcore_coapRequestRef_t serverReqRef
 )
 {
-    int sessionContext = avcClient_GetContext();
-    LE_ASSERT(sessionContext != 0);
+    // Save the session context and server request ref, so when reply function such as
+    // le_avdata_ReplyExecResult is called at the end of the command execution,
+    // it can async reply AV server with them.
+    AVCClientSessionContext = avcClient_GetContext();
+    LE_ASSERT(AVCClientSessionContext != 0);
 
+    AVServerReqRef = serverReqRef;
 
-    const char* path;
-    uint8_t* payload;
-    size_t payloadLen;
-    coap_method_t method;
-    uint8_t* token;
-    size_t tokenLength;
-    unsigned int contentType;
+    // Extract info from the server request.
+    const char* path = lwm2mcore_GetRequestUri(AVServerReqRef); // cannot have trailing slash.
+    coap_method_t method = lwm2mcore_GetRequestMethod(AVServerReqRef);
+    uint8_t* payload = lwm2mcore_GetRequestPayload(AVServerReqRef);
+    size_t payloadLen = lwm2mcore_GetRequestPayloadLength(AVServerReqRef);
+    uint8_t* token = lwm2mcore_GetToken(AVServerReqRef);
+    size_t tokenLength = lwm2mcore_GetTokenLength(AVServerReqRef);
+    unsigned int contentType = lwm2mcore_GetContentType(AVServerReqRef);
 
-    path = lwm2mcore_GetRequestUri(serverReqRef);
-    method = lwm2mcore_GetRequestMethod(serverReqRef);
+    // Partially fill in the response.
+    memcpy(AVServerResponse.token, token, tokenLength);
+    AVServerResponse.tokenLength = tokenLength;
+    AVServerResponse.contentType = LWM2M_CONTENT_CBOR;
 
-    payload = lwm2mcore_GetRequestPayload(serverReqRef);
-    payloadLen = lwm2mcore_GetRequestPayloadLength(serverReqRef);
-
-    token = lwm2mcore_GetToken(serverReqRef);
-    tokenLength = lwm2mcore_GetTokenLength(serverReqRef);
-    os_debug_data_dump("COAP tokenPtr3 token", token, tokenLength);
-
-    contentType = lwm2mcore_GetContentType(serverReqRef);
-
-    lwm2mcore_coapResponse_t response;
-
-
-    memcpy(response.token, token, tokenLength);
-    response.tokenLength = tokenLength;
-    response.contentType = LWM2M_CONTENT_CBOR;
-
-
-    LE_INFO(">>>>> Request Uri is: [%s]", path);
-
+    LE_DEBUG(">>>>> Request Uri is: [%s]", path);
 
     switch (method)
     {
         case COAP_GET: // server reads from device
-        {
-            LE_INFO(">>>>> COAP_GET - Server reads from device");
-
-            AssetValue_t assetValue;
-            le_avdata_DataType_t type;
-
-            le_result_t result = GetVal(path, &assetValue, &type, false);
-
-            if (result == LE_OK)
-            {
-                LE_INFO(">>>>> Reading single data point.");
-
-                // Encode the asset data value.
-                uint8_t buf[LE_AVDATA_STRING_VALUE_LEN + 1];
-                CborEncoder encoder;
-                cbor_encoder_init(&encoder, (uint8_t*)&buf, sizeof(buf), 0);
-
-                switch (type)
-                {
-                    case LE_AVDATA_DATA_TYPE_NONE:
-
-                        // TODO: TBD.
-                        break;
-
-                    case LE_AVDATA_DATA_TYPE_INT:
-                        cbor_encode_int(&encoder, assetValue.intValue);
-                        break;
-
-                    case LE_AVDATA_DATA_TYPE_FLOAT:
-                        cbor_encode_double(&encoder, assetValue.floatValue);
-                        break;
-
-                    case LE_AVDATA_DATA_TYPE_BOOL:
-                        cbor_encode_boolean(&encoder, assetValue.boolValue);
-                        break;
-
-                    case LE_AVDATA_DATA_TYPE_STRING:
-                        // TODO: maybe stringz is also ok?
-                        cbor_encode_text_string(&encoder,
-                                                assetValue.strValuePtr,
-                                                strlen(assetValue.strValuePtr));
-                        break;
-
-                    default:
-                        // TODO: TBD
-                        LE_ERROR("unexpected data type");
-                }
-
-                // TODO: call  lwm2mcore_SendAsyncResponse  with buf
-                // 1. Reading a single data point, success [2.05 Content]
-                // COAP_CONTENT_AVAILABLE
-
-                response.code = COAP_CONTENT_AVAILABLE;
-                response.payload = buf;
-                // TODO: check encoder error in case of buffer overflow
-                response.payloadLength = cbor_encoder_get_buffer_size(&encoder, buf);
-
-                LE_INFO("response.payloadLength = %d", response.payloadLength);
-
-                lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-            }
-            else if (result == LE_NOT_PERMITTED)
-            {
-                LE_INFO(">>>>> no permission. Replying COAP_METHOD_UNAUTHORIZED.");
-
-                // TODO: call  lwm2mcore_SendAsyncResponse  with error
-                // 2. Reading a single data point, no permission [4.01 Unauthorized]
-                // COAP_METHOD_UNAUTHORIZED
-
-                response.code = COAP_METHOD_UNAUTHORIZED;
-                response.payload = NULL;
-                response.payloadLength = 0;
-
-                lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-            }
-            else if (result == LE_NOT_FOUND)
-            {
-                // The path contain children nodes, so there might be multiple asset data under it.
-                if (IsPathParent(path))
-                {
-                    LE_INFO(">>>>> path not found, but is parent path.");
-
-                    AssetData_t* assetDataPtr;
-                    char* pathArray[le_hashmap_Size(AssetDataMap)];
-                    memset(pathArray, 0, sizeof(pathArray));
-                    int pathArrayIdx = 0;
-
-                    le_hashmap_It_Ref_t iter = le_hashmap_GetIterator(AssetDataMap);
-                    char* currentPath;
-
-                    while (le_hashmap_NextNode(iter) == LE_OK)
-                    {
-                        currentPath = le_hashmap_GetKey(iter);
-                        assetDataPtr = le_hashmap_GetValue(iter);
-
-                        // TODO: do we need to check if data type is valid (not NONE)?) tbd.
-                        if ((le_path_IsSubpath(path, currentPath, "/")) &&
-                            ((assetDataPtr->access & LE_AVDATA_ACCESS_READ) == LE_AVDATA_ACCESS_READ))
-                        {
-                            // Put the currentPath in the path array.
-                            pathArray[pathArrayIdx] = currentPath;
-                            pathArrayIdx++;
-                        }
-                    }
-
-                    // sort the path array
-                    qsort(pathArray, pathArrayIdx, sizeof(*pathArray), CompareStrings);
-
-                    // compose CBOR buffer
-                    // TODO: Estimate buffer size
-                    uint8_t buf[1024] = {0};
-                    CborEncoder rootNode, mapNode;
-
-                    cbor_encoder_init(&rootNode, (uint8_t*)&buf, sizeof(buf), 0);
-                    cbor_encoder_create_map(&rootNode, &mapNode, CborIndefiniteLength);
-
-                    EncodeMultiData(pathArray, &mapNode, 0, (pathArrayIdx - 1), 1);
-
-                    cbor_encoder_close_container(&rootNode, &mapNode);
-
-                    // TODO: call  lwm2mcore_SendAsyncResponse  with buf
-
-                    // 4. Reading multiple data points (with multiple data loads) [2.05 Content]
-                    // COAP_CONTENT_AVAILABLE
-
-                    response.code = COAP_CONTENT_AVAILABLE;
-                    response.payload = buf;
-                    // TODO: check encoder error in case of buffer overflow
-                    response.payloadLength = cbor_encoder_get_buffer_size(&rootNode, buf);
-
-                    LE_INFO("response.payloadLength = %d", response.payloadLength);
-
-                    lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                }
-                // The path contains no children nodes.
-                else
-                {
-                    LE_INFO(">>>>> path not found. Replying COAP_RESOURCE_NOT_FOUND.");
-
-                    // TODO: call  lwm2mcore_SendAsyncResponse  with "not found"
-                    // 3. Reading a single data point, asset data not found [4.04 Not Found]
-                    // COAP_RESOURCE_NOT_FOUND
-
-                    response.code = COAP_RESOURCE_NOT_FOUND;
-                    response.payload = NULL;
-                    response.payloadLength = 0;
-
-                    lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                }
-            }
-            else
-            {
-                LE_FATAL("Unexpected result status: %s", LE_RESULT_TXT(result));
-            }
-
+            ProcessAvServerReadRequest(path);
             break;
-        }
+
         case COAP_PUT: // server writes to device
-        {
-            LE_INFO(">>>>> COAP_PUT - Server writes to device");
-
-            CborParser parser;
-            CborValue value;
-
-            cbor_parser_init(payload, payloadLen, 0, &parser, &value);
-
-            // The payload would either contain a value for a single data point, or a map.
-            if (cbor_value_is_map(&value))
-            {
-                LE_INFO(">>>>> AV server sent a map.");
-
-                AssetData_t* assetDataPtr = GetAssetData(path);
-
-                // Check if path exists. If it does, then it's impossible to have children nodes.
-                // Therefore return error.
-                if (assetDataPtr != NULL)
-                {
-                    LE_INFO(">>>>> Server writes to an existing path. Replying COAP_BAD_REQUEST.");
-
-                    // TODO: call lwm2mcore_SendAsyncResponse with error
-                    // COAP_BAD_REQUEST
-
-                    response.code = COAP_BAD_REQUEST;
-                    response.payload = NULL;
-                    response.payloadLength = 0;
-
-                    lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                }
-                else
-                {
-                    LE_INFO(">>>>> Server writes to a non-existing path.");
-
-                    if (IsPathParent(path))
-                    {
-                        LE_INFO(">>>>> path is parent. Attempting to write the multi-value.");
-
-                        // If the path is a parent path, then call DecodeMultiData on that path.
-                        // Return status of write.
-
-                        // TODO: might need to check if path contains trailing separator
-
-                        CborError result = DecodeMultiData(&value, path);
-
-                        // TODO: call lwm2mcore_SendAsyncResponse depending on the decoding result
-                        // COAP_RESOURCE_CHANGED if ALL paths are success
-                        // COAP_BAD_REQUEST if one path is failure
-
-                        response.payload = NULL;
-                        response.payloadLength = 0;
-
-                        response.code = (result == CborNoError) ?
-                                        COAP_RESOURCE_CHANGED : COAP_BAD_REQUEST;
-
-                        lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                    }
-                    else
-                    {
-                        LE_INFO(">>>>> path is not parent. Replying COAP_BAD_REQUEST.");
-
-                        // If the path doesn't exist, check if it's a parent path. If it isn't,
-                        // then return error. (note that resource creation from server isn't
-                        // supported)
-
-                        // TODO: call lwm2mcore_SendAsyncResponse with error
-                        // COAP_BAD_REQUEST
-
-                        response.code = COAP_BAD_REQUEST;
-                        response.payload = NULL;
-                        response.payloadLength = 0;
-
-                        lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                    }
-                }
-            }
-            // Assume this is the case with a value for a single data point.
-            else
-            {
-                LE_INFO(">>>>> AV server sent a single value.");
-
-                // Decode the value and call SetVal.  Return success or failure depending on the
-                // return status.
-                CborType type = cbor_value_get_type(&value);
-
-                switch (type)
-                {
-                    case CborTextStringType:
-                    {
-                        LE_INFO(">>>>> string");
-
-                        size_t decodedValLen = LE_AVDATA_STRING_VALUE_LEN;
-                        char decodedVal[decodedValLen];
-                        cbor_value_copy_text_string(&value, decodedVal, &decodedValLen, NULL);
-
-                        AssetValue_t assetValue;
-                        assetValue.strValuePtr = le_mem_ForceAlloc(StringPool);
-                        strncpy(assetValue.strValuePtr, decodedVal, LE_AVDATA_STRING_VALUE_LEN);
-
-                        le_result_t result = SetVal(path, assetValue,
-                                                    LE_AVDATA_DATA_TYPE_STRING, false);
-
-                        // TODO: call lwm2mcore_SendAsyncResponse based on "result"
-
-                        // 1. Writing a single data point, success  [2.04 Changed]
-                        // COAP_RESOURCE_CHANGED
-
-                        // 2. Writing a single data point, no permission  [4.01 Unauthorized]
-                        // COAP_METHOD_UNAUTHORIZED
-
-                        // 3. Writing a single data point, asset data not found  [4.04 Not Found]
-                        // COAP_RESOURCE_NOT_FOUND
-
-                        response.payload = NULL;
-                        response.payloadLength = 0;
-
-                        switch (result)
-                        {
-                            case LE_OK:
-                                response.code = COAP_RESOURCE_CHANGED;
-                                break;
-                            case LE_NOT_PERMITTED:
-                                response.code = COAP_METHOD_UNAUTHORIZED;
-                                break;
-                            case LE_NOT_FOUND:
-                                response.code = COAP_RESOURCE_NOT_FOUND;
-                                break;
-                        }
-
-                        lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                        break;
-                    }
-                    case CborIntegerType:
-                    {
-                        LE_INFO(">>>>> int");
-
-                        int decodedVal;
-                        cbor_value_get_int(&value, &decodedVal);
-
-                        AssetValue_t assetValue;
-                        assetValue.intValue = decodedVal;
-
-                        le_result_t result = SetVal(path, assetValue,
-                                                    LE_AVDATA_DATA_TYPE_INT, false);
-
-                        // TODO: call lwm2mcore_SendAsyncResponse based on "result"
-                        //   same as string
-
-                        response.payload = NULL;
-                        response.payloadLength = 0;
-
-                        switch (result)
-                        {
-                            case LE_OK:
-                                response.code = COAP_RESOURCE_CHANGED;
-                                break;
-                            case LE_NOT_PERMITTED:
-                                response.code = COAP_METHOD_UNAUTHORIZED;
-                                break;
-                            case LE_NOT_FOUND:
-                                response.code = COAP_RESOURCE_NOT_FOUND;
-                                break;
-                        }
-
-                        lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                        break;
-                    }
-                    case CborBooleanType:
-                    {
-                        LE_INFO(">>>>> bool");
-
-                        bool decodedVal;
-                        cbor_value_get_boolean(&value, &decodedVal);
-
-                        AssetValue_t assetValue;
-                        assetValue.boolValue = decodedVal;
-
-                        le_result_t result = SetVal(path, assetValue,
-                                                    LE_AVDATA_DATA_TYPE_BOOL, false);
-
-                        // TODO: call lwm2mcore_SendAsyncResponse based on "result"
-                        //   same as string
-
-                        response.payload = NULL;
-                        response.payloadLength = 0;
-
-                        switch (result)
-                        {
-                            case LE_OK:
-                                response.code = COAP_RESOURCE_CHANGED;
-                                break;
-                            case LE_NOT_PERMITTED:
-                                response.code = COAP_METHOD_UNAUTHORIZED;
-                                break;
-                            case LE_NOT_FOUND:
-                                response.code = COAP_RESOURCE_NOT_FOUND;
-                                break;
-                        }
-
-                        lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                        break;
-                    }
-                    case CborDoubleType:
-                    {
-                        LE_INFO(">>>>> float");
-
-                        double decodedVal;
-                        cbor_value_get_double(&value, &decodedVal);
-
-                        AssetValue_t assetValue;
-                        assetValue.floatValue = decodedVal;
-
-                        le_result_t result = SetVal(path, assetValue,
-                                                    LE_AVDATA_DATA_TYPE_FLOAT, false);
-
-                        // TODO: call lwm2mcore_SendAsyncResponse based on "result"
-                        //   same as string
-
-                        response.payload = NULL;
-                        response.payloadLength = 0;
-
-                        switch (result)
-                        {
-                            case LE_OK:
-                                response.code = COAP_RESOURCE_CHANGED;
-                                break;
-                            case LE_NOT_PERMITTED:
-                                response.code = COAP_METHOD_UNAUTHORIZED;
-                                break;
-                            case LE_NOT_FOUND:
-                                response.code = COAP_RESOURCE_NOT_FOUND;
-                                break;
-                        }
-
-                        lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                        break;
-                    }
-                    default:
-                        LE_ERROR("Server attempts to write a single data point, but payload \
-                                 contains unexpected CBOR type: %d", type);
-
-                        // TODO: call lwm2mcore_SendAsyncResponse with error
-                        // COAP_BAD_REQUEST
-
-                        response.code = COAP_BAD_REQUEST;
-                        response.payload = NULL;
-                        response.payloadLength = 0;
-
-                        lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                }
-            }
-
+            ProcessAvServerWriteRequest(path, payload, payloadLen);
             break;
-        }
+
         case COAP_POST: // server executes a command on device
-        {
-            LE_INFO(">>>>> COAP_POST - Server executes a command on device");
-
-            AssetData_t* assetDataPtr = GetAssetData(path);
-
-            if (assetDataPtr != NULL)
-            {
-                // Server attempts to execute a path that's not executable.
-                if ((assetDataPtr->access & LE_AVDATA_ACCESS_EXEC) != LE_AVDATA_ACCESS_EXEC)
-                {
-                    LE_ERROR("Server attempts to execute on an asset data without execute permission.");
-
-                    // TODO: call  lwm2mcore_SendAsyncResponse  with error
-                    // 1. execute, no permission [4.01 Unauthorized]
-                    // COAP_METHOD_UNAUTHORIZED
-
-                    response.code = COAP_METHOD_UNAUTHORIZED;
-                    response.payload = NULL;
-                    response.payloadLength = 0;
-
-                    lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                    return;
-                }
-
-
-                CborParser parser;
-                CborValue value, recursed;
-
-                cbor_parser_init(payload, payloadLen, 0, &parser, &value);
-
-                // Decode data in payload, and construct the argument list.
-                if (cbor_value_is_map(&value))
-                {
-                    cbor_value_enter_container(&value, &recursed);
-
-                    bool labelProcessed = false;
-                    Argument_t* argPtr = NULL;
-
-                    while (!cbor_value_at_end(&recursed)) {
-
-                        CborType type = cbor_value_get_type(&recursed);
-
-                        if (type != CborTextStringType)
-                        {
-                            labelProcessed = false;
-                        }
-
-                        switch (type)
-                        {
-                            case CborTextStringType:
-                            {
-                                char *buf;
-                                size_t n;
-                                cbor_value_dup_text_string(&recursed, &buf, &n, &recursed);
-
-                                if (!labelProcessed)
-                                {
-                                    // "buf" is argument name.
-
-                                    // If the argument name doesn't exist in the list, create one.
-                                    // Otherwise, save the node ref.
-                                    le_dls_Link_t* argLinkPtr =
-                                        le_dls_Peek(&assetDataPtr->arguments);
-
-                                    while (argLinkPtr != NULL)
-                                    {
-                                        argPtr = CONTAINER_OF(argLinkPtr, Argument_t,
-                                                                          link);
-
-                                        if (strcmp(argPtr->argumentName, buf) == 0)
-                                        {
-                                            break;
-                                        }
-                                        else
-                                        {
-                                            argPtr = NULL;
-                                        }
-
-                                        argLinkPtr = le_dls_PeekNext(&assetDataPtr->arguments,
-                                                                     argLinkPtr);
-                                    }
-
-                                    if (argPtr == NULL)
-                                    {
-                                        Argument_t* argumentPtr = le_mem_ForceAlloc(ArgumentPool);
-                                        argumentPtr->link = LE_DLS_LINK_INIT;
-
-                                        argumentPtr->argumentName = le_mem_ForceAlloc(StringPool);
-                                        strncpy(argumentPtr->argumentName, buf,
-                                                LE_AVDATA_STRING_VALUE_LEN);
-
-                                        le_dls_Queue(&assetDataPtr->arguments,
-                                                     &(argumentPtr->link));
-
-                                        argPtr = argumentPtr;
-                                    }
-
-                                    labelProcessed = true;
-                                }
-                                else
-                                {
-                                    // "buf" is argument value.
-                                    argPtr->argValType = LE_AVDATA_DATA_TYPE_STRING;
-                                    argPtr->argValue.strValuePtr = le_mem_ForceAlloc(StringPool);
-                                    strncpy(argPtr->argValue.strValuePtr, buf,
-                                            LE_AVDATA_STRING_VALUE_LEN);
-                                    argPtr = NULL;
-
-                                    labelProcessed = false;
-                                }
-
-                                free(buf);
-
-                                continue;
-                            }
-
-                            case CborIntegerType:
-                            {
-                                int val;
-                                cbor_value_get_int(&recursed, &val);     // can't fail
-
-                                argPtr->argValType = LE_AVDATA_DATA_TYPE_INT;
-                                argPtr->argValue.intValue = val;
-                                argPtr = NULL;
-
-                                break;
-                            }
-
-                            case CborBooleanType:
-                            {
-                                bool val;
-                                cbor_value_get_boolean(&recursed, &val);       // can't fail
-
-                                argPtr->argValType = LE_AVDATA_DATA_TYPE_BOOL;
-                                argPtr->argValue.boolValue = val;
-                                argPtr = NULL;
-
-                                break;
-                            }
-
-                            case CborDoubleType:
-                            {
-                                double val;
-                                cbor_value_get_double(&recursed, &val);
-
-                                argPtr->argValType = LE_AVDATA_DATA_TYPE_FLOAT;
-                                argPtr->argValue.floatValue = val;
-                                argPtr = NULL;
-
-                                break;
-                            }
-
-                            default:
-                                LE_ERROR("Server attempts to execute a command, but payload \
-                                         contains unexpected CBOR type: %d", type);
-
-                                // TODO: call lwm2mcore_SendAsyncResponse with error
-                                // COAP_BAD_REQUEST
-
-                                response.code = COAP_BAD_REQUEST;
-                                response.payload = NULL;
-                                response.payloadLength = 0;
-
-                                lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                        }
-
-                        cbor_value_advance_fixed(&recursed);
-                    }
-
-                    cbor_value_leave_container(&value, &recursed);
-
-                    // TODO: DEBUG
-                    DumpArgList(&assetDataPtr->arguments);
-
-                    // Create a safe ref with the argument list, and pass that to the handler.
-                    le_avdata_ArgumentListRef_t argListRef
-                         = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
-
-                    // Execute the command with the argument list collected earlier.
-                    le_result_t commandResult = LE_OK;
-                    assetDataPtr->handlerPtr(path, LE_AVDATA_ACCESS_EXEC, argListRef,
-                                             &commandResult, assetDataPtr->contextPtr);
-
-                    // We can delete the ref right away since this is the only place the argument
-                    // list is used.
-                    le_ref_DeleteRef(ArgListRefMap, argListRef);
-
-                    // TODO: call  lwm2mcore_SendAsyncResponse  according to commandResult
-
-                    // 3. execute, command success  [2.04 Changed]
-                    // COAP_RESOURCE_CHANGED
-
-                    // 4. execute, command failure [?????]
-                    // COAP_BAD_REQUEST or COAP_INTERNAL_ERROR
-                    // put error msg in payload
-
-                    response.payload = NULL;  //TODO: put error msg in here in case of exe fail
-                    response.payloadLength = 0;
-
-                    response.code = (commandResult == LE_OK) ?
-                                    COAP_RESOURCE_CHANGED : COAP_INTERNAL_ERROR;
-
-                    lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                }
-                else
-                {
-                    LE_ERROR("Server attempts to execute a command but argument list is invalid");
-                    // TODO: call  lwm2mcore_SendAsyncResponse  with error
-                    // 5. execute, invalid argument list  [4.00 Bad Request]
-                    // COAP_BAD_REQUEST
-
-                    response.code = COAP_BAD_REQUEST;
-                    response.payload = NULL;
-                    response.payloadLength = 0;
-
-                    lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-                    return;
-                }
-            }
-            else
-            {
-                LE_ERROR("Server attempts to execute a command but the asset data doesn't exist");
-                // TODO: call  lwm2mcore_SendAsyncResponse  with "not found"
-                // 2. execute, asset data not found  [4.04 Not Found]
-                // COAP_RESOURCE_NOT_FOUND
-
-                response.code = COAP_RESOURCE_NOT_FOUND;
-                response.payload = NULL;
-                response.payloadLength = 0;
-
-                lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-            }
-
+            ProcessAvServerExecRequest(path, payload, payloadLen);
             break;
-        }
+
         default:
-            LE_WARN("undefined action from an AirVantage server.");
-            // TODO: call  lwm2mcore_SendAsyncResponse  with error
-            // COAP_BAD_REQUEST
+            LE_ERROR("unsupported coap method from an AirVantage server: %d", method);
 
-            response.code = COAP_BAD_REQUEST;
-            response.payload = NULL;
-            response.payloadLength = 0;
-
-            lwm2mcore_SendAsyncResponse(sessionContext, serverReqRef, &response);
-
-            break;
+            RespondToAvServer(COAP_BAD_REQUEST, NULL, 0);
     }
 }
 
@@ -1719,15 +1568,16 @@ void le_avdata_RemoveResourceEventHandler
 }
 
 
-// TODO:
-//   1. duplicated entry handling
-//   2. RemoveResource
-//   3. Function to make an asset data with NULL value (i.e. the initial state of data type of none)
 //--------------------------------------------------------------------------------------------------
 /**
  * Create an asset data with the provided path. Note that asset data type and value are determined
- * upton the first call to a Set function. When an asset data is created, it contains a NULL value,
+ * upton the first call to a Set function. When an asset data is created, it contains a null value,
  * represented by the data type of none.
+ *
+ * @return:
+ *      - LE_OK on success
+ *      - LE_DUPLICATE if path has already been called by CreateResource before, or path is parent
+ *        or child to an existing Asset Data path.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avdata_CreateResource
@@ -1736,32 +1586,63 @@ le_result_t le_avdata_CreateResource
     le_avdata_AccessMode_t accessMode ///< [IN] Asset data access mode
 )
 {
+    // The path cannot already exists, and cannot be a parent or child path to any of the existing
+    // path.
+    if ((GetAssetData(path) != NULL) || IsPathParent(path) || IsPathChild(path))
+    {
+        return LE_DUPLICATE;
+    }
+
     char* assetPathPtr = le_mem_ForceAlloc(AssetPathPool);
     AssetData_t* assetDataPtr = le_mem_ForceAlloc(AssetDataPool);
 
     // Check if the asset data path is legal.
     LE_ASSERT(IsAssetDataPathValid(path) == true);
-    LE_ASSERT(le_utf8_Copy(assetPathPtr, path, LE_AVDATA_PATH_NAME_LEN, NULL) == LE_OK);
+    LE_ASSERT(le_utf8_Copy(assetPathPtr, path, LE_AVDATA_PATH_NAME_BYTES, NULL) == LE_OK);
 
     // Initialize the asset data.
     // Note that the union field is zeroed out by the memset.
     memset(assetDataPtr, 0, sizeof(AssetData_t));
-    LE_ASSERT(ConvertAccessModeToMask(accessMode, &(assetDataPtr->access)) == LE_OK);
+    LE_ASSERT(ConvertAccessModeToServerAccess(accessMode, &(assetDataPtr->serverAccess)) == LE_OK);
+    LE_ASSERT(ConvertAccessModeToClientAccess(accessMode, &(assetDataPtr->clientAccess)) == LE_OK);
     assetDataPtr->dataType = LE_AVDATA_DATA_TYPE_NONE;
     assetDataPtr->handlerPtr = NULL;
     assetDataPtr->contextPtr = NULL;
     assetDataPtr->arguments = LE_DLS_LIST_INIT;
 
     le_hashmap_Put(AssetDataMap, assetPathPtr, assetDataPtr);
+
+    return LE_OK;
 }
 
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Gets the value of an integer asset data.
+ * Sets an asset data to contain a null value, represented by the data type of none.
+ *
+ * @return:
+ *      - per SetVal
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avdata_SetNull
+(
+    const char* path ///< [IN] Asset data path
+)
+{
+    AssetValue_t assetValue;
+    memset(&assetValue, 0, sizeof(AssetValue_t));
+
+    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_NONE, true);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Gets the integer value of an asset data.
  *
  * @return:
  *      - LE_BAD_PARAMETER - asset data being accessed is of the wrong data type
+ *      - LE_UNAVAILABLE - asset data contains null value
  *      - others per GetVal
  */
 //--------------------------------------------------------------------------------------------------
@@ -1775,6 +1656,11 @@ le_result_t le_avdata_GetInt
     le_avdata_DataType_t type;
 
     le_result_t result = GetVal(path, &assetValue, &type, true);
+
+    if (type == LE_AVDATA_DATA_TYPE_NONE)
+    {
+        return LE_UNAVAILABLE;
+    }
 
     if (type != LE_AVDATA_DATA_TYPE_INT)
     {
@@ -1796,7 +1682,7 @@ le_result_t le_avdata_GetInt
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Sets the value of an integer asset data.
+ * Sets an asset data to an integer value.
  *
  * @return:
  *      - per SetVal
@@ -1817,10 +1703,11 @@ le_result_t le_avdata_SetInt
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Gets the value of a float asset data.
+ * Gets the float value of an asset data.
  *
  * @return:
  *      - LE_BAD_PARAMETER - asset data being accessed is of the wrong data type
+ *      - LE_UNAVAILABLE - asset data contains null value
  *      - others per GetVal
  */
 //--------------------------------------------------------------------------------------------------
@@ -1834,6 +1721,11 @@ le_result_t le_avdata_GetFloat
     le_avdata_DataType_t type;
 
     le_result_t result = GetVal(path, &assetValue, &type, true);
+
+    if (type == LE_AVDATA_DATA_TYPE_NONE)
+    {
+        return LE_UNAVAILABLE;
+    }
 
     if (type != LE_AVDATA_DATA_TYPE_FLOAT)
     {
@@ -1855,7 +1747,7 @@ le_result_t le_avdata_GetFloat
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Sets the value of a float asset data.
+ * Sets an asset data to a float value.
  *
  * @return:
  *      - per SetVal
@@ -1876,10 +1768,11 @@ le_result_t le_avdata_SetFloat
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Gets the value of a bool asset data.
+ * Gets the bool value of an asset data.
  *
  * @return:
  *      - LE_BAD_PARAMETER - asset data being accessed is of the wrong data type
+ *      - LE_UNAVAILABLE - asset data contains null value
  *      - others per GetVal
  */
 //--------------------------------------------------------------------------------------------------
@@ -1893,6 +1786,11 @@ le_result_t le_avdata_GetBool
     le_avdata_DataType_t type;
 
     le_result_t result = GetVal(path, &assetValue, &type, true);
+
+    if (type == LE_AVDATA_DATA_TYPE_NONE)
+    {
+        return LE_UNAVAILABLE;
+    }
 
     if (type != LE_AVDATA_DATA_TYPE_BOOL)
     {
@@ -1914,7 +1812,7 @@ le_result_t le_avdata_GetBool
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Sets the value of a bool asset data.
+ * Sets an asset data to a bool value.
  *
  * @return:
  *      - per SetVal
@@ -1935,10 +1833,11 @@ le_result_t le_avdata_SetBool
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Gets the value of a string asset data.
+ * Gets the string value of an asset data.
  *
  * @return:
  *      - LE_BAD_PARAMETER - asset data being accessed is of the wrong data type
+ *      - LE_UNAVAILABLE - asset data contains null value
  *      - others per GetVal
  */
 //--------------------------------------------------------------------------------------------------
@@ -1953,6 +1852,11 @@ le_result_t le_avdata_GetString
     le_avdata_DataType_t type;
 
     le_result_t result = GetVal(path, &assetValue, &type, true);
+
+    if (type == LE_AVDATA_DATA_TYPE_NONE)
+    {
+        return LE_UNAVAILABLE;
+    }
 
     if (type != LE_AVDATA_DATA_TYPE_STRING)
     {
@@ -1974,7 +1878,7 @@ le_result_t le_avdata_GetString
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Sets the value of a string asset data.
+ * Sets an asset data to a string value.
  *
  * @return:
  *      - per SetVal
@@ -1988,7 +1892,7 @@ le_result_t le_avdata_SetString
 {
     AssetValue_t assetValue;
     assetValue.strValuePtr = le_mem_ForceAlloc(StringPool);
-    strncpy(assetValue.strValuePtr, value, LE_AVDATA_STRING_VALUE_LEN);
+    strncpy(assetValue.strValuePtr, value, LE_AVDATA_STRING_VALUE_BYTES);
 
     return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_STRING, true);
 }
@@ -2159,7 +2063,7 @@ le_result_t le_avdata_GetStringArg
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get the length of the string argument of the specified name.
+ * Get the length (excluding terminating null byte) of the string argument of the specified name.
  *
  * @return:
  *      - LE_OK on success
@@ -2168,9 +2072,9 @@ le_result_t le_avdata_GetStringArg
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avdata_GetStringArgLength
 (
-    le_avdata_ArgumentListRef_t argumentListRef, ///< [IN] asdfsadf
-    const char* argName,                         ///< [IN] asdfsadf
-    int32_t* strArgLenPtr                        ///< [OUT] asdfsadf
+    le_avdata_ArgumentListRef_t argumentListRef, ///< [IN] Argument list ref
+    const char* argName,                         ///< [IN] Argument name to get the length for
+    int32_t* strArgLenPtr ///< [OUT] Argument string length excluding terminating null byte
 )
 {
     Argument_t* argPtr = GetArg(argumentListRef, argName);
@@ -2195,6 +2099,37 @@ le_result_t le_avdata_GetStringArgLength
         LE_ERROR("Cannot find argument named %s", argName);
         return LE_NOT_FOUND;
     }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Reply command execution result to AVC Daemon, which can then respond to AV server. This function
+ * MUST be called at the end of a command execution, in order for AV server to be notified about the
+ * execution status.
+ */
+//--------------------------------------------------------------------------------------------------
+void le_avdata_ReplyExecResult
+(
+    le_result_t result
+)
+{
+    // Clean up the argument list and safe ref.
+    Argument_t* argPtr = NULL;
+    le_dls_List_t* argListPtr = le_ref_Lookup(ArgListRefMap, ArgListRef);
+    le_dls_Link_t* argLinkPtr = le_dls_Pop(argListPtr);
+
+    while (argLinkPtr != NULL)
+    {
+        argPtr = CONTAINER_OF(argLinkPtr, Argument_t, link);
+        le_mem_Release(argPtr);
+        argLinkPtr = le_dls_Pop(argListPtr);
+    }
+
+    le_ref_DeleteRef(ArgListRefMap, ArgListRef);
+
+    // Respond to AV server with the command execution result.
+    RespondToAvServer((result == LE_OK) ? COAP_RESOURCE_CHANGED : COAP_INTERNAL_ERROR, NULL, 0);
 }
 
 
@@ -2475,10 +2410,10 @@ void avData_Init
 )
 {
     // Create various memory pools
-    AssetPathPool = le_mem_CreatePool("Asset path pool", LE_AVDATA_PATH_NAME_LEN);
-    AssetDataPool = le_mem_CreatePool("Asset data pool", sizeof(AssetData_t));
-    StringPool = le_mem_CreatePool("String pool", LE_AVDATA_STRING_VALUE_LEN);
-    ArgumentPool = le_mem_CreatePool("Argument pool", sizeof(Argument_t));
+    AssetPathPool = le_mem_CreatePool("AssetData Path", LE_AVDATA_PATH_NAME_BYTES);
+    AssetDataPool = le_mem_CreatePool("AssetData_t", sizeof(AssetData_t));
+    StringPool = le_mem_CreatePool("AssetData string", LE_AVDATA_STRING_VALUE_BYTES);
+    ArgumentPool = le_mem_CreatePool("AssetData Argument_t", sizeof(Argument_t));
     RecordRefDataPoolRef = le_mem_CreatePool("Record ref data pool", sizeof(RecordRefData_t));
 
     // Create the hasmap to store asset data
@@ -2488,7 +2423,7 @@ void avData_Init
     // The argument list is used once at the command handler execution, so the map is really holding
     // one object at a time. Therefore the map size isn't expected to be big - techinically 1 is
     // enough.
-    ArgListRefMap = le_ref_CreateMap("Argument List Ref Map", 5);
+    ArgListRefMap = le_ref_CreateMap("Argument List Ref Map", 1);
 
     // Create map to store the resource event handler.
     ResourceEventHandlerMap = le_ref_CreateMap("Resource Event Handler Map", MAX_EXPECTED_ASSETDATA);
