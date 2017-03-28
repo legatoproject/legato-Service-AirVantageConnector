@@ -309,48 +309,6 @@ void UpdateEndHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
- *  Handler to start download.
- */
-//--------------------------------------------------------------------------------------------------
-static void DownloadHandler
-(
-     void *contextPtr
-)
-{
-    lwm2mcore_PackageDownloader_t *pkgDwlPtr;
-    packageDownloader_DownloadCtx_t *dwlCtxPtr;
-    le_result_t result;
-    int fd;
-
-    pkgDwlPtr = (lwm2mcore_PackageDownloader_t *)contextPtr;
-    dwlCtxPtr = pkgDwlPtr->ctxPtr;
-
-    LE_DEBUG("contextPtr: %p", pkgDwlPtr);
-
-    fd = open(dwlCtxPtr->fifoPtr, O_RDONLY, 0);
-    LE_DEBUG("Opened fifo");
-    if (-1 == fd)
-    {
-        LE_ERROR("failed to open fifo %m");
-        return;
-    }
-
-    LE_DEBUG("Calling update");
-    result = le_update_Start(fd);
-    if (LE_OK != result)
-    {
-        LE_ERROR("failed to update software %s", LE_RESULT_TXT(result));
-        fd_Close(fd);
-        return;
-    }
-
-    fd_Close(fd);
-
-    UpdateStarted = true;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  *  Update the state of the object 9 instance. Also, because they are so closely related, update
  *  the update result field while we're at it.
  */
@@ -391,6 +349,55 @@ static void SetObj9State_
                                                           result,       \
                                                           __FUNCTION__, \
                                                           __LINE__)
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Handler to start download.
+ */
+//--------------------------------------------------------------------------------------------------
+static void DownloadHandler
+(
+     void *contextPtr
+)
+{
+    lwm2mcore_PackageDownloader_t *pkgDwlPtr;
+    packageDownloader_DownloadCtx_t *dwlCtxPtr;
+    le_result_t result;
+    int fd;
+
+    pkgDwlPtr = (lwm2mcore_PackageDownloader_t *)contextPtr;
+    dwlCtxPtr = pkgDwlPtr->ctxPtr;
+
+    LE_DEBUG("contextPtr: %p", pkgDwlPtr);
+
+    fd = open(dwlCtxPtr->fifoPtr, O_RDONLY, 0);
+    LE_DEBUG("Opened fifo");
+    if (-1 == fd)
+    {
+        LE_ERROR("failed to open fifo %m");
+        return;
+    }
+
+    LE_DEBUG("Calling update");
+    result = le_update_Start(fd);
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to update software %s", LE_RESULT_TXT(result));
+
+        // Set the CurrentObj9 status to failure
+        SetObj9State(CurrentObj9,
+                     LWM2MCORE_SW_UPDATE_STATE_INITIAL,
+                     LWM2MCORE_SW_UPDATE_RESULT_INSTALL_FAILURE);
+        CurrentObj9 = NULL;
+
+        fd_Close(fd);
+        return;
+    }
+
+    fd_Close(fd);
+
+    UpdateStarted = true;
+}
 
 //--------------------------------------------------------------------------------------------------
 /**
