@@ -2040,6 +2040,7 @@ COMPONENT_INIT
     avData_Init();
     avcApp_Init();
     timeSeries_Init();
+    avcClient_Init();
 
     // Read the user defined timeout from config tree @ /apps/avcService/modemActivityTimeout
     le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn(AVC_SERVICE_CFG);

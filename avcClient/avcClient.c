@@ -48,6 +48,13 @@ static le_data_ConnectionStateHandlerRef_t DataHandler;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Event ID on bootstrap connection failure.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_event_Id_t BsFailureEventId;
+
+//--------------------------------------------------------------------------------------------------
+/**
  *  Call back registered in LWM2M client for bearer related events
  */
 //--------------------------------------------------------------------------------------------------
@@ -326,12 +333,16 @@ static int EventHandler
         break;
 
         case LWM2MCORE_EVENT_SESSION_FAILED:
-        {
             LE_ERROR("Session failure");
-            avcServer_UpdateHandler(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
-                                    0, 0, LE_AVC_ERR_NONE);
-        }
-        break;
+            // If the device is connected to the bootstrap server, disconnect from server
+            // If the device is connected to the DM server, a bootstrap connection will be
+            // automatically initiated (session is not stopped)
+            if (LE_AVC_BOOTSTRAP_SESSION == le_avc_GetSessionType())
+            {
+                LE_ERROR("Session failure on bootstrap server");
+                le_event_Report(BsFailureEventId, NULL, 0);
+            }
+            break;
 
         case LWM2MCORE_EVENT_SESSION_FINISHED:
             LE_DEBUG("Session finished");
@@ -561,3 +572,29 @@ le_avc_SessionType_t avcClient_GetSessionType
     return LE_AVC_SESSION_INVALID;
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Handler to terminate a connection to bootstrap on failure
+ */
+//--------------------------------------------------------------------------------------------------
+void BsFailureHandler
+(
+    void* reportPtr
+)
+{
+    lwm2mcore_disconnect(Context);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialization function avcClient. Should be called only once.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_Init
+(
+   void
+)
+{
+    BsFailureEventId = le_event_CreateId("BsFailure", 0);
+    le_event_AddHandler("BsFailureHandler", BsFailureEventId, BsFailureHandler);
+}
