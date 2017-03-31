@@ -500,9 +500,9 @@ size_t GetPriVersion
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_DeviceManufacturer
+lwm2mcore_Sid_t lwm2mcore_GetDeviceManufacturer
 (
-    char*   bufferPtr,  ///< [INOUT] data buffer
+    char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
@@ -552,9 +552,9 @@ lwm2mcore_Sid_t lwm2mcore_DeviceManufacturer
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_DeviceModelNumber
+lwm2mcore_Sid_t lwm2mcore_GetDeviceModelNumber
 (
-    char*   bufferPtr,  ///< [INOUT] data buffer
+    char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
@@ -604,9 +604,9 @@ lwm2mcore_Sid_t lwm2mcore_DeviceModelNumber
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_DeviceSerialNumber
+lwm2mcore_Sid_t lwm2mcore_GetDeviceSerialNumber
 (
-    char*   bufferPtr,  ///< [INOUT] data buffer
+    char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
@@ -642,7 +642,7 @@ lwm2mcore_Sid_t lwm2mcore_DeviceSerialNumber
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Retrieve the firmware version
+ * Retrieve the device firmware version
  * This API treatment needs to have a procedural treatment
  *
  * @return
@@ -656,9 +656,9 @@ lwm2mcore_Sid_t lwm2mcore_DeviceSerialNumber
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_DeviceFirmwareVersion
+lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
 (
-    char*   bufferPtr,  ///< [INOUT] data buffer
+    char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
@@ -732,7 +732,7 @@ lwm2mcore_Sid_t lwm2mcore_DeviceFirmwareVersion
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_DeviceBatteryLevel
+lwm2mcore_Sid_t lwm2mcore_GetBatteryLevel
 (
     uint8_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -760,7 +760,7 @@ lwm2mcore_Sid_t lwm2mcore_DeviceBatteryLevel
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_DeviceCurrentTime
+lwm2mcore_Sid_t lwm2mcore_GetDeviceCurrentTime
 (
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -784,3 +784,356 @@ lwm2mcore_Sid_t lwm2mcore_DeviceCurrentTime
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the module identity (IMEI)
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetDeviceImei
+(
+    char*   bufferPtr,  ///< [IN]    data buffer pointer
+    size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
+)
+{
+    lwm2mcore_Sid_t sID;
+    le_result_t result;
+    char imei[LE_INFO_IMEI_MAX_BYTES];
+    size_t imeiLen;
+
+    if ((!bufferPtr) || (!lenPtr))
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    memset(imei, 0, sizeof(imei));
+
+    result = le_info_GetImei(imei, sizeof(imei));
+    switch (result)
+    {
+        case LE_OK:
+            imeiLen = strlen(imei);
+
+            if (*lenPtr < imeiLen)
+            {
+                sID = LWM2MCORE_ERR_OVERFLOW;
+            }
+            else
+            {
+                memcpy(bufferPtr, imei, imeiLen);
+                *lenPtr = imeiLen;
+                sID = LWM2MCORE_ERR_COMPLETED_OK;
+            }
+            break;
+
+        case LE_OVERFLOW:
+            sID = LWM2MCORE_ERR_OVERFLOW;
+            break;
+
+        case LE_FAULT:
+        default:
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
+    }
+
+    LE_DEBUG("lwm2mcore_DeviceImei result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the SIM card identifier (ICCID)
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetIccid
+(
+    char*   bufferPtr,  ///< [IN]    data buffer pointer
+    size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
+)
+{
+    lwm2mcore_Sid_t sID;
+    le_result_t result;
+    char iccid[LE_SIM_ICCID_BYTES];
+    size_t iccidLen;
+
+    if ((!bufferPtr) || (!lenPtr))
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    memset(iccid, 0, sizeof(iccid));
+
+    result = le_sim_GetICCID(le_sim_GetSelectedCard(), iccid, sizeof(iccid));
+    switch (result)
+    {
+        case LE_OK:
+            iccidLen = strlen(iccid);
+
+            if (*lenPtr < iccidLen)
+            {
+                sID = LWM2MCORE_ERR_OVERFLOW;
+            }
+            else
+            {
+                memcpy(bufferPtr, iccid, iccidLen);
+                *lenPtr = iccidLen;
+                sID = LWM2MCORE_ERR_COMPLETED_OK;
+            }
+            break;
+
+        case LE_OVERFLOW:
+            sID = LWM2MCORE_ERR_OVERFLOW;
+            break;
+
+        case LE_BAD_PARAMETER:
+            sID = LWM2MCORE_ERR_INVALID_ARG;
+            break;
+
+        case LE_FAULT:
+        default:
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
+    }
+
+    LE_DEBUG("lwm2mcore_DeviceIccid result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the subscription identity (MEID/ESN/IMSI)
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetSubscriptionIdentity
+(
+    char*   bufferPtr,  ///< [IN]    data buffer pointer
+    size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
+)
+{
+    lwm2mcore_Sid_t sID;
+    le_result_t result;
+    le_mrc_Rat_t currentRat;
+    char imsi[LE_SIM_IMSI_BYTES];
+    char esn[LE_INFO_MAX_ESN_BYTES];
+    char meid[LE_INFO_MAX_MEID_BYTES];
+    size_t imsiLen, esnLen, meidLen;
+
+    if ((!bufferPtr) || (!lenPtr))
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    if (LE_OK != le_mrc_GetRadioAccessTechInUse(&currentRat))
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    memset(imsi, 0, sizeof(imsi));
+    memset(esn, 0, sizeof(esn));
+    memset(meid, 0, sizeof(meid));
+
+    // MEID and ESN are used in CDMA systems while IMSI is used in GSM/UMTS/LTE systems.
+    if (LE_MRC_RAT_CDMA == currentRat)
+    {
+        // Try to retrieve the ESN first, then the MEID if the ESN is not available
+        result = le_info_GetEsn(esn, sizeof(esn));
+        switch (result)
+        {
+            case LE_OK:
+                esnLen = strlen(esn);
+
+                if (*lenPtr < esnLen)
+                {
+                    sID = LWM2MCORE_ERR_OVERFLOW;
+                }
+                else
+                {
+                    memcpy(bufferPtr, esn, esnLen);
+                    *lenPtr = esnLen;
+                    sID = LWM2MCORE_ERR_COMPLETED_OK;
+                }
+                break;
+
+            case LE_OVERFLOW:
+                sID = LWM2MCORE_ERR_OVERFLOW;
+                break;
+
+            case LE_FAULT:
+            default:
+                sID = LWM2MCORE_ERR_GENERAL_ERROR;
+                break;
+        }
+
+        // ESN not available, try to retrieve the MEID
+        if (LWM2MCORE_ERR_COMPLETED_OK != sID)
+        {
+            result = le_info_GetMeid(meid, sizeof(meid));
+            switch (result)
+            {
+                case LE_OK:
+                    meidLen = strlen(meid);
+
+                    if (*lenPtr < meidLen)
+                    {
+                        sID = LWM2MCORE_ERR_OVERFLOW;
+                    }
+                    else
+                    {
+                        memcpy(bufferPtr, meid, meidLen);
+                        *lenPtr = meidLen;
+                        sID = LWM2MCORE_ERR_COMPLETED_OK;
+                    }
+                    break;
+
+                case LE_OVERFLOW:
+                    sID = LWM2MCORE_ERR_OVERFLOW;
+                    break;
+
+                case LE_FAULT:
+                default:
+                    sID = LWM2MCORE_ERR_GENERAL_ERROR;
+                    break;
+            }
+        }
+    }
+    else
+    {
+        // Retrieve the IMSI for GSM/UMTS/LTE
+        result = le_sim_GetIMSI(le_sim_GetSelectedCard(), imsi, sizeof(imsi));
+        switch (result)
+        {
+            case LE_OK:
+                imsiLen = strlen(imsi);
+
+                if (*lenPtr < imsiLen)
+                {
+                    sID = LWM2MCORE_ERR_OVERFLOW;
+                }
+                else
+                {
+                    memcpy(bufferPtr, imsi, imsiLen);
+                    *lenPtr = imsiLen;
+                    sID = LWM2MCORE_ERR_COMPLETED_OK;
+                }
+                break;
+
+            case LE_OVERFLOW:
+                sID = LWM2MCORE_ERR_OVERFLOW;
+                break;
+
+            case LE_BAD_PARAMETER:
+                sID = LWM2MCORE_ERR_INVALID_ARG;
+                break;
+
+            case LE_FAULT:
+            default:
+                sID = LWM2MCORE_ERR_GENERAL_ERROR;
+                break;
+        }
+    }
+
+    LE_DEBUG("lwm2mcore_DeviceSubscriptionIdentity result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the phone number (MSISDN)
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetMsisdn
+(
+    char*   bufferPtr,  ///< [IN]    data buffer pointer
+    size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
+)
+{
+    lwm2mcore_Sid_t sID;
+    le_result_t result;
+    char msisdn[LE_MDMDEFS_PHONE_NUM_MAX_BYTES];
+    size_t msisdnLen;
+
+    if ((!bufferPtr) || (!lenPtr))
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    memset(msisdn, 0, sizeof(msisdn));
+
+    result = le_sim_GetSubscriberPhoneNumber(le_sim_GetSelectedCard(), msisdn, sizeof(msisdn));
+    switch (result)
+    {
+        case LE_OK:
+            msisdnLen = strlen(msisdn);
+
+            if (*lenPtr < msisdnLen)
+            {
+                sID = LWM2MCORE_ERR_OVERFLOW;
+            }
+            else
+            {
+                memcpy(bufferPtr, msisdn, msisdnLen);
+                *lenPtr = msisdnLen;
+                sID = LWM2MCORE_ERR_COMPLETED_OK;
+            }
+            break;
+
+        case LE_OVERFLOW:
+            sID = LWM2MCORE_ERR_OVERFLOW;
+            break;
+
+        case LE_BAD_PARAMETER:
+            sID = LWM2MCORE_ERR_INVALID_ARG;
+            break;
+
+        case LE_FAULT:
+        default:
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
+    }
+
+    LE_DEBUG("lwm2mcore_DeviceMsisdn result: %d", sID);
+    return sID;
+}

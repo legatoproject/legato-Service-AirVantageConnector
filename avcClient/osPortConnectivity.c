@@ -330,7 +330,7 @@ static lwm2mcore_Sid_t GetApn
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_ConnectivityNetworkBearer
+lwm2mcore_Sid_t lwm2mcore_GetNetworkBearer
 (
     lwm2mcore_networkBearer_enum_t* valuePtr    ///< [INOUT] data buffer
 )
@@ -400,9 +400,9 @@ lwm2mcore_Sid_t lwm2mcore_ConnectivityNetworkBearer
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_ConnectivityAvailableNetworkBearers
+lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
 (
-    lwm2mcore_networkBearer_enum_t* bearersListPtr,     ///< [INOUT] bearers list
+    lwm2mcore_networkBearer_enum_t* bearersListPtr,     ///< [IN]    bearers list pointer
     uint16_t* bearersNbPtr                              ///< [INOUT] bearers number
 )
 {
@@ -508,7 +508,7 @@ lwm2mcore_Sid_t lwm2mcore_ConnectivityAvailableNetworkBearers
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_ConnectivitySignalStrength
+lwm2mcore_Sid_t lwm2mcore_GetSignalStrength
 (
     int32_t* valuePtr   ///< [INOUT] data buffer
 )
@@ -625,7 +625,7 @@ lwm2mcore_Sid_t lwm2mcore_ConnectivitySignalStrength
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_ConnectivityLinkQuality
+lwm2mcore_Sid_t lwm2mcore_GetLinkQuality
 (
     uint16_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -693,7 +693,7 @@ lwm2mcore_Sid_t lwm2mcore_ConnectivityLinkQuality
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_ConnectivityIpAddresses
+lwm2mcore_Sid_t lwm2mcore_GetIpAddresses
 (
     char ipAddrList[CONN_MONITOR_IP_ADDRESSES_MAX_NB][CONN_MONITOR_IP_ADDR_MAX_BYTES],
                             ///< [INOUT] IP addresses list
@@ -747,7 +747,7 @@ lwm2mcore_Sid_t lwm2mcore_ConnectivityIpAddresses
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_ConnectivityRouterIpAddresses
+lwm2mcore_Sid_t lwm2mcore_GetRouterIpAddresses
 (
     char ipAddrList[CONN_MONITOR_ROUTER_IP_ADDRESSES_MAX_NB][CONN_MONITOR_IP_ADDR_MAX_BYTES],
                             ///< [INOUT] IP addresses list
@@ -801,7 +801,7 @@ lwm2mcore_Sid_t lwm2mcore_ConnectivityRouterIpAddresses
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_ConnectivityLinkUtilization
+lwm2mcore_Sid_t lwm2mcore_GetLinkUtilization
 (
     uint8_t* valuePtr   ///< [INOUT] data buffer
 )
@@ -830,7 +830,7 @@ lwm2mcore_Sid_t lwm2mcore_ConnectivityLinkUtilization
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_ConnectivityApn
+lwm2mcore_Sid_t lwm2mcore_GetAccessPointNames
 (
     char apnList[CONN_MONITOR_APN_MAX_NB][CONN_MONITOR_APN_MAX_BYTES],  ///< [INOUT] APN list
     uint16_t* apnNbPtr                                                  ///< [INOUT] APN number
@@ -883,7 +883,7 @@ lwm2mcore_Sid_t lwm2mcore_ConnectivityApn
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_ConnectivityCellId
+lwm2mcore_Sid_t lwm2mcore_GetCellId
 (
     uint32_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -944,7 +944,7 @@ lwm2mcore_Sid_t lwm2mcore_ConnectivityCellId
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_ConnectivityMncMcc
+lwm2mcore_Sid_t lwm2mcore_GetMncMcc
 (
     uint16_t* mncPtr,   ///< [INOUT] MNC buffer, NULL if not needed
     uint16_t* mccPtr    ///< [INOUT] MCC buffer, NULL if not needed
