@@ -53,23 +53,6 @@ le_result_t avcApp_StartInstall
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Start an application removal.
- *
- * @return
- *     - LE_OK if successful
- *     - LE_BUSY if system busy.
- *     - LE_NOT_FOUND if given instance not found or given app is not installed.
- *     - LE_FAULT for any other failure.
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t avcApp_StartUninstall
-(
-    uint16_t instanceId    ///< [IN] Instance id of the app to be uninstalled.
-);
-
-
-//--------------------------------------------------------------------------------------------------
-/**
  *  Prepare for an application removal. This function doesn't remove the app but deletes only the
  *  app objects, so that an existing app can stay running during an upgrade operation. During an
  *  uninstall operation the app will be removed after the client receives the object9 delete

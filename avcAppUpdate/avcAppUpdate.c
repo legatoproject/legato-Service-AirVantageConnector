@@ -1047,36 +1047,24 @@ le_result_t avcApp_PrepareUninstall
  *
  * @return
  *     - LE_OK if successful
- *     - LE_NOT_FOUND if given instance not found or given app is not installed.
+ *     - LE_BUSY if system busy.
+ *     - LE_NOT_FOUND if given app is not installed.
  *     - LE_FAULT for any other failure.
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcApp_StartUninstall
+le_result_t StartUninstall
 (
-    uint16_t instanceId    ///< [IN] Instance id of the app to be uninstalled.
+    const char* appNamePtr    ///< [IN] App to be uninstalled.
 )
 {
-    assetData_InstanceDataRef_t instanceRef;
-    char appName[MAX_APP_NAME_BYTES] = "";
 
-    le_result_t result = GetAppNameAndInstanceRef(instanceId,
-                                                  &instanceRef,
-                                                  appName,
-                                                  sizeof(appName));
+    LE_DEBUG("Application '%s' uninstall requested", appNamePtr);
 
-    if (result != LE_OK)
-    {
-        return result;
-    }
-
-    LE_DEBUG("Application '%s' uninstall requested, instanceID: %d", appName, instanceId);
-
-    result = le_appRemove_Remove(appName);
+    le_result_t result = le_appRemove_Remove(appNamePtr);
 
     if (result == LE_OK)
     {
         LE_DEBUG("Uninstall of application completed.");
-        CurrentObj9 = instanceRef;
     }
     else
     {
@@ -1127,7 +1115,16 @@ le_result_t avcApp_StartApp
         return LE_UNAVAILABLE;
     }
 
-    return le_appCtrl_Start(appName);
+    result = le_appCtrl_Start(appName);
+
+    if (result == LE_DUPLICATE)
+    {
+        LE_DEBUG("Application %s is already running, ignoring LE_DUPLICATE", appName);
+        // App is already running, so return LE_OK.
+        result = LE_OK;
+    }
+
+    return result;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1295,11 +1292,19 @@ le_result_t avcApp_GetActivationState
 
     LE_DEBUG("Application '%s' activation status requested.", appName);
 
-    le_appInfo_State_t state = le_appInfo_GetState(appName);
+    if (0 == strcmp(appName, ""))
+    {
+        LE_INFO("Appname is empty, sending default value 'false'");
+        *valuePtr = false;
+    }
+    else
+    {
+        le_appInfo_State_t state = le_appInfo_GetState(appName);
 
-    *valuePtr = (state == LE_APPINFO_RUNNING);
+        *valuePtr = (state == LE_APPINFO_RUNNING);
 
-    LE_DEBUG("App: %s activationState: %d", appName, *valuePtr);
+        LE_DEBUG("App: %s activationState: %d", appName, *valuePtr);
+    }
 
     return LE_OK;
 }
@@ -1430,20 +1435,38 @@ le_result_t avcApp_DeleteObj9Instance
     switch(result)
     {
         case LE_OK:
-            result = avcApp_StartUninstall(instanceId);
-            if (result != LE_OK)
+            if (0 == strcmp(appName, ""))
             {
+                assetData_DeleteInstance(instanceRef);
                 CurrentObj9 = NULL;
+            }
+            else
+            {
+                result = StartUninstall(appName);
+
+                if (result == LE_OK)
+                {
+                    // Keep the instance reference so that it can be used when Uninstall callback
+                    // called
+                    CurrentObj9 = instanceRef;
+                }
+                else if (result == LE_NOT_FOUND)
+                {
+                    // App not installed. Just delete the instance from assetData
+                    assetData_DeleteInstance(instanceRef);
+                    CurrentObj9 = NULL;
+                    result = LE_OK;
+                }
+                else
+                {
+                    // Something wrong
+                    CurrentObj9 = NULL;
+                }
             }
             break;
 
-        case LE_NOT_FOUND:
-            assetData_DeleteInstance(instanceRef);
-            result = LE_OK;
-            break;
-
         default:
-            LE_ERROR("Error in deleting instance: %d (%s)",
+            LE_CRIT("Can't get mandatory field 'packageName' for obj9 instance: %d (%s)",
                       instanceId,
                       LE_RESULT_TXT(result));
             break;
@@ -1671,6 +1694,8 @@ void avcApp_Init
    void
 )
 {
+    le_sig_Block(SIGPIPE);
+
     // Register our handler for update progress reports from the Update Daemon.
     le_update_AddProgressHandler(UpdateProgressHandler, NULL);
 

@@ -337,7 +337,7 @@ lwm2mcore_sid_t os_portUpdateGetUpdateResult
                                                     (lwm2mcore_fwUpdateResult_t*)updateResultPtr))
             {
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
-                LE_DEBUG("updateState : %d", *updateResultPtr);
+                LE_DEBUG("updateResult : %d", *updateResultPtr);
             }
             else
             {
@@ -350,7 +350,7 @@ lwm2mcore_sid_t os_portUpdateGetUpdateResult
                                                 (lwm2mcore_swUpdateResult_t*)updateResultPtr))
             {
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
-                LE_DEBUG("updateState : %d", *updateResultPtr);
+                LE_DEBUG("updateResult : %d", *updateResultPtr);
             }
             else
             {
@@ -667,13 +667,14 @@ lwm2mcore_sid_t os_portUpdateSoftwareInstance
     if (create)
     {
         result = avcApp_CreateObj9Instance(instanceId);
+        LE_DEBUG("Instance creation result: %s ", LE_RESULT_TXT(result));
     }
     else
     {
-        result = avcApp_StartUninstall(instanceId);
+        result = avcApp_DeleteObj9Instance(instanceId);
+        LE_DEBUG("Instance Deletion result: %s ", LE_RESULT_TXT(result));
     }
 
-    LE_INFO("Instance creation result: %s ", LE_RESULT_TXT(result));
     return (result == LE_OK) ? LWM2MCORE_ERR_COMPLETED_OK : LWM2MCORE_ERR_GENERAL_ERROR;
 }
 
