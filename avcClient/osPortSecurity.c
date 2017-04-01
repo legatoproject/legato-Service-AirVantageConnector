@@ -170,26 +170,17 @@ bool os_portSecurityCheckCredential
     lwm2mcore_credentials_t credId      ///< [IN] Credential identifier
 )
 {
-    char credsPathStr[SECSTOREGLOBAL_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+    char buffer[SECSTOREGLOBAL_MAX_NAME_BYTES] = {0};
+    size_t bufferSz = sizeof(buffer);
+    bool ret = false;
+    const char* retTxt = "Not Present";
+    lwm2mcore_sid_t result;
 
-    LE_FATAL_IF(LE_OK != le_path_Concat("/",
-                                        credsPathStr,
-                                        sizeof(credsPathStr),
-                                        CredentialLocations[credId],
-                                        NULL), "Buffer is not long enough");
-
-    // The provided buffer is too small and that is fine, as we just want to check that it starts
-    // with something.
-    uint8_t bufferPtr[10] = {0};
-    size_t size = sizeof(bufferPtr);
-    bool ret = true;
-    const char* retTxt = "Present";
-
-    le_result_t result = secStoreGlobal_Read(credsPathStr, bufferPtr, &size);
-    if ((LE_OK != result) && (LE_OVERFLOW != result) && (bufferPtr[0] != 0))
+    result = os_portSecurityGetCredential(credId, buffer, &bufferSz);
+    if ( (LWM2MCORE_ERR_COMPLETED_OK == result) && (buffer[0] != 0))
     {
-        ret = false;
-        retTxt = "Not present";
+        ret = true;
+        retTxt = "Present";
     }
 
     LE_DEBUG("credId %d result %s [%d]", credId, retTxt, ret);
