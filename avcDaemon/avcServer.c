@@ -673,6 +673,14 @@ static void ClientCloseSessionHandler
         return;
     }
 
+    // Release session owned by control app (only when control app closes).
+    if (RegisteredControlAppRef == sessionRef)
+    {
+        LE_DEBUG("Close session owned by control app.");
+        RegisteredControlAppRef = NULL;
+        avcClient_Disconnect();
+    }
+
     LE_INFO("Client %p closed, remove allocated resources", sessionRef);
 
     // Search for the block reference(s) used by the closed client, and clean up any data.
