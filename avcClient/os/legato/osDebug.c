@@ -81,7 +81,7 @@ void lwm2m_printf(
               strBuffer[ret-1] = '\0';
         }
     }
-    LE_INFO((char*)strBuffer);
+    LE_INFO("%s", strBuffer);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -103,18 +103,24 @@ void os_debug_data_dump(
 
 
     // Output description if given.
-    if (descPtr != NULL)
+    if (NULL != descPtr)
     {
         LE_INFO("%s:", descPtr);
     }
 
-    if (len == 0)
+    if (NULL == addrPtr)
+    {
+        LE_INFO("NULL");
+        return;
+    }
+
+    if (0 == len)
     {
         LE_INFO("  ZERO LENGTH");
         return;
     }
 
-    if (len < 0)
+    if (0 > len)
     {
         LE_INFO("  NEGATIVE LENGTH: %i\n",len);
         return;
@@ -132,7 +138,7 @@ void os_debug_data_dump(
                 snprintf(strBuffer + strlen(strBuffer),
                          DUMP_BUFFER_LEN - strlen(strBuffer),
                          "  %s", buffPtr);
-                LE_INFO((char*)strBuffer);
+                LE_INFO("%s", strBuffer);
                 memset(strBuffer, 0, DUMP_BUFFER_LEN);
             }
 
@@ -169,6 +175,6 @@ void os_debug_data_dump(
     snprintf(strBuffer + strlen (strBuffer),
              DUMP_BUFFER_LEN - strlen(strBuffer),
              "  %s", buffPtr);
-    LE_INFO((char*)strBuffer);
+    LE_INFO("%s", strBuffer);
 }
 
