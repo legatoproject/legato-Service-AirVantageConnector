@@ -21,6 +21,7 @@ requires:
         modemServices/le_mrc.api
         modemServices/le_rtc.api
         modemServices/le_sim.api
+        modemServices/le_temp.api
         positioning/le_gnss.api
         positioning/le_pos.api
         le_appInfo.api

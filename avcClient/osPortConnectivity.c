@@ -20,7 +20,60 @@
  * Define value for the base used in strtoul
  */
 //--------------------------------------------------------------------------------------------------
-#define BASE10  10
+#define BASE10              10
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Define for maximum string length of the currently used cellular technology
+ */
+//--------------------------------------------------------------------------------------------------
+#define MAX_TECH_LEN        20
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Define value for the signal bars range (0 to 5)
+ */
+//--------------------------------------------------------------------------------------------------
+#define SIGNAL_BARS_RANGE   6
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Measures used for signal bars computation depending on the cellular technology
+ */
+//--------------------------------------------------------------------------------------------------
+typedef enum
+{
+    SIGNAL_BARS_WITH_RSSI,          ///< Used for GSM
+    SIGNAL_BARS_WITH_RSCP,          ///< Used for WCDMA
+    SIGNAL_BARS_WITH_ECIO,          ///< Used for WCDMA
+    SIGNAL_BARS_WITH_RSRP,          ///< Used for LTE
+    SIGNAL_BARS_WITH_RSRQ,          ///< Used for LTE
+    SIGNAL_BARS_WITH_SINR,          ///< Used for LTE
+    SIGNAL_BARS_WITH_3GPP2_RSSI,    ///< Used for CDMA 1x and HRPD
+    SIGNAL_BARS_WITH_3GPP2_ECIO,    ///< Used for CDMA 1x and HRPD
+    SIGNAL_BARS_WITH_MAX            ///< Should be the last of this enum
+}
+SignalBarsTech_t;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Table defining the signal bars for different cellular technologies
+ * Based on:
+ *  - AT&T 13340 Device Requirement CDR-RBP-1030 for GSM, UMTS and LTE
+ *  - Android source code (SignalStrength API) for CDMA
+ */
+//--------------------------------------------------------------------------------------------------
+static uint16_t SignalBarsTable[SIGNAL_BARS_WITH_MAX][SIGNAL_BARS_RANGE] =
+{
+    {  125, 104,  98,  89,  80, 0 },    ///< RSSI (GSM)
+    {  125, 106, 100,  90,  80, 0 },    ///< RSCP (UMTS)
+    {   63,  32,  28,  24,  20, 0 },    ///< ECIO (UMTS)
+    {  125, 115, 105,  95,  85, 0 },    ///< RSRP (LTE)
+    {  125,  16,  13,  10,   7, 0 },    ///< RSRQ (LTE)
+    { -200, -30,  10,  45, 130, 0 },    ///< 10xSINR (LTE)
+    {  125, 100,  95,  85,  75, 0 },    ///< RSSI (CDMA)
+    {   63,  15,  13,  11,   9, 0 }     ///< ECIO (CDMA)
+};
 
 //--------------------------------------------------------------------------------------------------
 // Static functions
@@ -997,5 +1050,693 @@ lwm2mcore_Sid_t lwm2mcore_GetMncMcc
     }
 
     LE_DEBUG("os_portConnectivityMncMcc result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the signal bars (range 0-5)
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetSignalBars
+(
+    uint8_t* valuePtr   ///< [INOUT] data buffer
+)
+{
+    lwm2mcore_Sid_t sID = LWM2MCORE_ERR_GENERAL_ERROR;
+    uint8_t signalBars = 0;
+    le_mrc_Rat_t rat;
+    int32_t  rxLevel = 0;
+    uint32_t er      = 0;
+    int32_t  ecio    = 0;
+    int32_t  rscp    = 0;
+    int32_t  sinr    = 0;
+    int32_t  rsrq    = 0;
+    int32_t  rsrp    = 0;
+    int32_t  snr     = 0;
+    int32_t  io      = 0;
+    le_mrc_MetricsRef_t metricsRef;
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    metricsRef = le_mrc_MeasureSignalMetrics();
+    if (!metricsRef)
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    rat = le_mrc_GetRatOfSignalMetrics(metricsRef);
+    switch (rat)
+    {
+        case LE_MRC_RAT_GSM:
+            if (LE_OK != le_mrc_GetGsmSignalMetrics(metricsRef, &rxLevel, &er))
+            {
+                return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+
+            while ((signalBars < SIGNAL_BARS_RANGE) && (sID != LWM2MCORE_ERR_COMPLETED_OK))
+            {
+                if ((-rxLevel) >= SignalBarsTable[SIGNAL_BARS_WITH_RSSI][signalBars])
+                {
+                    *valuePtr = signalBars;
+                    sID = LWM2MCORE_ERR_COMPLETED_OK;
+                }
+                else
+                {
+                    signalBars++;
+                }
+            }
+            break;
+
+        case LE_MRC_RAT_UMTS:
+            if (LE_OK != le_mrc_GetUmtsSignalMetrics(metricsRef, &rxLevel, &er,
+                                                     &ecio, &rscp, &sinr))
+            {
+                return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+
+            // Ec/Io value is given with a decimal by the le_mrc API
+            ecio = ecio / 10;
+
+            while ((signalBars < SIGNAL_BARS_RANGE) && (sID != LWM2MCORE_ERR_COMPLETED_OK))
+            {
+                if (   (   (UINT32_MAX != rscp)     // 0xFFFFFFFF returned if RSCP not available
+                        && ((-rscp) >= SignalBarsTable[SIGNAL_BARS_WITH_RSCP][signalBars])
+                       )
+                    || ((-ecio) >= SignalBarsTable[SIGNAL_BARS_WITH_ECIO][signalBars])
+                   )
+                {
+                    *valuePtr = signalBars;
+                    sID = LWM2MCORE_ERR_COMPLETED_OK;
+                }
+                else
+                {
+                    signalBars++;
+                }
+            }
+            break;
+
+        case LE_MRC_RAT_LTE:
+            if (LE_OK != le_mrc_GetLteSignalMetrics(metricsRef, &rxLevel, &er,
+                                                    &rsrq, &rsrp, &snr))
+            {
+                return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+
+            // RSRP value is given with a decimal by the le_mrc API
+            rsrp = rsrp / 10;
+
+            while ((signalBars < SIGNAL_BARS_RANGE) && (sID != LWM2MCORE_ERR_COMPLETED_OK))
+            {
+                if ((-rsrp) >= SignalBarsTable[SIGNAL_BARS_WITH_RSRP][signalBars])
+                {
+                    *valuePtr = signalBars;
+                    sID = LWM2MCORE_ERR_COMPLETED_OK;
+                }
+                else
+                {
+                    signalBars++;
+                }
+            }
+            break;
+
+        case LE_MRC_RAT_CDMA:
+            if (LE_OK != le_mrc_GetCdmaSignalMetrics(metricsRef, &rxLevel, &er,
+                                                     &ecio, &sinr, &io))
+            {
+                return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+
+            // Ec/Io value is given with a decimal by the le_mrc API
+            ecio = ecio / 10;
+
+            while ((signalBars < SIGNAL_BARS_RANGE) && (sID != LWM2MCORE_ERR_COMPLETED_OK))
+            {
+                if (   ((-rxLevel) >= SignalBarsTable[SIGNAL_BARS_WITH_3GPP2_RSSI][signalBars])
+                    || ((-ecio) >= SignalBarsTable[SIGNAL_BARS_WITH_3GPP2_ECIO][signalBars])
+                   )
+                {
+                    *valuePtr = signalBars;
+                    sID = LWM2MCORE_ERR_COMPLETED_OK;
+                }
+                else
+                {
+                    signalBars++;
+                }
+            }
+            break;
+
+        default:
+            LE_ERROR("Unknown RAT %d", rat);
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
+    }
+    le_mrc_DeleteSignalMetrics(metricsRef);
+
+    LE_DEBUG("lwm2mCore_ConnectivitySignalBars result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the currently used cellular technology
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
+(
+    char*   bufferPtr,  ///< [IN]    data buffer pointer
+    size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
+)
+{
+    lwm2mcore_Sid_t sID;
+    le_result_t result;
+    char cellularTech[MAX_TECH_LEN];
+    int cellularTechLen;
+    le_mdc_DataBearerTechnology_t uplinkTech;
+    le_mdc_DataBearerTechnology_t downlinkTech;
+
+    if ((!bufferPtr) || (!lenPtr))
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    memset(cellularTech, 0, sizeof(cellularTech));
+
+    result = le_mdc_GetDataBearerTechnology(le_mdc_GetProfile(LE_MDC_DEFAULT_PROFILE),
+                                            &downlinkTech,
+                                            &uplinkTech);
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to retrieve the data bearer technology");
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    // Consider only the downlink technology, as it is the relevant one for
+    // most of the AVC use cases (FOTA, SOTA)
+    switch (downlinkTech)
+    {
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_GSM:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "GSM");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_GPRS:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "GPRS");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_EGPRS:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "EDGE");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_WCDMA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "WCDMA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HSPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "HSPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HSPA_PLUS:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "HSPA+");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_DC_HSPA_PLUS:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "DC-HSPA+");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_LTE:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "LTE");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_TD_SCDMA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "TD-SCDMA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_CDMA2000_1X:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "CDMA 1X");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_CDMA2000_EVDO:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "CDMA Ev-DO");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_CDMA2000_EVDO_REVA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "CDMA Ev-DO Rev.A");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_CDMA2000_EHRPD:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "CDMA eHRPD");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_UNKNOWN:
+        default:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "Unknown");
+            break;
+    }
+
+    if ((cellularTechLen < 0) || (MAX_TECH_LEN < cellularTechLen))
+    {
+        LE_ERROR("Failed to print the data bearer technology");
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    if (*lenPtr < cellularTechLen)
+    {
+        LE_WARN("Buffer too small to hold the data bearer technology");
+        return LWM2MCORE_ERR_OVERFLOW;
+    }
+
+    memcpy(bufferPtr, cellularTech, cellularTechLen);
+    *lenPtr = cellularTechLen;
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the roaming indicator (0: home, 1: roaming)
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetRoamingIndicator
+(
+    uint8_t* valuePtr   ///< [INOUT] data buffer
+)
+{
+    lwm2mcore_Sid_t sID;
+    le_result_t result;
+    le_mrc_NetRegState_t state = LE_MRC_REG_UNKNOWN;
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    result = le_mrc_GetNetRegState(&state);
+    switch (result)
+    {
+        case LE_OK:
+            if (LE_MRC_REG_ROAMING == state)
+            {
+                *valuePtr = 1;
+            }
+            else
+            {
+                *valuePtr = 0;
+            }
+            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
+
+        case LE_BAD_PARAMETER:
+            sID = LWM2MCORE_ERR_INVALID_ARG;
+            break;
+
+        case LE_FAULT:
+        default:
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
+    }
+
+    LE_DEBUG("lwm2mCore_ConnectivityRoamingIndicator result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the signal to noise Ec/Io ratio (in dBm)
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetEcIo
+(
+    int32_t* valuePtr   ///< [INOUT] data buffer
+)
+{
+    lwm2mcore_Sid_t sID;
+    le_mrc_Rat_t rat;
+    int32_t  rxLevel = 0;
+    uint32_t er      = 0;
+    int32_t  ecio    = 0;
+    int32_t  rscp    = 0;
+    int32_t  sinr    = 0;
+    int32_t  snr     = 0;
+    int32_t  io      = 0;
+    le_mrc_MetricsRef_t metricsRef;
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    metricsRef = le_mrc_MeasureSignalMetrics();
+    if (!metricsRef)
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    rat = le_mrc_GetRatOfSignalMetrics(metricsRef);
+    switch (rat)
+    {
+        case LE_MRC_RAT_GSM:
+        case LE_MRC_RAT_LTE:
+            // No Ec/Io available for GSM and LTE
+            sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            break;
+
+        case LE_MRC_RAT_UMTS:
+            if (LE_OK != le_mrc_GetUmtsSignalMetrics(metricsRef, &rxLevel, &er,
+                                                     &ecio, &rscp, &sinr))
+            {
+                return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            // Ec/Io value is given with a decimal by the le_mrc API
+            *valuePtr = ecio / 10;
+            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
+
+        case LE_MRC_RAT_CDMA:
+            if (LE_OK != le_mrc_GetCdmaSignalMetrics(metricsRef, &rxLevel, &er,
+                                                     &ecio, &sinr, &io))
+            {
+                return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            // Ec/Io value is given with a decimal by the le_mrc API
+            *valuePtr = ecio / 10;
+            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
+
+        default:
+            LE_ERROR("Unknown RAT %d", rat);
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
+    }
+    le_mrc_DeleteSignalMetrics(metricsRef);
+
+    LE_DEBUG("lwm2mCore_ConnectivityEcIo result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the Reference Signal Received Power (in dBm) if LTE is used
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetRsrp
+(
+    int32_t* valuePtr   ///< [INOUT] data buffer
+)
+{
+    lwm2mcore_Sid_t sID;
+    le_mrc_Rat_t rat;
+    int32_t  rxLevel = 0;
+    uint32_t er      = 0;
+    int32_t  rsrq    = 0;
+    int32_t  rsrp    = 0;
+    int32_t  snr     = 0;
+    le_mrc_MetricsRef_t metricsRef;
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    metricsRef = le_mrc_MeasureSignalMetrics();
+    if (!metricsRef)
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    rat = le_mrc_GetRatOfSignalMetrics(metricsRef);
+    switch (rat)
+    {
+        case LE_MRC_RAT_GSM:
+        case LE_MRC_RAT_UMTS:
+        case LE_MRC_RAT_CDMA:
+            // RSRP available only for LTE
+            sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            break;
+
+        case LE_MRC_RAT_LTE:
+            if (LE_OK != le_mrc_GetLteSignalMetrics(metricsRef, &rxLevel, &er,
+                                                    &rsrq, &rsrp, &snr))
+            {
+                return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            // RSRP value is given with a decimal by the le_mrc API
+            *valuePtr = rsrp / 10;
+            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
+
+        default:
+            LE_ERROR("Unknown RAT %d", rat);
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
+    }
+    le_mrc_DeleteSignalMetrics(metricsRef);
+
+    LE_DEBUG("lwm2mCore_ConnectivityRsrp result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the Reference Signal Received Quality (in dB) if LTE is used
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetRsrq
+(
+    int32_t* valuePtr   ///< [INOUT] data buffer
+)
+{
+    lwm2mcore_Sid_t sID;
+    le_mrc_Rat_t rat;
+    int32_t  rxLevel = 0;
+    uint32_t er      = 0;
+    int32_t  rsrq    = 0;
+    int32_t  rsrp    = 0;
+    int32_t  snr     = 0;
+    le_mrc_MetricsRef_t metricsRef;
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    metricsRef = le_mrc_MeasureSignalMetrics();
+    if (!metricsRef)
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    rat = le_mrc_GetRatOfSignalMetrics(metricsRef);
+    switch (rat)
+    {
+        case LE_MRC_RAT_GSM:
+        case LE_MRC_RAT_UMTS:
+        case LE_MRC_RAT_CDMA:
+            // RSRQ available only for LTE
+            sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            break;
+
+        case LE_MRC_RAT_LTE:
+            if (LE_OK != le_mrc_GetLteSignalMetrics(metricsRef, &rxLevel, &er,
+                                                    &rsrq, &rsrp, &snr))
+            {
+                return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            // RSRQ value is given with a decimal by the le_mrc API
+            *valuePtr = rsrq / 10;
+            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
+
+        default:
+            LE_ERROR("Unknown RAT %d", rat);
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
+    }
+    le_mrc_DeleteSignalMetrics(metricsRef);
+
+    LE_DEBUG("lwm2mCore_ConnectivityRsrq result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the Received Signal Code Power (in dBm) if UMTS is used
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetRscp
+(
+    int32_t* valuePtr   ///< [INOUT] data buffer
+)
+{
+    lwm2mcore_Sid_t sID;
+    le_mrc_Rat_t rat;
+    int32_t  rxLevel = 0;
+    uint32_t er      = 0;
+    int32_t  ecio    = 0;
+    int32_t  rscp    = 0;
+    int32_t  sinr    = 0;
+    le_mrc_MetricsRef_t metricsRef;
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    metricsRef = le_mrc_MeasureSignalMetrics();
+    if (!metricsRef)
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    rat = le_mrc_GetRatOfSignalMetrics(metricsRef);
+    switch (rat)
+    {
+        case LE_MRC_RAT_GSM:
+        case LE_MRC_RAT_LTE:
+        case LE_MRC_RAT_CDMA:
+            // RSCP available only for UMTS
+            sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            break;
+
+        case LE_MRC_RAT_UMTS:
+            if (LE_OK != le_mrc_GetUmtsSignalMetrics(metricsRef, &rxLevel, &er,
+                                                     &ecio, &rscp, &sinr))
+            {
+                return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            *valuePtr = rscp;
+            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
+
+        default:
+            LE_ERROR("Unknown RAT %d", rat);
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
+    }
+    le_mrc_DeleteSignalMetrics(metricsRef);
+
+    LE_DEBUG("lwm2mCore_ConnectivityRscp result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the Location Area Code
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetLac
+(
+    uint32_t* valuePtr  ///< [INOUT] data buffer
+)
+{
+    lwm2mcore_Sid_t sID;
+    uint32_t lac;
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    lac = le_mrc_GetServingCellLocAreaCode();
+    if (UINT32_MAX != lac)
+    {
+        *valuePtr = lac;
+        sID = LWM2MCORE_ERR_COMPLETED_OK;
+    }
+    else
+    {
+        sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+    }
+
+    LE_DEBUG("lwm2mCore_ConnectivityLac result: %d", sID);
     return sID;
 }

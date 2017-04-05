@@ -1137,3 +1137,106 @@ lwm2mcore_Sid_t lwm2mcore_GetMsisdn
     LE_DEBUG("lwm2mcore_DeviceMsisdn result: %d", sID);
     return sID;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the device temperature (in °C)
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetDeviceTemperature
+(
+    int32_t* valuePtr   ///< [INOUT] data buffer
+)
+{
+    lwm2mcore_Sid_t sID;
+    le_result_t result;
+    le_temp_SensorRef_t pcSensorRef;
+    int32_t temp;
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    // Retrieve the power controller temperature
+    pcSensorRef = le_temp_Request("POWER_CONTROLLER");
+    result = le_temp_GetTemperature(pcSensorRef, &temp);
+    if (LE_OK == result)
+    {
+        *valuePtr = temp;
+        sID = LWM2MCORE_ERR_COMPLETED_OK;
+    }
+    else
+    {
+        sID = LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    LE_DEBUG("lwm2mCore_DeviceTemperature result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the number of unexpected resets
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetDeviceUnexpectedResets
+(
+    uint32_t* valuePtr  ///< [INOUT] data buffer
+)
+{
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the total number of resets
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetDeviceTotalResets
+(
+    uint32_t* valuePtr  ///< [INOUT] data buffer
+)
+{
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+}
