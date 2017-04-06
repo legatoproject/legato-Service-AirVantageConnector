@@ -89,4 +89,14 @@ lwm2mcore_DwlResult_t pkgDwlCb_EndDownload
     void* ctxPtr
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Download user agreement callback function definition
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t pkgDwlCb_UserAgreement
+(
+    uint32_t pkgSize        ///< Package size
+);
+
 #endif /* _PACKAGEDOWNLOADERCALLBACKS_H */

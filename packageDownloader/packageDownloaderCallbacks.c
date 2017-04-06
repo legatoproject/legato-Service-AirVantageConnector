@@ -16,6 +16,7 @@
 #include <avcFsConfig.h>
 #include "packageDownloader.h"
 #include "packageDownloaderCallbacks.h"
+#include "avcServer.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -461,4 +462,38 @@ lwm2mcore_DwlResult_t pkgDwlCb_EndDownload
     }
 
     return DWL_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Download user agreement callback function definition
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t pkgDwlCb_UserAgreement
+(
+    uint32_t pkgSize        ///< Package size
+)
+{
+    le_result_t result;
+    lwm2mcore_DwlResult_t dwlResult = DWL_OK;
+
+    result = avcServer_QueryDownload(lwm2mcore_PackageDownloaderAcceptDownload, pkgSize);
+
+    // Get user agreement before starting package download
+    if (LE_FAULT == result)
+    {
+        LE_ERROR("Unexpected error in Query Download.");
+        dwlResult = DWL_FAULT;
+    }
+    else if (LE_OK == result)
+    {
+        LE_DEBUG("Download accepted");
+        lwm2mcore_PackageDownloaderAcceptDownload();
+    }
+    else
+    {
+        LE_DEBUG("Download deffered");
+    }
+
+    return dwlResult;
 }

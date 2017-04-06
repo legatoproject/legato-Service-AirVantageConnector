@@ -14,6 +14,20 @@
 #include "interfaces.h"
 #include "avcAppUpdate.h"
 
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Launch update structure.
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    lwm2mcore_UpdateType_t  type;       ///< update type (firmware or software)
+    uint16_t                instanceId; ///< instance id (0 for firmware update)
+}
+LaunchUpdateCtx_t;
+
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Timer used to launch the update
@@ -23,16 +37,18 @@ static le_timer_Ref_t LaunchUpdateTimer;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Called when the install defer timer expires.
+ * Current update context.
  */
 //--------------------------------------------------------------------------------------------------
-static void LaunchUpdateTimerExpiryHandler
-(
-    le_timer_Ref_t timerRef    ///< Timer that expired
-)
-{
-    lwm2mcore_UpdateType_t updateType = (lwm2mcore_UpdateType_t)le_timer_GetContextPtr(timerRef);
+static LaunchUpdateCtx_t UpdateCtx;
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Launch update
+ */
+//--------------------------------------------------------------------------------------------------
+static void LaunchUpdate(lwm2mcore_UpdateType_t updateType, uint16_t instanceId)
+{
     switch (updateType)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
@@ -54,9 +70,37 @@ static void LaunchUpdateTimerExpiryHandler
             }
             break;
 
+        case LWM2MCORE_SW_UPDATE_TYPE:
+            LE_DEBUG("Launch SW update");
+            avcApp_StartInstall(instanceId);
+            break;
+
         default:
             LE_ERROR("Unknown update type %u", updateType);
             break;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Called when the install defer timer expires.
+ */
+//--------------------------------------------------------------------------------------------------
+static void LaunchUpdateTimerExpiryHandler
+(
+    le_timer_Ref_t timerRef    ///< Timer that expired
+)
+{
+    LaunchUpdateCtx_t* updateCtxPtr = (LaunchUpdateCtx_t*)le_timer_GetContextPtr(timerRef);
+
+    // Notify for user agreement and launch update after user acceptance.
+    if (NULL == updateCtxPtr)
+    {
+        LE_ERROR("Update context not available");
+    }
+    else
+    {
+        avcServer_QueryInstall(LaunchUpdate, updateCtxPtr->type, updateCtxPtr->instanceId);
     }
 }
 
@@ -227,13 +271,18 @@ lwm2mcore_Sid_t lwm2mcore_LaunchUpdate
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
+        case LWM2MCORE_SW_UPDATE_TYPE:
             {
                 // Acknowledge the launch update notification and launch the update later
+                UpdateCtx.type = type;
+                UpdateCtx.instanceId = instanceId;
+
                 le_clk_Time_t interval = {2, 0};
                 LaunchUpdateTimer = le_timer_Create("launch update timer");
                 if (   (LE_OK != le_timer_SetHandler(LaunchUpdateTimer,
                                                      LaunchUpdateTimerExpiryHandler))
-                    || (LE_OK != le_timer_SetContextPtr(LaunchUpdateTimer, (void*)type))
+                    || (LE_OK != le_timer_SetContextPtr(LaunchUpdateTimer,
+                                                        (LaunchUpdateCtx_t*)&UpdateCtx))
                     || (LE_OK != le_timer_SetInterval(LaunchUpdateTimer, interval))
                     || (LE_OK != le_timer_Start(LaunchUpdateTimer))
                    )
@@ -244,17 +293,6 @@ lwm2mcore_Sid_t lwm2mcore_LaunchUpdate
                 {
                     sid = LWM2MCORE_ERR_COMPLETED_OK;
                 }
-            }
-            break;
-
-        case LWM2MCORE_SW_UPDATE_TYPE:
-            if(avcApp_StartInstall(instanceId) == LE_OK)
-            {
-                sid = LWM2MCORE_ERR_COMPLETED_OK;
-            }
-            else
-            {
-                sid = LWM2MCORE_ERR_GENERAL_ERROR;
             }
             break;
 

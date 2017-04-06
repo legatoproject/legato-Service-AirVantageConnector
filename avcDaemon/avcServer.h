@@ -14,6 +14,8 @@
 
 #include "legato.h"
 #include "assetData.h"
+#include "lwm2mcore/update.h"
+#include "lwm2mcorePackageDownloader.h"
 
 //--------------------------------------------------------------------------------------------------
 // Definitions.
@@ -26,7 +28,8 @@
 //--------------------------------------------------------------------------------------------------
 typedef void (*avcServer_InstallHandlerFunc_t)
 (
-    void
+    lwm2mcore_UpdateType_t type,    ///< Update type
+    uint16_t instanceId             ///< Instance id (0 for fw update)
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -72,7 +75,9 @@ typedef void (*avcServer_DownloadHandlerFunc_t)
 //--------------------------------------------------------------------------------------------------
 LE_SHARED le_result_t avcServer_QueryInstall
 (
-    avcServer_InstallHandlerFunc_t handlerRef  ///< [IN] Handler to receive install response.
+    avcServer_InstallHandlerFunc_t handlerRef,  ///< [IN] Handler to receive install response.
+    lwm2mcore_UpdateType_t type,                ///< [IN] Update type.
+    uint16_t instanceId                         ///< [IN] Instance id.
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -140,7 +145,8 @@ LE_SHARED void avcServer_SetUpdateType
 //--------------------------------------------------------------------------------------------------
 LE_SHARED le_result_t avcServer_QueryDownload
 (
-    avcServer_DownloadHandlerFunc_t handlerRef  ///< [IN] Handler to receive download response.
+    avcServer_DownloadHandlerFunc_t handlerFunc,    ///< [IN] Download handler function.
+    uint32_t pkgSize                                ///< [IN] Package size.
 );
 
 

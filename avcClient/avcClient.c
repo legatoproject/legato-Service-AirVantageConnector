@@ -192,7 +192,7 @@ static int PackageEventHandler
     switch (status.event)
     {
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_DETAILS:
-            // Download pending notification will be sent through user agreement.
+            // Notification of download pending is sent from user agreement callback.
             break;
 
         case LWM2MCORE_EVENT_DOWNLOAD_PROGRESS:

@@ -67,6 +67,30 @@ AvcState_t;
 
 
 //--------------------------------------------------------------------------------------------------
+/**
+ * Package download context
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    uint32_t pkgSize;               ///< Package size.
+}
+PkgDownloadContext_t;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Package install context
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    lwm2mcore_UpdateType_t  type;   ///< Update type.
+    uint16_t instanceId;            ///< Instance Id (0 for FW, any value for SW)
+}
+PkgInstallContext_t;
+
+
+//--------------------------------------------------------------------------------------------------
 // Data structures
 //--------------------------------------------------------------------------------------------------
 
@@ -212,6 +236,21 @@ static le_timer_Ref_t UninstallDeferTimer;
 //--------------------------------------------------------------------------------------------------
 static le_avc_ErrorCode_t AvcErrorCode = LE_AVC_ERR_NONE;
 
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Current package download context
+ */
+//--------------------------------------------------------------------------------------------------
+static PkgDownloadContext_t PkgDownloadCtx;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Current package install context
+ */
+//--------------------------------------------------------------------------------------------------
+static PkgInstallContext_t PkgInstallCtx;
 
 
 //--------------------------------------------------------------------------------------------------
@@ -457,7 +496,7 @@ static le_result_t AcceptInstallPackage
         CurrentState = AVC_INSTALL_IN_PROGRESS;
         if (QueryInstallHandlerRef != NULL)
         {
-            QueryInstallHandlerRef();
+            QueryInstallHandlerRef(PkgInstallCtx.type, PkgInstallCtx.instanceId);
             QueryInstallHandlerRef = NULL;
         }
         else
@@ -800,7 +839,7 @@ static le_result_t QueryInstall
 //--------------------------------------------------------------------------------------------------
 static le_result_t QueryDownload
 (
-    void
+    uint32_t totalNumBytes          ///< Number of bytes to download.
 )
 {
     le_result_t result = LE_BUSY;
@@ -808,8 +847,9 @@ static le_result_t QueryDownload
     if (StatusHandlerRef != NULL)
     {
         // Notify registered control app.
+        LE_DEBUG("Report status LE_AVC_DOWNLOAD_PENDING");
         CurrentState = AVC_DOWNLOAD_PENDING;
-        StatusHandlerRef(LE_AVC_DOWNLOAD_PENDING, -1, -1, StatusHandlerContextPtr);
+        StatusHandlerRef(LE_AVC_DOWNLOAD_PENDING, totalNumBytes, 0, StatusHandlerContextPtr);
     }
     else if (IsControlAppInstalled)
     {
@@ -933,7 +973,7 @@ void DownloadTimerExpiryHandler
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    if ( QueryDownload() == LE_OK )
+    if ( QueryDownload(PkgDownloadCtx.pkgSize) == LE_OK )
     {
         // Notify the registered handler to proceed with the download; only called once.
         if (QueryDownloadHandlerRef != NULL)
@@ -964,7 +1004,7 @@ void InstallTimerExpiryHandler
         // Notify the registered handler to proceed with the install; only called once.
         if (QueryInstallHandlerRef != NULL)
         {
-            QueryInstallHandlerRef();
+            QueryInstallHandlerRef(PkgInstallCtx.type, PkgInstallCtx.instanceId);
             QueryInstallHandlerRef = NULL;
         }
         else
@@ -1021,7 +1061,9 @@ void UninstallTimerExpiryHandler
 //--------------------------------------------------------------------------------------------------
 le_result_t avcServer_QueryInstall
 (
-    avcServer_InstallHandlerFunc_t handlerRef  ///< [IN] Handler to receive install response.
+    avcServer_InstallHandlerFunc_t handlerRef,  ///< [IN] Handler to receive install response.
+    lwm2mcore_UpdateType_t  type,               ///< [IN] update type.
+    uint16_t instanceId                         ///< [IN] instance id (0 for fw install).
 )
 {
     le_result_t result;
@@ -1032,14 +1074,15 @@ le_result_t avcServer_QueryInstall
         return LE_FAULT;
     }
 
+    // Update install handler
+    PkgInstallCtx.type = type;
+    PkgInstallCtx.instanceId = instanceId;
+    QueryInstallHandlerRef = handlerRef;
+
     result = QueryInstall();
 
-    // Store the handler to call later, once install is allowed.
-    if ( result == LE_BUSY )
-    {
-        QueryInstallHandlerRef = handlerRef;
-    }
-    else
+    // Reset the handler as install can proceed now.
+    if (LE_BUSY != result)
     {
         QueryInstallHandlerRef = NULL;
     }
@@ -1063,7 +1106,8 @@ le_result_t avcServer_QueryInstall
 //--------------------------------------------------------------------------------------------------
 le_result_t avcServer_QueryDownload
 (
-    avcServer_DownloadHandlerFunc_t handlerRef  ///< [IN] Handler to receive download response.
+    avcServer_DownloadHandlerFunc_t handlerFunc,    ///< [IN] Download handler function.
+    uint32_t pkgSize                                ///< [IN] Package size.
 )
 {
     le_result_t result;
@@ -1074,14 +1118,14 @@ le_result_t avcServer_QueryDownload
         return LE_FAULT;
     }
 
-    result = QueryDownload();
+    // Update download handler
+    PkgDownloadCtx.pkgSize = pkgSize;
+    QueryDownloadHandlerRef = handlerFunc;
 
-    // Store the handler to call later, once download is allowed.
-    if ( result == LE_BUSY )
-    {
-        QueryDownloadHandlerRef = handlerRef;
-    }
-    else
+    result = QueryDownload(pkgSize);
+
+    // Reset the handler as download can proceed now.
+    if (LE_BUSY != result)
     {
         QueryDownloadHandlerRef = NULL;
     }
@@ -1118,14 +1162,13 @@ le_result_t avcServer_QueryUninstall
         return LE_BUSY;
     }
 
+    // Update uninstall handler
+    QueryUninstallHandlerRef = handlerRef;
+
     result = QueryUninstall();
 
-    // Store the handler to call later, once uninstall is allowed.
-    if ( result == LE_BUSY )
-    {
-        QueryUninstallHandlerRef = handlerRef;
-    }
-    else
+    // Reset the handler as uninstall can proceed now.
+    if (LE_BUSY != result)
     {
         QueryUninstallHandlerRef = NULL;
     }

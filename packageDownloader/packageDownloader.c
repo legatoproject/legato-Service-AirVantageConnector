@@ -711,6 +711,7 @@ le_result_t packageDownloader_StartDownload
     // Set the package downloader callbacks
     pkgDwl.initDownload = pkgDwlCb_InitDownload;
     pkgDwl.getInfo = pkgDwlCb_GetInfo;
+    pkgDwl.userAgreement = pkgDwlCb_UserAgreement;
     pkgDwl.setFwUpdateState = packageDownloader_SetFwUpdateState;
     pkgDwl.setFwUpdateResult = packageDownloader_SetFwUpdateResult;
     pkgDwl.setSwUpdateState = avcApp_SetDownloadState;
@@ -747,6 +748,7 @@ le_result_t packageDownloader_StartDownload
 
     dwlRef = le_thread_Create("Downloader", (void*)dwlCtx.downloadPackage,
                 (void*)&pkgDwl);
+
     le_thread_Start(dwlRef);
 
 

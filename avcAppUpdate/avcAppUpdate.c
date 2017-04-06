@@ -944,13 +944,13 @@ static le_result_t GetAppNameAndInstanceRef
  *
  * @return
  *      - LE_OK if installation started.
- *      - LE_BUSY if package download is not finished yet.
+ *      - LE_BUSY if install is not finished yet.
  *      - LE_FAULT if there is an error.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcApp_StartInstall
 (
-    uint16_t instanceId    ///< [IN] Instance id of the app to be installed.
+    uint16_t instanceId                 ///< [IN] Instance id of the app to be installed.
 )
 {
     LE_DEBUG("Install application using AirVantage, instanceID: %d.", instanceId);
@@ -1321,7 +1321,7 @@ static void UpdateProgressHandler
   void* contextPtr                ///< Context for the callback.
 )
 {
-    LE_DEBUG("UpdateProgressHandler");
+    le_avc_ErrorCode_t avcErrorCode = LE_AVC_ERR_NONE;
 
     switch (updateState)
     {
@@ -1337,23 +1337,63 @@ static void UpdateProgressHandler
             break;
 
         case LE_UPDATE_STATE_APPLYING:
+            avcServer_UpdateHandler(LE_AVC_INSTALL_IN_PROGRESS,
+                                    LE_AVC_APPLICATION_UPDATE,
+                                    -1,
+                                    percentDone,
+                                    LE_AVC_ERR_NONE);
+
             LE_INFO("Doing update.");
             break;
 
         case LE_UPDATE_STATE_SUCCESS:
+            avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE,
+                                    LE_AVC_APPLICATION_UPDATE,
+                                    -1,
+                                    percentDone,
+                                    LE_AVC_ERR_NONE);
+
             LE_INFO("Install completed.");
             le_update_End();
             break;
 
         case LE_UPDATE_STATE_FAILED:
-            LE_ERROR("Install/uninstall failed.");
+            LE_DEBUG("Install/uninstall failed.");
+
+            // Get the error code.
+            switch (le_update_GetErrorCode())
+            {
+                case LE_UPDATE_ERR_SECURITY_FAILURE:
+                    avcErrorCode = LE_AVC_ERR_SECURITY_FAILURE;
+                    break;
+
+                case LE_UPDATE_ERR_BAD_PACKAGE:
+                    avcErrorCode = LE_AVC_ERR_BAD_PACKAGE;
+                    break;
+
+                case LE_UPDATE_ERR_INTERNAL_ERROR:
+                    avcErrorCode = LE_AVC_ERR_INTERNAL;
+                    break;
+
+                default:
+                    LE_ERROR("Should have an error code in failed state.");
+                    break;
+            }
+
+            // Notify registered control app
+            avcServer_UpdateHandler(LE_AVC_INSTALL_FAILED,
+                                    LE_AVC_APPLICATION_UPDATE,
+                                    -1,
+                                    percentDone,
+                                    avcErrorCode);
+
             SetObj9State(CurrentObj9,
                          LWM2MCORE_SW_UPDATE_STATE_INITIAL,
                          LWM2MCORE_SW_UPDATE_RESULT_INSTALL_FAILURE);
             le_update_End();
             CurrentObj9 = NULL;
             UpdateStarted = false;
-            break;
+        break;
 
         default:
             LE_ERROR("Bad state: %d\n", updateState);
