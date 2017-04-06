@@ -686,9 +686,13 @@ static le_result_t SetVal
 //--------------------------------------------------------------------------------------------------
 /**
  * Encode the Asset Data value with the provided CBOR encoder.
+ *
+ * @return:
+ *      - LE_FAULT on any error.
+ *      - LE_OK if success.
  */
 //--------------------------------------------------------------------------------------------------
-static void EncodeAssetData
+static le_result_t EncodeAssetData
 (
     le_avdata_DataType_t type, ///< [IN]
     AssetValue_t assetValue,   ///< [IN]
@@ -698,46 +702,49 @@ static void EncodeAssetData
     switch (type)
     {
         case LE_AVDATA_DATA_TYPE_NONE:
-            LE_ASSERT(CborNoError == cbor_encode_text_string(encoder, "(null)", 6));
-            break;
+            return (CborNoError == cbor_encode_text_string(encoder, "(null)", 6)) ?
+                   LE_OK : LE_FAULT;
 
         case LE_AVDATA_DATA_TYPE_INT:
-            LE_ASSERT(CborNoError == cbor_encode_int(encoder, assetValue.intValue));
-            break;
+            return (CborNoError == cbor_encode_int(encoder, assetValue.intValue)) ?
+                   LE_OK : LE_FAULT;
 
         case LE_AVDATA_DATA_TYPE_FLOAT:
-            LE_ASSERT(CborNoError == cbor_encode_double(encoder, assetValue.floatValue));
-            break;
+            return (CborNoError == cbor_encode_double(encoder, assetValue.floatValue)) ?
+                   LE_OK : LE_FAULT;
 
         case LE_AVDATA_DATA_TYPE_BOOL:
-            LE_ASSERT(CborNoError == cbor_encode_boolean(encoder, assetValue.boolValue));
-            break;
+            return (CborNoError == cbor_encode_boolean(encoder, assetValue.boolValue)) ?
+                   LE_OK : LE_FAULT;
 
         case LE_AVDATA_DATA_TYPE_STRING:
         {
             size_t strValLen = strlen(assetValue.strValuePtr);
 
-            LE_ASSERT(strValLen <= (LE_AVDATA_STRING_VALUE_BYTES - 1));
+            if (strValLen > LE_AVDATA_STRING_VALUE_LEN)
+            {
+                LE_ERROR("String len too big (%d). %d chars expected.",
+                         strValLen, LE_AVDATA_STRING_VALUE_LEN);
+                return LE_FAULT;
+            }
 
-            LE_ASSERT(CborNoError == cbor_encode_text_string(encoder,
-                                                             assetValue.strValuePtr,
-                                                             strValLen));
-            break;
+            return (CborNoError ==
+                    cbor_encode_text_string(encoder, assetValue.strValuePtr, strValLen)) ?
+                   LE_OK : LE_FAULT;
         }
         default:
             LE_ERROR("Unexpected data type: %d", type);
-            LE_ASSERT(CborNoError == cbor_encode_text_string(encoder, "(null)", 6));
+            return LE_FAULT;
     }
 }
 
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Perform cbor_value_copy_text_string only if the provided buffer is large enough. Otherwise put
- * "(null)" in the provided buffer.
+ * Perform cbor_value_copy_text_string only if the provided buffer is large enough.
  *
  * @return:
- *      - LE_FAULT if the provided buffer is too small.
+ *      - LE_FAULT on any error.
  *      - LE_OK if success.
  */
 //--------------------------------------------------------------------------------------------------
@@ -750,18 +757,23 @@ static le_result_t CborSafeCopyString
 {
     size_t incomingStrSize;
 
-    cbor_value_calculate_string_length(valuePtr, &incomingStrSize);
+    // Could return fault if the incoming string is so big that the length can't fit in
+    // incomingStrSize.
+    if (CborNoError != cbor_value_calculate_string_length(valuePtr, &incomingStrSize))
+    {
+        return LE_FAULT;
+    }
 
     // need to reserve one byte for the null terminating byte.
     if (incomingStrSize > (*strSizePtr-1))
     {
         LE_ERROR("Encoded string (%d bytes) too big. Max %d bytes expected.",
                  incomingStrSize, (*strSizePtr-1));
-        strncpy(str, "(null)", 6);
         return LE_FAULT;
     }
     else
     {
+        // We've already ensured that buffer size is sufficient, so this should not fail.
         LE_ASSERT(CborNoError == cbor_value_copy_text_string(valuePtr, str, strSizePtr, NULL));
         return LE_OK;
     }
@@ -771,9 +783,13 @@ static le_result_t CborSafeCopyString
 //--------------------------------------------------------------------------------------------------
 /**
  * Decode the CBOR value and return the value and type.
+ *
+ * @return:
+ *      - LE_FAULT on any error.
+ *      - LE_OK if success.
  */
 //--------------------------------------------------------------------------------------------------
-static void DecodeAssetData
+static le_result_t DecodeAssetData
 (
     le_avdata_DataType_t* typePtr, ///< [OUT]
     AssetValue_t* assetValuePtr,   ///< [OUT]
@@ -789,7 +805,12 @@ static void DecodeAssetData
             LE_DEBUG(">>>>> decoding string");
             size_t strSize = LE_AVDATA_STRING_VALUE_BYTES;
             assetValuePtr->strValuePtr = le_mem_ForceAlloc(StringPool);
-            CborSafeCopyString(valuePtr, assetValuePtr->strValuePtr, &strSize);
+
+            if (LE_OK != CborSafeCopyString(valuePtr, assetValuePtr->strValuePtr, &strSize))
+            {
+                return LE_FAULT;
+            }
+
             *typePtr = LE_AVDATA_DATA_TYPE_STRING;
             break;
         }
@@ -813,8 +834,10 @@ static void DecodeAssetData
 
         default:
             LE_ERROR("Unexpected CBOR type: %d", type);
-            *typePtr = LE_AVDATA_DATA_TYPE_NONE;
+            return LE_FAULT;
     }
+
+    return LE_OK;
 }
 
 
@@ -839,11 +862,19 @@ static int CompareStrings
  * format with the provided CBOR encoder. In the initial call, the "level" parameter controls the
  * path depth the encoding begins at.
  *
+ * In case of any error, this function returns right away and does not perform further encoding, so
+ * the CborEncoder out param (and the associated buffer) would be in an unpredictable state and
+ * should not be used.
+ *
  * Note: The list of paths MUST be grouped at each level. They don't need to be sorted, but a sorted
  * list achieves the same goal.
+ *
+ * @return:
+ *      - LE_FAULT on any error.
+ *      - LE_OK if success.
  */
 //--------------------------------------------------------------------------------------------------
-static void EncodeMultiData
+static le_result_t EncodeMultiData
 (
     char* list[], ///< [IN] List of asset data paths. MUST be grouped at each level.
     CborEncoder* parentCborEncoder, ///< [OUT] Parent CBOR encoder
@@ -854,7 +885,10 @@ static void EncodeMultiData
 {
     // Each range of paths is enclosed in a CBOR map.
     CborEncoder mapNode;
-    cbor_encoder_create_map(parentCborEncoder, &mapNode, CborIndefiniteLength);
+    if (CborNoError != cbor_encoder_create_map(parentCborEncoder, &mapNode, CborIndefiniteLength))
+    {
+        return LE_FAULT;
+    }
 
     char* savedToken = ""; // initialized to an empty string.
     char* currToken = NULL;
@@ -884,21 +918,40 @@ static void EncodeMultiData
             if (strcmp(savedToken, "") != 0)
             {
                 maxCurrRange = i - 1;
-                cbor_encode_text_stringz(&mapNode, savedToken); // Map name of the next recursion
-                EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange, level+1);
+
+                // Encoding the map name of the next recursion first.
+                if ((CborNoError != cbor_encode_text_stringz(&mapNode, savedToken)) ||
+                    (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange, level+1)))
+                {
+                    return LE_FAULT;
+                }
             }
 
             /* CBOR encoding for the leaf node itself. */
 
             // Value name.
-            cbor_encode_text_stringz(&mapNode, currToken);
+            if (CborNoError != cbor_encode_text_stringz(&mapNode, currToken))
+            {
+                return LE_FAULT;
+            }
 
             // Use the path to look up its asset data, and do the corresponding encoding.
             AssetValue_t assetValue;
             le_avdata_DataType_t type;
-            LE_ASSERT(LE_OK == GetVal(list[i], &assetValue, &type, false));
+            le_result_t getValresult = GetVal(list[i], &assetValue, &type, false);
 
-            EncodeAssetData(type, assetValue, &mapNode);
+            if (getValresult != LE_OK)
+            {
+                LE_ERROR("Fail to get asset data at [%s]. Result [%s]",
+                         list[i], LE_RESULT_TXT(getValresult));
+
+                return LE_FAULT;
+            }
+
+            if (LE_OK != EncodeAssetData(type, assetValue, &mapNode))
+            {
+                return LE_FAULT;
+            }
 
             // Reset savedToken
             if (strcmp(savedToken, "") != 0)
@@ -913,8 +966,13 @@ static void EncodeMultiData
             if (strcmp(savedToken, "") != 0)
             {
                 maxCurrRange = i - 1;
-                cbor_encode_text_stringz(&mapNode, savedToken); // Map name of the next recursion
-                EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange, level+1);
+
+                // Encoding the map name of the next recursion first.
+                if ((CborNoError != cbor_encode_text_stringz(&mapNode, savedToken)) ||
+                    (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange, level+1)))
+                {
+                    return LE_FAULT;
+                }
             }
 
             minCurrRange = i;
@@ -940,11 +998,21 @@ static void EncodeMultiData
     if (peekToken != NULL)
     {
         maxCurrRange = i - 1;
-        cbor_encode_text_stringz(&mapNode, savedToken); // Map name of the next recursion
-        EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange, level+1);
+
+        // Encoding the map name of the next recursion first.
+        if ((CborNoError != cbor_encode_text_stringz(&mapNode, savedToken)) ||
+            (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange, level+1)))
+        {
+            return LE_FAULT;
+        }
     }
 
-    cbor_encoder_close_container(parentCborEncoder, &mapNode);
+    if (CborNoError != cbor_encoder_close_container(parentCborEncoder, &mapNode))
+    {
+        return LE_FAULT;
+    }
+
+    return LE_OK;
 }
 
 
@@ -952,6 +1020,10 @@ static void EncodeMultiData
 /**
  * Decode the CBOR data and with the provided path as the base path, set the asset data values for
  * asset data paths.
+ *
+ * In case of any error, this function returns right away and does not perform further decoding, so
+ * the CborValue out param would be in an unpredictable state and should not be used. However, any
+ * values already decoded would have already been set to their corresponding asset data paths.
  *
  * @return:
  *      - LE_FAULT on any error.
@@ -967,11 +1039,13 @@ static le_result_t DecodeMultiData
 {
     // Entering a CBOR map.
     CborValue map;
-    LE_ASSERT(CborNoError == cbor_value_enter_container(valuePtr, &map));
+    if (CborNoError != cbor_value_enter_container(valuePtr, &map))
+    {
+        return LE_FAULT;
+    }
 
     size_t endingPathSegLen = 0;
     bool labelProcessed = false;
-    le_result_t decodeResult = LE_OK;
 
     while (!cbor_value_at_end(&map))
     {
@@ -980,14 +1054,17 @@ static le_result_t DecodeMultiData
         // string should be a label.
         if (!labelProcessed)
         {
-            LE_ASSERT(CborTextStringType == cbor_value_get_type(&map));
+            if (CborTextStringType != cbor_value_get_type(&map))
+            {
+                return LE_FAULT;
+            }
 
             char buf[LE_AVDATA_STRING_VALUE_BYTES] = {0};
             size_t strSize = LE_AVDATA_STRING_VALUE_BYTES;
 
             if (LE_OK != CborSafeCopyString(&map, buf, &strSize))
             {
-                decodeResult = LE_FAULT;
+                return LE_FAULT;
             }
 
             endingPathSegLen = strlen(buf);
@@ -1002,10 +1079,9 @@ static le_result_t DecodeMultiData
             // The value is a map
             if (cbor_value_is_map(&map))
             {
-                le_result_t result = DecodeMultiData(&map, path);
-                if (result != LE_OK)
+                if (LE_OK != DecodeMultiData(&map, path))
                 {
-                    decodeResult = LE_FAULT;
+                    return LE_FAULT;
                 }
 
                 path[strlen(path) - (endingPathSegLen + 1)] = '\0';
@@ -1023,7 +1099,10 @@ static le_result_t DecodeMultiData
             le_avdata_DataType_t type;
             AssetValue_t assetValue;
 
-            DecodeAssetData(&type, &assetValue, &map);
+            if (LE_OK != DecodeAssetData(&type, &assetValue, &map))
+            {
+                return LE_FAULT;
+            }
 
             setValresult = (type == LE_AVDATA_DATA_TYPE_NONE) ?
                            LE_UNSUPPORTED : SetVal(path, assetValue, type, false);
@@ -1033,7 +1112,7 @@ static le_result_t DecodeMultiData
                 LE_ERROR("Fail to change asset data at [%s]. Result [%s]",
                          path, LE_RESULT_TXT(setValresult));
 
-                decodeResult = LE_FAULT;
+                return LE_FAULT;
             }
 
             path[strlen(path) - (endingPathSegLen + 1)] = '\0';
@@ -1041,11 +1120,18 @@ static le_result_t DecodeMultiData
             labelProcessed = false;
         }
 
-        cbor_value_advance(&map);
+        if (CborNoError != cbor_value_advance(&map))
+        {
+            return LE_FAULT;
+        }
     }
 
-    cbor_value_leave_container(valuePtr, &map);
-    return decodeResult;
+    if (CborNoError != cbor_value_leave_container(valuePtr, &map))
+    {
+        return LE_FAULT;
+    }
+
+    return LE_OK;
 }
 
 
@@ -1068,7 +1154,10 @@ static le_result_t CreateArgList
     CborParser parser;
     CborValue value, recursed;
 
-    cbor_parser_init(payload, payloadLen, 0, &parser, &value);
+    if (CborNoError != cbor_parser_init(payload, payloadLen, 0, &parser, &value))
+    {
+        return LE_BAD_PARAMETER;
+    }
 
     if (!cbor_value_is_map(&value))
     {
@@ -1076,7 +1165,10 @@ static le_result_t CreateArgList
     }
 
     // Decode data in payload, and construct the argument list.
-    cbor_value_enter_container(&value, &recursed);
+    if (CborNoError != cbor_value_enter_container(&value, &recursed))
+    {
+        return LE_BAD_PARAMETER;
+    }
 
     bool labelProcessed = false;
     Argument_t* argPtr = NULL;
@@ -1088,13 +1180,18 @@ static le_result_t CreateArgList
         // string should be a label.
         if (!labelProcessed)
         {
-            LE_ASSERT(CborTextStringType == cbor_value_get_type(&recursed));
+            if (CborTextStringType != cbor_value_get_type(&recursed))
+            {
+                LE_ERROR("Expect a text string for argument name, but didn't get it.");
+                return LE_BAD_PARAMETER;
+            }
 
             char buf[LE_AVDATA_STRING_VALUE_BYTES] = {0};
             size_t strSize = LE_AVDATA_STRING_VALUE_BYTES;
 
             if (LE_OK != CborSafeCopyString(&recursed, buf, &strSize))
             {
+                LE_ERROR("Fail to decode an argument name.");
                 return LE_BAD_PARAMETER;
             }
 
@@ -1135,12 +1232,9 @@ static le_result_t CreateArgList
         }
         else
         {
-            DecodeAssetData(&(argPtr->argValType), &(argPtr->argValue), &recursed);
-
-            if (argPtr->argValType == LE_AVDATA_DATA_TYPE_NONE)
+            if (LE_OK != DecodeAssetData(&(argPtr->argValType), &(argPtr->argValue), &recursed))
             {
-                LE_ERROR("Server attempts to execute a command, but payload \
-                         contains unexpected CBOR type");
+                LE_ERROR("Fail to decode an argument value.");
                 return LE_BAD_PARAMETER;
             }
 
@@ -1148,10 +1242,16 @@ static le_result_t CreateArgList
             argPtr = NULL;
         }
 
-        cbor_value_advance(&recursed);
+        if (CborNoError != cbor_value_advance(&recursed))
+        {
+            return LE_BAD_PARAMETER;
+        }
     }
 
-    cbor_value_leave_container(&value, &recursed);
+    if (CborNoError != cbor_value_leave_container(&value, &recursed))
+    {
+        return LE_BAD_PARAMETER;
+    }
 
     return LE_OK;
 }
@@ -1194,28 +1294,35 @@ static void ProcessAvServerReadRequest
     AssetValue_t assetValue;
     le_avdata_DataType_t type;
 
-    le_result_t result = GetVal(path, &assetValue, &type, false);
+    le_result_t getValResult = GetVal(path, &assetValue, &type, false);
 
-    if (result == LE_OK)
+    if (getValResult == LE_OK)
     {
         LE_DEBUG(">>>>> Reading single data point.");
 
         // Encode the asset data value.
         uint8_t buf[CBOR_DECODER_BUFFER_BYTES] = {0};
         CborEncoder encoder;
-        cbor_encoder_init(&encoder, (uint8_t*)&buf, sizeof(buf), 0);
+        cbor_encoder_init(&encoder, (uint8_t*)&buf, sizeof(buf), 0); // no error check needed.
 
-        EncodeAssetData(type, assetValue, &encoder);
-
-        RespondToAvServer(COAP_CONTENT_AVAILABLE, buf, cbor_encoder_get_buffer_size(&encoder, buf));
+        if (LE_OK == EncodeAssetData(type, assetValue, &encoder))
+        {
+            RespondToAvServer(COAP_CONTENT_AVAILABLE, buf,
+                              cbor_encoder_get_buffer_size(&encoder, buf));
+        }
+        else
+        {
+            LE_DEBUG(">>>>> Fail to encode single data point.");
+            RespondToAvServer(COAP_INTERNAL_ERROR, NULL, 0);
+        }
     }
-    else if (result == LE_NOT_PERMITTED)
+    else if (getValResult == LE_NOT_PERMITTED)
     {
         LE_DEBUG(">>>>> no permission.");
 
         RespondToAvServer(COAP_METHOD_UNAUTHORIZED, NULL, 0);
     }
-    else if (result == LE_NOT_FOUND)
+    else if (getValResult == LE_NOT_FOUND)
     {
         // The path contain children nodes, so there might be multiple asset data under it.
         if (IsPathParent(path))
@@ -1263,24 +1370,30 @@ static void ProcessAvServerReadRequest
             uint8_t buf[CBOR_DECODER_BUFFER_BYTES] = {0};
             CborEncoder rootNode;
 
-            cbor_encoder_init(&rootNode, (uint8_t*)&buf, sizeof(buf), 0);
+            cbor_encoder_init(&rootNode, (uint8_t*)&buf, sizeof(buf), 0); // no error check needed.
 
-            EncodeMultiData(pathArray, &rootNode, 0, (pathArrayIdx - 1), (levelCount + 1));
-
-            RespondToAvServer(COAP_CONTENT_AVAILABLE,
-                              buf, cbor_encoder_get_buffer_size(&rootNode, buf));
+            if (LE_OK ==
+                EncodeMultiData(pathArray, &rootNode, 0, (pathArrayIdx - 1), (levelCount + 1)))
+            {
+                RespondToAvServer(COAP_CONTENT_AVAILABLE,
+                                  buf, cbor_encoder_get_buffer_size(&rootNode, buf));
+            }
+            else
+            {
+                LE_DEBUG(">>>>> Fail to encode multiple data points.");
+                RespondToAvServer(COAP_INTERNAL_ERROR, NULL, 0);
+            }
         }
         // The path contains no children nodes.
         else
         {
             LE_DEBUG(">>>>> path not found and isn't parent path. Replying 'not found'");
-
             RespondToAvServer(COAP_RESOURCE_NOT_FOUND, NULL, 0);
         }
     }
     else
     {
-        LE_FATAL("Unexpected result status: %s", LE_RESULT_TXT(result));
+        LE_FATAL("Unexpected GetVal result: %s", LE_RESULT_TXT(getValResult));
     }
 }
 
@@ -1302,7 +1415,11 @@ static void ProcessAvServerWriteRequest
     CborParser parser;
     CborValue value;
 
-    cbor_parser_init(payload, payloadLen, 0, &parser, &value);
+    if (CborNoError != cbor_parser_init(payload, payloadLen, 0, &parser, &value))
+    {
+        RespondToAvServer(COAP_BAD_REQUEST, NULL, 0);
+        return;
+    }
 
     // The payload would either contain a value for a single data point, or a map.
     if (cbor_value_is_map(&value))
@@ -1356,28 +1473,34 @@ static void ProcessAvServerWriteRequest
         AssetValue_t assetValue;
         CoapResponseCode_t code;
 
-        DecodeAssetData(&type, &assetValue, &value);
-
-        result = (type == LE_AVDATA_DATA_TYPE_NONE) ?
-                 LE_UNSUPPORTED : SetVal(path, assetValue, type, false);
-
-        switch (result)
+        if (LE_OK != DecodeAssetData(&type, &assetValue, &value))
         {
-            case LE_OK:
-                code = COAP_RESOURCE_CHANGED;
-                break;
-            case LE_NOT_PERMITTED:
-                code = COAP_METHOD_UNAUTHORIZED;
-                break;
-            case LE_NOT_FOUND:
-                code = COAP_RESOURCE_NOT_FOUND;
-                break;
-            case LE_UNSUPPORTED:
-                code = COAP_BAD_REQUEST;
-                break;
-            default:
-                LE_ERROR("Unexpected result.");
-                code = COAP_INTERNAL_ERROR;
+            LE_DEBUG(">>>>> Fail to decode single data point.");
+            code = COAP_INTERNAL_ERROR;
+        }
+        else
+        {
+            result = (type == LE_AVDATA_DATA_TYPE_NONE) ?
+                     LE_UNSUPPORTED : SetVal(path, assetValue, type, false);
+
+            switch (result)
+            {
+                case LE_OK:
+                    code = COAP_RESOURCE_CHANGED;
+                    break;
+                case LE_NOT_PERMITTED:
+                    code = COAP_METHOD_UNAUTHORIZED;
+                    break;
+                case LE_NOT_FOUND:
+                    code = COAP_RESOURCE_NOT_FOUND;
+                    break;
+                case LE_UNSUPPORTED:
+                    code = COAP_BAD_REQUEST;
+                    break;
+                default:
+                    LE_ERROR("Unexpected result.");
+                    code = COAP_INTERNAL_ERROR;
+            }
         }
 
         RespondToAvServer(code, NULL, 0);
@@ -1462,7 +1585,11 @@ static void AvServerRequestHandler
     // le_avdata_ReplyExecResult is called at the end of the command execution,
     // it can async reply AV server with them.
     AVCClientSessionContext = avcClient_GetContext();
-    LE_ASSERT(AVCClientSessionContext != 0);
+    if (0 == AVCClientSessionContext)
+    {
+        LE_ERROR("Cannot get AVC client session context. Stop processing AV server request.");
+        return;
+    }
 
     AVServerReqRef = serverReqRef;
 
@@ -1577,6 +1704,7 @@ void le_avdata_RemoveResourceEventHandler
  *      - LE_OK on success
  *      - LE_DUPLICATE if path has already been called by CreateResource before, or path is parent
  *        or child to an existing Asset Data path.
+ *      - LE_FAULT on any other error.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avdata_CreateResource
@@ -1592,18 +1720,32 @@ le_result_t le_avdata_CreateResource
         return LE_DUPLICATE;
     }
 
+    // Check if the asset data path is legal.
+    if (IsAssetDataPathValid(path) != true)
+    {
+        LE_ERROR("Invalid asset data path [%s].", path);
+        return LE_FAULT;
+    }
+
+    // Convert access mode to access bitmasks.
+    le_avdata_AccessType_t serverAccess, clientAccess;
+    if ((ConvertAccessModeToServerAccess(accessMode, &serverAccess) != LE_OK) ||
+        (ConvertAccessModeToClientAccess(accessMode, &clientAccess) != LE_OK))
+    {
+        LE_KILL_CLIENT("Invalid access mode [%d].", accessMode);
+    }
+
     char* assetPathPtr = le_mem_ForceAlloc(AssetPathPool);
     AssetData_t* assetDataPtr = le_mem_ForceAlloc(AssetDataPool);
 
-    // Check if the asset data path is legal.
-    LE_ASSERT(IsAssetDataPathValid(path) == true);
+    // Copy path to our internal record. Overflow should never occur.
     LE_ASSERT(le_utf8_Copy(assetPathPtr, path, LE_AVDATA_PATH_NAME_BYTES, NULL) == LE_OK);
 
     // Initialize the asset data.
     // Note that the union field is zeroed out by the memset.
     memset(assetDataPtr, 0, sizeof(AssetData_t));
-    LE_ASSERT(ConvertAccessModeToServerAccess(accessMode, &(assetDataPtr->serverAccess)) == LE_OK);
-    LE_ASSERT(ConvertAccessModeToClientAccess(accessMode, &(assetDataPtr->clientAccess)) == LE_OK);
+    assetDataPtr->serverAccess = serverAccess;
+    assetDataPtr->clientAccess = clientAccess;
     assetDataPtr->dataType = LE_AVDATA_DATA_TYPE_NONE;
     assetDataPtr->handlerPtr = NULL;
     assetDataPtr->contextPtr = NULL;
@@ -1844,7 +1986,7 @@ le_result_t le_avdata_GetString
 (
     const char* path,       ///< [IN] Asset data path
     char* value,            ///< [OUT] Retrieved string
-    size_t valueNumElements ///< [IN] String buffer size
+    size_t valueNumElements ///< [IN] String buffer size in bytes
 )
 {
     AssetValue_t assetValue;
