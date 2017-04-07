@@ -57,5 +57,6 @@ bindings:
     avcDaemon.avcDaemon.le_rtc  -> modemService.le_rtc
     avcDaemon.avcDaemon.le_sim  -> modemService.le_sim
     avcDaemon.avcDaemon.le_pos -> positioningService.le_pos
+    avcDaemon.avcDaemon.le_gnss -> positioningService.le_gnss
     avcDaemon.avcDaemon.secStoreGlobal -> secStore.secStoreGlobal
 }

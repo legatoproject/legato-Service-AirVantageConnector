@@ -21,6 +21,7 @@ requires:
         modemServices/le_mrc.api
         modemServices/le_rtc.api
         modemServices/le_sim.api
+        positioning/le_gnss.api
         positioning/le_pos.api
         le_appInfo.api
         le_fwupdate.api
@@ -47,6 +48,7 @@ sources:
     ../avcClient/avcClient.c
     ../avcClient/osPortConnectivity.c
     ../avcClient/osPortDevice.c
+    ../avcClient/osPortLocation.c
     ../avcClient/osPortSecurity.c
     ../avcClient/osPortUpdate.c
     ../avcClient/osPortParamStorage.c
