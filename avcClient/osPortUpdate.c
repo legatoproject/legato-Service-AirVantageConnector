@@ -39,7 +39,7 @@ static void LaunchUpdateTimerExpiryHandler
             LE_DEBUG("Launch FW update");
             if (LE_OK == packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING))
             {
-                le_fwupdate_DualSysSwap();
+                le_fwupdate_Install();
             }
             else
             {

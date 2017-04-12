@@ -162,22 +162,7 @@ static int PackageEventHandler
     switch (status.event)
     {
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_DETAILS:
-            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
-            {
-                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_PENDING, LE_AVC_FIRMWARE_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
-            }
-            else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
-            {
-                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_PENDING, LE_AVC_APPLICATION_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
-            }
-            else
-            {
-                LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
-            }
+            // Download pending notification will be sent through user agreement.
             break;
 
         case LWM2MCORE_EVENT_DOWNLOAD_PROGRESS:

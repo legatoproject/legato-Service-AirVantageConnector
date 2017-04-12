@@ -609,7 +609,17 @@ void* packageDownloader_StoreFwPackage
     // Initialize the fwupdate process, except for a download resume
     if (!dwlCtxPtr->resume)
     {
-        if (LE_OK != le_fwupdate_InitDownload())
+        result = le_fwupdate_InitDownload();
+
+        if (LE_UNSUPPORTED == result)
+        {
+            LE_DEBUG("Init download not supported");
+        }
+        else if (LE_OK == result)
+        {
+            LE_DEBUG("Init download successful");
+        }
+        else
         {
             LE_ERROR("Failed to initialize fwupdate");
             return (void *)-1;
