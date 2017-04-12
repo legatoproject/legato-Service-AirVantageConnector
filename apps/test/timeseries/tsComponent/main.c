@@ -678,6 +678,143 @@ void PushMix_03()
 }
 
 
+void PushMix_04()
+{
+    le_avdata_RecordRef_t recRef = le_avdata_CreateRecord();
+
+/*
+RecordString TsVarString = 20170410-153946 @ 1485134809
+RecordInt TsVarInt = 15140 @ 1485134812
+RecordBool TsVarBool = 1 @ 1485134815
+RecordFloat TsVarFloat = 1.075843 @ 1485134818
+*/
+    LE_ASSERT(le_avdata_RecordString(recRef, "TsVarString", "20170410-153946", 1485134809) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 15140, 1485134812) == LE_OK);
+    LE_ASSERT(le_avdata_RecordBool(recRef, "TsVarBool", true, 1485134815) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 1.075843, 1485134818) == LE_OK);
+
+/*
+RecordString TsVarString = 20170410-153951 @ 1485139808
+RecordInt TsVarInt = 15587 @ 1485139810
+RecordBool TsVarBool = 0 @ 1485139811
+RecordFloat TsVarFloat = 0.494045 @ 1485139813
+*/
+    LE_ASSERT(le_avdata_RecordString(recRef, "TsVarString", "20170410-153951", 1485139808) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 15587, 1485139810) == LE_OK);
+    LE_ASSERT(le_avdata_RecordBool(recRef, "TsVarBool", false, 1485139811) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 0.494045, 1485139813) == LE_OK);
+
+/*
+RecordString TsVarString = 20170410-153956 @ 1485144808
+RecordInt TsVarInt = 2086 @ 1485144810
+RecordBool TsVarBool = 1 @ 1485144812
+RecordFloat TsVarFloat = 1.483310 @ 1485144813
+*/
+    LE_ASSERT(le_avdata_RecordString(recRef, "TsVarString", "20170410-153956", 1485144808) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 2086, 1485144810) == LE_OK);
+    LE_ASSERT(le_avdata_RecordBool(recRef, "TsVarBool", true, 1485144812) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 1.483310, 1485144813) == LE_OK);
+
+/*
+RecordString TsVarString = 20170410-154001 @ 1485149808
+RecordInt TsVarInt = 8967 @ 1485149810
+RecordBool TsVarBool = 0 @ 1485149812
+RecordFloat TsVarFloat = 13.533650 @ 1485149814
+*/
+    LE_ASSERT(le_avdata_RecordString(recRef, "TsVarString", "20170410-154001", 1485149808) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 8967, 1485149810) == LE_OK);
+    LE_ASSERT(le_avdata_RecordBool(recRef, "TsVarBool", false, 1485149812) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 13.533650, 1485149814) == LE_OK);
+
+/*
+RecordString TsVarString = 20170410-154006 @ 1485154808
+RecordInt TsVarInt = 8752 @ 1485154810
+RecordBool TsVarBool = 1 @ 1485154813
+RecordFloat TsVarFloat = 1.001101 @ 1485154814
+*/
+    LE_ASSERT(le_avdata_RecordString(recRef, "TsVarString", "20170410-154006", 1485154808) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 8752, 1485154810) == LE_OK);
+    LE_ASSERT(le_avdata_RecordBool(recRef, "TsVarBool", true, 1485154813) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 1.001101, 1485154814) == LE_OK);
+
+/*
+RecordString TsVarString = 20170410-154011 @ 1485159808
+RecordInt TsVarInt = 14717 @ 1485159811
+RecordBool TsVarBool = 0 @ 1485159813
+RecordFloat TsVarFloat = 0.384943 @ 1485159815
+*/
+    LE_ASSERT(le_avdata_RecordString(recRef, "TsVarString", "20170410-154011", 1485159808) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 14717, 1485159811) == LE_OK);
+    LE_ASSERT(le_avdata_RecordBool(recRef, "TsVarBool", false, 1485159813) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat",  0.384943, 1485159815) == LE_OK);
+
+
+/*
+RecordString TsVarString = 20170410-154016 @ 1485164808
+RecordInt TsVarInt = 3013 @ 1485164811
+RecordBool TsVarBool = 1 @ 1485164813
+RecordFloat TsVarFloat = 0.514709 @ 1485164816
+*/
+    LE_ASSERT(le_avdata_RecordString(recRef, "TsVarString", "20170410-154016", 1485164808) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 3013, 1485164811) == LE_OK);
+    LE_ASSERT(le_avdata_RecordBool(recRef, "TsVarBool", true, 1485164813) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 0.514709, 1485164816) == LE_OK);
+
+
+/*
+RecordString TsVarString = 20170410-154021 @ 1485169808
+RecordInt TsVarInt = 3903 @ 1485169811
+RecordBool TsVarBool = 0 @ 1485169814
+RecordFloat TsVarFloat = 0.500076 @ 1485169816
+*/
+    LE_ASSERT(le_avdata_RecordString(recRef, "TsVarString", "20170410-154021", 1485169808) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 3903, 1485169811) == LE_OK);
+    LE_ASSERT(le_avdata_RecordBool(recRef, "TsVarBool", false, 1485169814) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 0.500076, 1485169816) == LE_OK);
+
+/*
+RecordString TsVarString = 20170410-154026 @ 1485174808
+RecordInt TsVarInt = 6758 @ 1485174811
+RecordBool TsVarBool = 1 @ 1485174814
+RecordFloat TsVarFloat = 1.442721 @ 1485174817
+*/
+    LE_ASSERT(le_avdata_RecordString(recRef, "TsVarString", "20170410-154026", 1485174808) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 6758, 1485174811) == LE_OK);
+    LE_ASSERT(le_avdata_RecordBool(recRef, "TsVarBool", true, 1485174814) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 1.442721, 1485174817) == LE_OK);
+
+/*
+RecordString TsVarString = 20170410-154031 @ 1485179808
+RecordInt TsVarInt = 15771 @ 1485179811
+RecordBool TsVarBool = 0 @ 1485179814
+RecordFloat TsVarFloat = 0.510231 @ 1485179817
+*/
+    LE_ASSERT(le_avdata_RecordString(recRef, "TsVarString", "20170410-154031", 1485179808) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 15771, 1485179811) == LE_OK);
+    LE_ASSERT(le_avdata_RecordBool(recRef, "TsVarBool", false, 1485179814) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 0.510231, 1485179817) == LE_OK);
+
+    LE_ASSERT(le_avdata_PushRecord(recRef, PushCallbackHandler, NULL) == LE_OK);
+}
+
+
+void PushMix_05()
+{
+    le_avdata_RecordRef_t recRef = le_avdata_CreateRecord();
+
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 15140, 1485134812) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 15150, 1485134814) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 1.075843, 1485134818) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 2.075843, 1485134820) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 15160, 1485134816) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 15170, 1485134818) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 3.075843, 1485134822) == LE_OK);
+    LE_ASSERT(le_avdata_RecordFloat(recRef, "TsVarFloat", 4.075843, 1485134824) == LE_OK);
+
+    LE_ASSERT(le_avdata_PushRecord(recRef, PushCallbackHandler, NULL) == LE_OK);
+}
+
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Component initializer.  Must return when done initializing.
@@ -773,6 +910,12 @@ COMPONENT_INIT
             break;
         case 26:
             PushMix_03();
+            break;
+        case 27:
+            PushMix_04();
+            break;
+        case 28:
+            PushMix_05();
             break;
         default:
             LE_INFO("Invalid test case");

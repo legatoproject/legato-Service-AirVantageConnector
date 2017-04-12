@@ -162,10 +162,12 @@ TimestampData_t;
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    char name[LE_AVDATA_PATH_NAME_BYTES];     ///< The name of the resource
+    char name[LE_AVDATA_PATH_NAME_BYTES];   ///< The name of the resource
     DataTypes_t type;                       ///< The type of the resource
     le_hashmap_Ref_t data;                  ///< Table of data accumulated over time
     double factor;                          ///< Factor of data
+    int32_t lastIntValue;                   ///< Last recorded int value
+    double lastFloatValue;                  ///< Last recorded float value
     le_dls_Link_t link;                     ///< For adding to the resource list
 }
 ResourceData_t;
@@ -411,6 +413,29 @@ static void ClearResource
         le_hashmap_RemoveAll(resourceDataPtr->data);
         le_mem_Release(resourceDataPtr);
         linkPtr = le_dls_Pop(&recRef->resourceList);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Reset the last valid value stored
+ */
+//--------------------------------------------------------------------------------------------------
+static void ResetResourceLastValue
+(
+    timeSeries_RecordRef_t recRef
+)
+{
+    le_dls_Link_t* linkPtr = le_dls_Peek(&recRef->resourceList);
+    ResourceData_t* resourceDataPtr;
+
+    while ( linkPtr != NULL )
+    {
+        resourceDataPtr = CONTAINER_OF(linkPtr, ResourceData_t, link);
+        resourceDataPtr->lastIntValue = 0;
+        resourceDataPtr->lastFloatValue = 0;
+        linkPtr = le_dls_PeekNext(&recRef->resourceList, linkPtr);
     }
 }
 
@@ -703,7 +728,6 @@ static le_result_t EncodeResourceDeltaValue
     int prevIntValue;
     double prevFloatValue;
 
-    // prev timestamp being null means this is the first set of data
     if (prevTimestampPtr != NULL)
     {
         prevValuePtr = (Data_t*)le_hashmap_Get(resourceDataPtr->data, prevTimestampPtr->timestamp);
@@ -719,10 +743,9 @@ static le_result_t EncodeResourceDeltaValue
             }
             else
             {
-                // If there is no previous value on the last timestamp, just give it a default value
                 if (!le_hashmap_ContainsKey(resourceDataPtr->data, prevTimestampPtr->timestamp))
                 {
-                    prevIntValue = 0;
+                    prevIntValue = resourceDataPtr->lastIntValue;
                 }
                 else
                 {
@@ -732,6 +755,7 @@ static le_result_t EncodeResourceDeltaValue
                 intDelta = (valuePtr->intValue - prevIntValue) * resourceDataPtr->factor;
             }
 
+            resourceDataPtr->lastIntValue = valuePtr->intValue;
             err = cbor_encode_int(&recRef->sampleArray, intDelta);
             RETURN_IF_CBOR_ERROR(err);
             break;
@@ -743,10 +767,9 @@ static le_result_t EncodeResourceDeltaValue
             }
             else
             {
-                // If there is no previous value on the last timestamp, just give it a default value
                 if (!le_hashmap_ContainsKey(resourceDataPtr->data, prevTimestampPtr->timestamp))
                 {
-                    prevFloatValue = 0.0;
+                    prevFloatValue = resourceDataPtr->lastFloatValue;
                 }
                 else
                 {
@@ -756,6 +779,7 @@ static le_result_t EncodeResourceDeltaValue
                 floatDelta = (valuePtr->floatValue - prevFloatValue) * resourceDataPtr->factor;
             }
 
+            resourceDataPtr->lastFloatValue = valuePtr->floatValue;
             err = cbor_encode_double(&recRef->sampleArray, floatDelta);
             RETURN_IF_CBOR_ERROR(err);
             break;
@@ -811,11 +835,12 @@ static le_result_t EncodeResourceDataToCborArray
         uint64_t timestamp;
         if (prevTimestampPtr == NULL)
         {
+            ResetResourceLastValue(recRef);
             timestamp = *(timestampPtr->timestamp) * recRef->timestampFactor;
         }
         else
         {
-            uint deltaTimestamp = (*(timestampPtr->timestamp) - *(prevTimestampPtr->timestamp));
+            uint64_t deltaTimestamp = (*(timestampPtr->timestamp) - *(prevTimestampPtr->timestamp));
             timestamp = deltaTimestamp * recRef->timestampFactor;
         }
 
@@ -1108,6 +1133,8 @@ static le_result_t CreateResourceData
     else
     {
         resourceDataPtr->factor = 1;
+        resourceDataPtr->lastIntValue = 0;
+        resourceDataPtr->lastFloatValue = 0;
     }
 
     if (resourceDataPtr->data == NULL)
