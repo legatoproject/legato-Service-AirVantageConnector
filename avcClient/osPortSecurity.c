@@ -21,11 +21,6 @@
 #include "legato.h"
 #include "interfaces.h"
 
-//--------------------------------------------------------------------------------------------------
-/**
- *                  OBJECT 0: SECURITY
- */
-//--------------------------------------------------------------------------------------------------
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -121,8 +116,7 @@ lwm2mcore_Sid_t lwm2mcore_SetCredential
 (
     lwm2mcore_Credentials_t credId,         ///< [IN] credential Id of credential to be set
     char* bufferPtr,                        ///< [INOUT] data buffer
-    size_t len                              ///< [IN] length of input buffer and length of the
-                                            ///< returned data
+    size_t len                              ///< [IN] length of input buffer
 )
 {
     if ((bufferPtr == NULL) || (credId >= LWM2MCORE_CREDENTIAL_MAX))
@@ -189,7 +183,7 @@ bool lwm2mcore_CheckCredential
 
 //--------------------------------------------------------------------------------------------------
 /**
- * This function erases one credential from NV storage
+ * This function erases one credential from platform storage
  *
  * @return
  *      - true if the credential is deleted

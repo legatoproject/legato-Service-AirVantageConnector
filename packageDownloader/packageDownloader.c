@@ -122,7 +122,7 @@ le_result_t packageDownloader_Init
     unsigned char pemKeyPtr[MAX_CERT_LEN] = "\0";
     struct stat st;
     uint8_t derKey[MAX_CERT_LEN] = "\0";
-    size_t derKeyLen;
+    size_t derKeyLen = MAX_CERT_LEN;
     int pemKeyLen = MAX_CERT_LEN;
     le_result_t result;
 
@@ -141,7 +141,7 @@ le_result_t packageDownloader_Init
         return LE_FAULT;
     }
 
-    result = avc_FsRead(DERCERT_PATH, derKey, &derKeyLen);
+    result = ReadFs(DERCERT_PATH, derKey, &derKeyLen);
     if (LE_OK != result)
     {
         LE_ERROR("using default DER key");
@@ -186,9 +186,9 @@ le_result_t packageDownloader_SetFwUpdateState
 {
     le_result_t result;
 
-    result = avc_FsWrite(FW_UPDATE_STATE_PATH,
-                         (uint8_t *)&fwUpdateState,
-                         sizeof(lwm2mcore_FwUpdateState_t));
+    result = WriteFs(FW_UPDATE_STATE_PATH,
+                     (uint8_t *)&fwUpdateState,
+                     sizeof(lwm2mcore_FwUpdateState_t));
     if (LE_OK != result)
     {
         LE_ERROR("Failed to write %s: %s", FW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
@@ -214,9 +214,9 @@ le_result_t packageDownloader_SetFwUpdateResult
 {
     le_result_t result;
 
-    result = avc_FsWrite(FW_UPDATE_RESULT_PATH,
-                         (uint8_t *)&fwUpdateResult,
-                         sizeof(lwm2mcore_FwUpdateResult_t));
+    result = WriteFs(FW_UPDATE_RESULT_PATH,
+                     (uint8_t *)&fwUpdateResult,
+                     sizeof(lwm2mcore_FwUpdateResult_t));
     if (LE_OK != result)
     {
         LE_ERROR("Failed to write %s: %s", FW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
@@ -252,7 +252,7 @@ le_result_t packageDownloader_GetFwUpdateState
     }
 
     size = sizeof(lwm2mcore_FwUpdateState_t);
-    result = avc_FsRead(FW_UPDATE_STATE_PATH, (uint8_t *)&updateState, &size);
+    result = ReadFs(FW_UPDATE_STATE_PATH, (uint8_t *)&updateState, &size);
     if (LE_OK != result)
     {
         if (LE_NOT_FOUND == result)
@@ -296,7 +296,7 @@ le_result_t packageDownloader_GetFwUpdateResult
     }
 
     size = sizeof(lwm2mcore_FwUpdateResult_t);
-    result = avc_FsRead(FW_UPDATE_RESULT_PATH, (uint8_t *)&updateResult, &size);
+    result = ReadFs(FW_UPDATE_RESULT_PATH, (uint8_t *)&updateResult, &size);
     if (LE_OK != result)
     {
         if (LE_NOT_FOUND == result)

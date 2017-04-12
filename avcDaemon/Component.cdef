@@ -49,6 +49,7 @@ sources:
     ../avcClient/osPortDevice.c
     ../avcClient/osPortSecurity.c
     ../avcClient/osPortUpdate.c
+    ../avcClient/osPortParamStorage.c
     ../avcAppUpdate/avcAppUpdate.c
     ../packageDownloader/packageDownloaderCallbacks.c
     ../packageDownloader/packageDownloader.c
@@ -66,6 +67,7 @@ sources:
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/objects.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/objectsTable.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/handlers.c
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/utils.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader/lwm2mcorePackageDownloader.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/lwm2mcoreCoapHandlers.c
 
