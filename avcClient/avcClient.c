@@ -327,9 +327,7 @@ static int EventHandler
     {
         case LWM2MCORE_EVENT_SESSION_STARTED:
             LE_DEBUG("Session start");
-            avcServer_UpdateHandler(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
-                                    0, 0, LE_AVC_ERR_NONE);
-        break;
+            break;
 
         case LWM2MCORE_EVENT_SESSION_FAILED:
             LE_ERROR("Session failure");
@@ -357,6 +355,8 @@ static int EventHandler
             else
             {
                 LE_DEBUG("Connected to DM");
+                avcServer_UpdateHandler(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
+                                        0, 0, LE_AVC_ERR_NONE);
             }
             break;
 
