@@ -1388,7 +1388,7 @@ static void ProcessAvServerReadRequest
         else
         {
             LE_DEBUG(">>>>> path not found and isn't parent path. Replying 'not found'");
-            RespondToAvServer(COAP_RESOURCE_NOT_FOUND, NULL, 0);
+            RespondToAvServer(COAP_NOT_FOUND, NULL, 0);
         }
     }
     else
@@ -1492,7 +1492,7 @@ static void ProcessAvServerWriteRequest
                     code = COAP_METHOD_UNAUTHORIZED;
                     break;
                 case LE_NOT_FOUND:
-                    code = COAP_RESOURCE_NOT_FOUND;
+                    code = COAP_NOT_FOUND;
                     break;
                 case LE_UNSUPPORTED:
                     code = COAP_BAD_REQUEST;
@@ -1530,43 +1530,49 @@ static void ProcessAvServerExecRequest
         if ((assetDataPtr->serverAccess & LE_AVDATA_ACCESS_EXEC) != LE_AVDATA_ACCESS_EXEC)
         {
             LE_ERROR("Server attempts to execute on an asset data without execute permission.");
-
             RespondToAvServer(COAP_METHOD_UNAUTHORIZED, NULL, 0);
         }
         else
         {
-            le_result_t result = CreateArgList(payload, payloadLen, &assetDataPtr->arguments);
-
-            if (result == LE_OK)
+            if (assetDataPtr->handlerPtr == NULL)
             {
-                // Dump argument list (for debug)
-                #if 0
-                DumpArgList(&assetDataPtr->arguments);
-                #endif
-
-                // Create a safe ref with the argument list, and pass that to the handler.
-                ArgListRef = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
-
-                // Execute the command with the argument list collected earlier.
-                assetDataPtr->handlerPtr(path, LE_AVDATA_ACCESS_EXEC, ArgListRef,
-                                         assetDataPtr->contextPtr);
-
-                // Note that we are not repsonding to AV server yet. The response happens when the
-                // client app finishes command execution and calls le_avdata_ReplyExecResult.
+                LE_ERROR("Server attempts to execute a command, but no command defined.");
+                RespondToAvServer(COAP_NOT_FOUND, NULL, 0);
             }
             else
             {
-                LE_ERROR("Server attempts to execute a command but argument list is invalid");
+                le_result_t result = CreateArgList(payload, payloadLen, &assetDataPtr->arguments);
 
-                RespondToAvServer(COAP_BAD_REQUEST, NULL, 0);
+                if (result == LE_OK)
+                {
+                    // Dump argument list (for debug)
+                    #if 0
+                    DumpArgList(&assetDataPtr->arguments);
+                    #endif
+
+                    // Create a safe ref with the argument list, and pass that to the handler.
+                    ArgListRef = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
+
+                    // Execute the command with the argument list collected earlier.
+                    assetDataPtr->handlerPtr(path, LE_AVDATA_ACCESS_EXEC, ArgListRef,
+                                             assetDataPtr->contextPtr);
+
+                    // Note that we are not repsonding to AV server yet. The response happens when
+                    // the client app finishes command execution and calls
+                    // le_avdata_ReplyExecResult.
+                }
+                else
+                {
+                    LE_ERROR("Server attempts to execute a command but argument list is invalid");
+                    RespondToAvServer(COAP_BAD_REQUEST, NULL, 0);
+                }
             }
         }
     }
     else
     {
         LE_ERROR("Server attempts to execute a command but the asset data doesn't exist");
-
-        RespondToAvServer(COAP_RESOURCE_NOT_FOUND, NULL, 0);
+        RespondToAvServer(COAP_NOT_FOUND, NULL, 0);
     }
 }
 
