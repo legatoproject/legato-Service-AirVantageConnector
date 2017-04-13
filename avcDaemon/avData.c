@@ -371,7 +371,7 @@ static le_result_t ConvertAccessModeToClientAccess
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Check if the asset data path is legal. The path cannot resemble a lwm2m object.
+ * Check if the asset data path is legal.
  */
 //--------------------------------------------------------------------------------------------------
 static bool IsAssetDataPathValid
@@ -379,6 +379,13 @@ static bool IsAssetDataPathValid
     const char* path ///< [IN] Asset data path
 )
 {
+    // The path cannot lack a leading slash, or contain a trailing slash.
+    if (('/' != path[0]) || ('/' == path[strlen(path)-1]))
+    {
+        return false;
+    }
+
+    // The path cannot resemble a lwm2m object.
     char* pathDup = strdup(path);
     char* firstLevelPath = strtok(pathDup, "/");
 
