@@ -54,6 +54,36 @@ static le_event_Id_t BsFailureEventId;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Convert an OMA FUMO (Firmware Update Management Object) error to an AVC error code
+ */
+//--------------------------------------------------------------------------------------------------
+static le_avc_ErrorCode_t ConvertFumoErrorCode
+(
+    uint32_t fumoError
+)
+{
+    switch (fumoError)
+    {
+        case 0:
+            return LE_AVC_ERR_NONE;
+
+        case LWM2MCORE_FUMO_CORRUPTED_PKG:
+        case LWM2MCORE_FUMO_UNSUPPORTED_PKG:
+            return LE_AVC_ERR_BAD_PACKAGE;
+
+        case LWM2MCORE_FUMO_FAILED_VALIDATION:
+            return LE_AVC_ERR_SECURITY_FAILURE;
+
+        case LWM2MCORE_FUMO_INVALID_URI:
+        case LWM2MCORE_FUMO_ALTERNATE_DL_ERROR:
+        case LWM2MCORE_FUMO_NO_SUFFICIENT_MEMORY:
+        default:
+            return LE_AVC_ERR_INTERNAL;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  *  Call back registered in LWM2M client for bearer related events
  */
 //--------------------------------------------------------------------------------------------------
@@ -170,13 +200,13 @@ static int PackageEventHandler
             {
                 avcServer_UpdateHandler(LE_AVC_DOWNLOAD_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
                                         status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
+                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateHandler(LE_AVC_DOWNLOAD_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
                                         status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
+                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else
             {
@@ -189,13 +219,13 @@ static int PackageEventHandler
             {
                 avcServer_UpdateHandler(LE_AVC_DOWNLOAD_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
                                         status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
+                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateHandler(LE_AVC_DOWNLOAD_COMPLETE, LE_AVC_APPLICATION_UPDATE,
                                         status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
+                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else
             {
@@ -209,13 +239,13 @@ static int PackageEventHandler
             {
                 avcServer_UpdateHandler(LE_AVC_DOWNLOAD_FAILED, LE_AVC_FIRMWARE_UPDATE,
                                         status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
+                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateHandler(LE_AVC_DOWNLOAD_FAILED, LE_AVC_APPLICATION_UPDATE,
                                         status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
+                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else
             {
@@ -226,15 +256,13 @@ static int PackageEventHandler
         case LWM2MCORE_EVENT_UPDATE_STARTED:
             if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
+                avcServer_UpdateHandler(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
+                                        -1, -1, LE_AVC_ERR_NONE);
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
+                avcServer_UpdateHandler(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
+                                        -1, -1, LE_AVC_ERR_NONE);
             }
             else
             {
@@ -246,14 +274,12 @@ static int PackageEventHandler
             if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
+                                        -1, -1, LE_AVC_ERR_NONE);
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
+                                        -1, -1, LE_AVC_ERR_NONE);
             }
             else
             {
@@ -265,14 +291,12 @@ static int PackageEventHandler
             if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateHandler(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
+                                        -1, -1, ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateHandler(LE_AVC_INSTALL_FAILED, LE_AVC_APPLICATION_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        status.u.pkgStatus.errorCode);
+                                        -1, -1, ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else
             {
@@ -329,7 +353,7 @@ static int EventHandler
         case LWM2MCORE_EVENT_SESSION_FINISHED:
             LE_DEBUG("Session finished");
             avcServer_UpdateHandler(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
-                                    0, 0, LE_AVC_ERR_NONE);
+                                    -1, -1, LE_AVC_ERR_NONE);
             break;
 
         case LWM2MCORE_EVENT_LWM2M_SESSION_TYPE_START:
@@ -341,7 +365,7 @@ static int EventHandler
             {
                 LE_DEBUG("Connected to DM");
                 avcServer_UpdateHandler(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
-                                        0, 0, LE_AVC_ERR_NONE);
+                                        -1, -1, LE_AVC_ERR_NONE);
             }
             break;
 

@@ -37,13 +37,20 @@ static void LaunchUpdateTimerExpiryHandler
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
             LE_DEBUG("Launch FW update");
-            if (LE_OK == packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING))
-            {
-                le_fwupdate_Install();
-            }
-            else
+            avcServer_UpdateHandler(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
+                                    -1, -1, LE_AVC_ERR_NONE);
+            if (LE_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING))
             {
                 LE_ERROR("Unable to set FW update state to UPDATING");
+                return;
+            }
+
+            // This function returns only if there was an error
+            if (LE_OK != le_fwupdate_Install())
+            {
+                 avcServer_UpdateHandler(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
+                                         -1, -1, LE_AVC_ERR_INTERNAL);
+                 packageDownloader_SetFwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_INSTALL_FAILURE);
             }
             break;
 
@@ -753,10 +760,24 @@ lwm2mcore_Sid_t lwm2mcore_GetFirmwareUpdateInstallResult
         if (LE_FWUPDATE_UPDATE_STATUS_OK == fwUpdateStatus)
         {
             newFwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL;
+            avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
+                                    -1, -1, LE_AVC_ERR_NONE);
         }
         else
         {
+            le_avc_ErrorCode_t errorCode;
+
             newFwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_INSTALL_FAILURE;
+            if (LE_FWUPDATE_UPDATE_STATUS_PARTITION_ERROR == fwUpdateStatus)
+            {
+                errorCode = LE_AVC_ERR_BAD_PACKAGE;
+            }
+            else
+            {
+                errorCode = LE_AVC_ERR_INTERNAL;
+            }
+            avcServer_UpdateHandler(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
+                                    -1, -1, errorCode);
         }
         LE_DEBUG("Set FW update result to %d", newFwUpdateResult);
         if (LE_OK != packageDownloader_SetFwUpdateResult(newFwUpdateResult))
