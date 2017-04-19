@@ -19,10 +19,10 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Static context for LWM2MCore
+ * Static instance reference for LWM2MCore
  */
 //--------------------------------------------------------------------------------------------------
-static int Context = 0;
+static lwm2mcore_Ref_t Lwm2mInstanceRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -83,13 +83,13 @@ static void BearerEventCb
         else
         {
             /* Register to the LWM2M agent */
-            if (!lwm2mcore_objectRegister(Context, endpointPtr, NULL, NULL))
+            if (!lwm2mcore_ObjectRegister(Lwm2mInstanceRef, endpointPtr, NULL, NULL))
             {
                 LE_ERROR("ERROR in LWM2M obj reg");
             }
             else
             {
-                result = lwm2mcore_Connect(Context);
+                result = lwm2mcore_Connect(Lwm2mInstanceRef);
                 if (result != true)
                 {
                     LE_ERROR("connect error");
@@ -99,11 +99,11 @@ static void BearerEventCb
     }
     else
     {
-        if (Context)
+        if (NULL != Lwm2mInstanceRef)
         {
             /* The data connection is closed */
-            lwm2mcore_Free(Context);
-            Context = 0;
+            lwm2mcore_Free(Lwm2mInstanceRef);
+            Lwm2mInstanceRef = NULL;
 
             /* Remove the data handler */
             le_data_RemoveConnectionStateHandler(DataHandler);
@@ -397,11 +397,10 @@ le_result_t avcClient_Connect
 )
 {
     le_result_t result = LE_FAULT;
-    LE_DEBUG("Connect Context %d", Context);
 
-    if (!Context)
+    if (NULL == Lwm2mInstanceRef)
     {
-        Context = lwm2mcore_Init(EventHandler);
+        Lwm2mInstanceRef = lwm2mcore_Init(EventHandler);
 
         /* Initialize the bearer */
         /* Open a data connection */
@@ -438,7 +437,7 @@ le_result_t avcClient_Disconnect
     /* If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active */
     if (true == lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
     {
-        if (true == lwm2mcore_Disconnect(Context))
+        if (true == lwm2mcore_Disconnect(Lwm2mInstanceRef))
         {
             /* stop the bearer */
             /* Check that a data connection was opened */
@@ -448,8 +447,8 @@ le_result_t avcClient_Disconnect
                 le_data_Release(DataRef);
             }
             /* The data connection is closed */
-            lwm2mcore_Free(Context);
-            Context = 0;
+            lwm2mcore_Free(Lwm2mInstanceRef);
+            Lwm2mInstanceRef = NULL;
 
             /* Remove the data handler */
             le_data_RemoveConnectionStateHandler(DataHandler);
@@ -478,7 +477,7 @@ le_result_t avcClient_Update
 {
     LE_DEBUG("Registration update");
 
-    if (true == lwm2mcore_Update(Context))
+    if (true == lwm2mcore_Update(Lwm2mInstanceRef))
     {
         return LE_OK;
     }
@@ -507,7 +506,7 @@ le_result_t avcClient_Push
 {
     LE_DEBUG("Push data");
 
-    if (true == lwm2mcore_Push(Context, payload, payloadLength, callback))
+    if (true == lwm2mcore_Push(Lwm2mInstanceRef, payload, payloadLength, callback))
     {
         LE_DEBUG("Push success");
         return LE_OK;
@@ -531,20 +530,20 @@ void avcClient_SendList
     size_t objListLen           ///< [IN] List length
 )
 {
-    lwm2mcore_UpdateSwList(Context, lwm2mObjListPtr, objListLen);
+    lwm2mcore_UpdateSwList(Lwm2mInstanceRef, lwm2mObjListPtr, objListLen);
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Returns the context of this client
+ * Returns the instance reference of this client
  */
 //--------------------------------------------------------------------------------------------------
-int avcClient_GetContext
+lwm2mcore_Ref_t avcClient_GetInstance
 (
     void
 )
 {
-    return Context;
+    return Lwm2mInstanceRef;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -564,7 +563,7 @@ le_avc_SessionType_t avcClient_GetSessionType
 {
     bool isDeviceManagement = false;
 
-    if (lwm2mcore_ConnectionGetType(Context, &isDeviceManagement))
+    if (lwm2mcore_ConnectionGetType(Lwm2mInstanceRef, &isDeviceManagement))
     {
         return (isDeviceManagement ? LE_AVC_DM_SESSION : LE_AVC_BOOTSTRAP_SESSION);
     }
@@ -581,7 +580,7 @@ void BsFailureHandler
     void* reportPtr
 )
 {
-    lwm2mcore_Disconnect(Context);
+    lwm2mcore_Disconnect(Lwm2mInstanceRef);
 }
 
 //--------------------------------------------------------------------------------------------------

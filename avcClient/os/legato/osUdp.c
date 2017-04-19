@@ -173,7 +173,7 @@ static int createSocket
 //--------------------------------------------------------------------------------------------------
 bool lwm2mcore_UdpOpen
 (
-    int context,                            ///< [IN] LWM2M context
+    lwm2mcore_Ref_t instanceRef,            ///< [IN] LWM2M instance reference
     lwm2mcore_UdpCb_t callback,             ///< [IN] callback for data receipt
     lwm2mcore_SocketConfig_t* configPtr     ///< [INOUT] socket configuration
 )
@@ -181,7 +181,7 @@ bool lwm2mcore_UdpOpen
     bool result = false;
 
     /* IP v4 */
-    SocketConfig.context = context;
+    SocketConfig.instanceRef = instanceRef;
     SocketConfig.af = OS_SOCK_AF;
     SocketConfig.type = LWM2MCORE_SOCK_UDP;
     SocketConfig.proto = OS_SOCK_PROTO;

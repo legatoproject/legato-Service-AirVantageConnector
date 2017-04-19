@@ -9,6 +9,7 @@
  *
  */
 
+#include <lwm2mcore/lwm2mcore.h>
 #include <lwm2mcore/coapHandlers.h>
 #include "tinycbor/cbor.h"
 #include "legato.h"
@@ -114,10 +115,10 @@ static const char* InvalidFirstLevelPathNames[] =
 
 //--------------------------------------------------------------------------------------------------
 /**
- * AVC client session context.
+ * AVC client session instance reference.
  */
 //--------------------------------------------------------------------------------------------------
-static int AVCClientSessionContext;
+static lwm2mcore_Ref_t AVCClientSessionInstanceRef;
 
 
 //--------------------------------------------------------------------------------------------------
@@ -1282,7 +1283,7 @@ static void RespondToAvServer
     AVServerResponse.payload = payload;
     AVServerResponse.payloadLength = payloadLength;
 
-    lwm2mcore_SendAsyncResponse(AVCClientSessionContext, AVServerReqRef, &AVServerResponse);
+    lwm2mcore_SendAsyncResponse(AVCClientSessionInstanceRef, AVServerReqRef, &AVServerResponse);
 }
 
 
@@ -1597,8 +1598,8 @@ static void AvServerRequestHandler
     // Save the session context and server request ref, so when reply function such as
     // le_avdata_ReplyExecResult is called at the end of the command execution,
     // it can async reply AV server with them.
-    AVCClientSessionContext = avcClient_GetContext();
-    if (0 == AVCClientSessionContext)
+    AVCClientSessionInstanceRef = avcClient_GetInstance();
+    if (NULL == AVCClientSessionInstanceRef)
     {
         LE_ERROR("Cannot get AVC client session context. Stop processing AV server request.");
         return;
