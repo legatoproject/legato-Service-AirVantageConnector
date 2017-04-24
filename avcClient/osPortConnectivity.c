@@ -24,6 +24,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Value of 1 kilobytes in bytes
+ */
+//--------------------------------------------------------------------------------------------------
+#define KILOBYTE            1000
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Define for maximum string length of the currently used cellular technology
  */
 //--------------------------------------------------------------------------------------------------
@@ -1739,4 +1746,205 @@ lwm2mcore_Sid_t lwm2mcore_GetLac
 
     LE_DEBUG("lwm2mCore_ConnectivityLac result: %d", sID);
     return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the total number of SMS successfully transmitted during the collection period
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetSmsTxCount
+(
+    uint64_t* valuePtr  ///< [INOUT] data buffer
+)
+{
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the total number of SMS successfully received during the collection period
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetSmsRxCount
+(
+    uint64_t* valuePtr  ///< [INOUT] data buffer
+)
+{
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the total amount of data transmitted during the collection period (in kilobytes)
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetTxData
+(
+    uint64_t* valuePtr  ///< [INOUT] data buffer
+)
+{
+    lwm2mcore_Sid_t sID;
+    uint64_t rxBytes, txBytes;
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    if (LE_OK == le_mdc_GetBytesCounters(&rxBytes, &txBytes))
+    {
+        // Amount of data is converted from bytes to kilobytes
+        *valuePtr = txBytes / KILOBYTE;
+        LE_DEBUG("txBytes: %llu -> Tx Data = %llu kB", txBytes, *valuePtr);
+        sID = LWM2MCORE_ERR_COMPLETED_OK;
+    }
+    else
+    {
+        sID= LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    LE_DEBUG("lwm2mcore_GetTxData result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the total amount of data received during the collection period (in kilobytes)
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetRxData
+(
+    uint64_t* valuePtr  ///< [INOUT] data buffer
+)
+{
+    lwm2mcore_Sid_t sID;
+    uint64_t rxBytes, txBytes;
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    if (LE_OK == le_mdc_GetBytesCounters(&rxBytes, &txBytes))
+    {
+        // Amount of data is converted from bytes to kilobytes
+        *valuePtr = rxBytes / KILOBYTE;
+        LE_DEBUG("rxBytes: %llu -> Rx Data = %llu kB", rxBytes, *valuePtr);
+        sID = LWM2MCORE_ERR_COMPLETED_OK;
+    }
+    else
+    {
+        sID= LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    LE_DEBUG("lwm2mcore_GetRxData result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Reset SMS and data counters and start to collect information
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_StartConnectivityCounters
+(
+    void
+)
+{
+    if (LE_OK == le_mdc_ResetBytesCounter())
+    {
+        return LWM2MCORE_ERR_COMPLETED_OK;
+    }
+
+    return LWM2MCORE_ERR_GENERAL_ERROR;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Stop SMS and data counters without resetting the counters
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_StopConnectivityCounters
+(
+    void
+)
+{
+    return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
 }
