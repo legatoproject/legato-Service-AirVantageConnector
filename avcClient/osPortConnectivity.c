@@ -1141,7 +1141,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSignalBars
 
             while ((signalBars < SIGNAL_BARS_RANGE) && (sID != LWM2MCORE_ERR_COMPLETED_OK))
             {
-                if (   (   (UINT32_MAX != rscp)     // 0xFFFFFFFF returned if RSCP not available
+                if (   (   (INT32_MAX != rscp)     // INT32_MAX returned if RSCP not available
                         && ((-rscp) >= SignalBarsTable[SIGNAL_BARS_WITH_RSCP][signalBars])
                        )
                     || ((-ecio) >= SignalBarsTable[SIGNAL_BARS_WITH_ECIO][signalBars])
@@ -1689,8 +1689,16 @@ lwm2mcore_Sid_t lwm2mcore_GetRscp
             {
                 return LWM2MCORE_ERR_GENERAL_ERROR;
             }
-            *valuePtr = rscp;
-            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            if (INT32_MAX == rscp)
+            {
+                // This value means that the value is not available
+                sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            }
+            else
+            {
+                *valuePtr = rscp;
+                sID = LWM2MCORE_ERR_COMPLETED_OK;
+            }
             break;
 
         default:
