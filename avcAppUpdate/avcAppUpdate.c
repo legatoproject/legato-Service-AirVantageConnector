@@ -279,8 +279,7 @@ static bool IsHiddenApp
                 "wifiApTest",
                 "wifiClientTest",
                 "wifiService",
-                "wifiWebAp",
-                "fsService"
+                "wifiWebAp"
             };
 
         for (size_t i = 0; i < NUM_ARRAY_MEMBERS(appList); i++)

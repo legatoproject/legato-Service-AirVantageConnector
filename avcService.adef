@@ -49,7 +49,6 @@ bindings:
     avcDaemon.avcDaemon.le_appInfo -> <root>.le_appInfo
     avcDaemon.avcDaemon.le_update -> <root>.le_update
     avcDaemon.avcDaemon.le_data -> dataConnectionService.le_data
-    avcDaemon.avcDaemon.le_fs -> fsService.le_fs
     avcDaemon.avcDaemon.le_fwupdate -> fwupdateService.le_fwupdate
     avcDaemon.avcDaemon.le_info -> modemService.le_info
     avcDaemon.avcDaemon.le_mdc  -> modemService.le_mdc

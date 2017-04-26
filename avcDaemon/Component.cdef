@@ -28,7 +28,6 @@ requires:
         le_fwupdate.api
         le_update.api
         secStoreGlobal = le_secStore.api
-        le_fs.api
     }
 
     component:

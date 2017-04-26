@@ -545,7 +545,6 @@ void* packageDownloader_DownloadPackage
 
     // Connect to services used by this thread
     secStoreGlobal_ConnectService();
-    le_fs_ConnectService();
 
     pkgDwlPtr = (lwm2mcore_PackageDownloader_t*)ctxPtr;
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)pkgDwlPtr->ctxPtr;
@@ -604,7 +603,6 @@ void* packageDownloader_StoreFwPackage
 
     // Connect to services used by this thread
     le_fwupdate_ConnectService();
-    le_fs_ConnectService();
 
     // Initialize the fwupdate process, except for a download resume
     if (!dwlCtxPtr->resume)
