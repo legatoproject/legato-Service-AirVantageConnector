@@ -63,7 +63,6 @@ PackageInfo_t;
 typedef struct
 {
     CURL*           curlPtr;    ///< curl pointer
-    int             fd;         ///< FIFO file descriptor
     const char*     uriPtr;     ///< package URI pointer
     PackageInfo_t   pkgInfo;    ///< package information
 }
@@ -221,11 +220,16 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)ctxPtr;
 
     pkg.curlPtr = NULL;
-    pkg.fd = -1;
 
     dwlCtxPtr->ctxPtr = (void *)&pkg;
 
     LE_DEBUG("Initialize package downloader");
+
+    // Check if download is not already aborted by an error during the Store thread initialization
+    if (true == packageDownloader_CurrentDownloadToAbort())
+    {
+        return DWL_FAULT;
+    }
 
     // initialize everything possible
     rc = curl_global_init(CURL_GLOBAL_ALL);
@@ -269,13 +273,6 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
         return DWL_FAULT;
     }
 
-    pkg.fd = open(dwlCtxPtr->fifoPtr, O_WRONLY);
-    if (-1 == pkg.fd)
-    {
-        LE_ERROR("open fifo failed: %m");
-        return DWL_FAULT;
-    }
-
     pkg.uriPtr = uriPtr;
 
     return DWL_OK;
@@ -299,6 +296,12 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)ctxPtr;
     pkgPtr = (Package_t*)dwlCtxPtr->ctxPtr;
     pkgInfoPtr = &pkgPtr->pkgInfo;
+
+    // Check if download is not already aborted by an error during the Store thread initialization
+    if (true == packageDownloader_CurrentDownloadToAbort())
+    {
+        return DWL_FAULT;
+    }
 
     LE_DEBUG("using: %s", pkgInfoPtr->curlVersion);
     LE_DEBUG("connection status: %ld", pkgInfoPtr->httpRespCode);
@@ -349,6 +352,46 @@ lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateResult
     }
 
     return DWL_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Download user agreement callback function definition
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t pkgDwlCb_UserAgreement
+(
+    uint32_t pkgSize        ///< Package size
+)
+{
+    le_result_t result;
+    lwm2mcore_DwlResult_t dwlResult = DWL_OK;
+
+    // Check if download is not already aborted by an error during the Store thread initialization
+    if (true == packageDownloader_CurrentDownloadToAbort())
+    {
+        return DWL_FAULT;
+    }
+
+    result = avcServer_QueryDownload(lwm2mcore_PackageDownloaderAcceptDownload, pkgSize);
+
+    // Get user agreement before starting package download
+    if (LE_FAULT == result)
+    {
+        LE_ERROR("Unexpected error in Query Download.");
+        dwlResult = DWL_FAULT;
+    }
+    else if (LE_OK == result)
+    {
+        LE_DEBUG("Download accepted");
+        lwm2mcore_PackageDownloaderAcceptDownload();
+    }
+    else
+    {
+        LE_DEBUG("Download deffered");
+    }
+
+    return dwlResult;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -412,13 +455,11 @@ lwm2mcore_DwlResult_t pkgDwlCb_StoreRange
 )
 {
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
-    Package_t* pkgPtr;
     ssize_t count;
 
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)ctxPtr;
-    pkgPtr = (Package_t *)dwlCtxPtr->ctxPtr;
 
-    count = write(pkgPtr->fd, bufPtr, bufSize);
+    count = write(dwlCtxPtr->downloadFd, bufPtr, bufSize);
 
     if (-1 == count)
     {
@@ -455,45 +496,5 @@ lwm2mcore_DwlResult_t pkgDwlCb_EndDownload
 
     curl_global_cleanup();
 
-    if (close(pkgPtr->fd) == -1)
-    {
-        LE_ERROR("failed to close fd: %m");
-        return DWL_FAULT;
-    }
-
     return DWL_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Download user agreement callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_UserAgreement
-(
-    uint32_t pkgSize        ///< Package size
-)
-{
-    le_result_t result;
-    lwm2mcore_DwlResult_t dwlResult = DWL_OK;
-
-    result = avcServer_QueryDownload(lwm2mcore_PackageDownloaderAcceptDownload, pkgSize);
-
-    // Get user agreement before starting package download
-    if (LE_FAULT == result)
-    {
-        LE_ERROR("Unexpected error in Query Download.");
-        dwlResult = DWL_FAULT;
-    }
-    else if (LE_OK == result)
-    {
-        LE_DEBUG("Download accepted");
-        lwm2mcore_PackageDownloaderAcceptDownload();
-    }
-    else
-    {
-        LE_DEBUG("Download deffered");
-    }
-
-    return dwlResult;
 }

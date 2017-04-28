@@ -54,6 +54,15 @@ static pthread_mutex_t DownloadStatusMutex = PTHREAD_MUTEX_INITIALIZER;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Maximal time to wait for the correct download abort.
+ * Set to 15 seconds in order to allow a complete abort even with slow data connection, as at least
+ * one data chunk should be downloaded before being able to abort a download.
+ */
+//--------------------------------------------------------------------------------------------------
+#define DOWNLOAD_ABORT_TIMEOUT      15
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Semaphore to synchronize download abort.
  */
 //--------------------------------------------------------------------------------------------------
@@ -61,7 +70,7 @@ static le_sem_Ref_t DownloadAbortSemaphore = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Update download status
+ * Send a registration update to the server in order to follow the update treatment
  */
 //--------------------------------------------------------------------------------------------------
 static void UpdateStatus
@@ -155,7 +164,7 @@ static void AbortDownload
     if (DOWNLOAD_STATUS_IDLE != GetDownloadStatus())
     {
         // Wait for download end
-        le_clk_Time_t timeout = {2, 0};
+        le_clk_Time_t timeout = {DOWNLOAD_ABORT_TIMEOUT, 0};
         if (LE_OK != le_sem_WaitWithTimeOut(DownloadAbortSemaphore, timeout))
         {
             LE_ERROR("Error while aborting download");
@@ -693,36 +702,83 @@ void* packageDownloader_DownloadPackage
     pkgDwlPtr = (lwm2mcore_PackageDownloader_t*)ctxPtr;
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)pkgDwlPtr->ctxPtr;
 
-    // Initialize the package downloader, except for a download resume
-    if (!dwlCtxPtr->resume)
+    // Open the FIFO file descriptor to write downloaded data, blocking
+    dwlCtxPtr->downloadFd = open(dwlCtxPtr->fifoPtr, O_WRONLY);
+    if (-1 != dwlCtxPtr->downloadFd)
     {
-        lwm2mcore_PackageDownloaderInit();
+        // Initialize the package downloader, except for a download resume
+        if (!dwlCtxPtr->resume)
+        {
+            lwm2mcore_PackageDownloaderInit();
+        }
+
+        // The download can already be aborted if the store thread
+        // encountered an error during its initialization.
+        if (DOWNLOAD_STATUS_ABORT != GetDownloadStatus())
+        {
+            // Download will start soon
+            SetDownloadStatus(DOWNLOAD_STATUS_ACTIVE);
+
+            if (DWL_OK != lwm2mcore_PackageDownloaderRun(pkgDwlPtr))
+            {
+                LE_ERROR("packageDownloadRun failed");
+                ret = -1;
+                // An error occurred, close the file descriptor in order to stop the Store thread
+                close(dwlCtxPtr->downloadFd);
+                dwlCtxPtr->downloadFd = -1;
+            }
+        }
+
+        le_sem_Post(DownloadAbortSemaphore);
+
+        // Download finished or aborted: delete stored URI and update type
+        if (LE_OK != DeleteResumeInfo())
+        {
+            ret = -1;
+        }
+
+        // Wait for the end of the store thread used for FOTA
+        if (LWM2MCORE_FW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
+        {
+            le_thread_Join(dwlCtxPtr->storeRef, (void*)&ret);
+            LE_DEBUG("Store thread joined");
+        }
+
+        // Reset download status
+        SetDownloadStatus(DOWNLOAD_STATUS_IDLE);
+
+        // Close the file descriptor if necessary
+        if (-1 != dwlCtxPtr->downloadFd)
+        {
+            close(dwlCtxPtr->downloadFd);
+        }
     }
-
-    SetDownloadStatus(DOWNLOAD_STATUS_ACTIVE);
-
-    if (lwm2mcore_PackageDownloaderRun(pkgDwlPtr) != DWL_OK)
+    else
     {
-        LE_ERROR("packageDownloadRun failed");
+        LE_ERROR("Open FIFO failed: %m");
         ret = -1;
+
+        switch (pkgDwlPtr->data.updateType)
+        {
+            case LWM2MCORE_FW_UPDATE_TYPE:
+                packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
+                packageDownloader_SetFwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_COMMUNICATION_ERROR);
+                break;
+
+            case LWM2MCORE_SW_UPDATE_TYPE:
+                avcApp_SetDownloadState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
+                avcApp_SetDownloadResult(LWM2MCORE_SW_UPDATE_RESULT_CONNECTION_LOST);
+                break;
+
+            default:
+                LE_ERROR("Unknown download type");
+                break;
+        }
     }
 
-    le_sem_Post(DownloadAbortSemaphore);
-
-    // Download finished or aborted: delete stored URI and update type
-    if (LE_OK != DeleteResumeInfo())
-    {
-        ret = -1;
-    }
-
-    // If the download was not aborted, trigger a connection to the server:
-    // the update state and result will be read to determine if the download was successful
-    if (DOWNLOAD_STATUS_ABORT != GetDownloadStatus())
-    {
-        le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
-    }
-
-    SetDownloadStatus(DOWNLOAD_STATUS_IDLE);
+    // Trigger a connection to the server: the update state and result will be read to determine
+    // if the download was successful
+    le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
 
     return (void*)&ret;
 }
@@ -739,8 +795,9 @@ void* packageDownloader_StoreFwPackage
 {
     lwm2mcore_PackageDownloader_t* pkgDwlPtr;
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
-    int fd;
     le_result_t result;
+    int fd;
+    int ret = 0;
 
     pkgDwlPtr = (lwm2mcore_PackageDownloader_t*)ctxPtr;
     dwlCtxPtr = pkgDwlPtr->ctxPtr;
@@ -748,69 +805,70 @@ void* packageDownloader_StoreFwPackage
     // Connect to services used by this thread
     le_fwupdate_ConnectService();
 
-    // Initialize the fwupdate process, except for a download resume
+    // Initialize the FW update process, except for a download resume
     if (!dwlCtxPtr->resume)
     {
         result = le_fwupdate_InitDownload();
 
-        if (LE_UNSUPPORTED == result)
+        switch (result)
         {
-            LE_DEBUG("Init download not supported");
-        }
-        else if (LE_OK == result)
-        {
-            LE_DEBUG("Init download successful");
-        }
-        else
-        {
-            LE_ERROR("Failed to initialize fwupdate");
-            return (void *)-1;
+            case LE_OK:
+                LE_DEBUG("FW update download initialization successful");
+                break;
+
+            case LE_UNSUPPORTED:
+                LE_DEBUG("FW update download initialization not supported");
+                break;
+
+            default:
+                LE_ERROR("Failed to initialize FW update download: %s", LE_RESULT_TXT(result));
+                // Indicate that the download should be aborted
+                SetDownloadStatus(DOWNLOAD_STATUS_ABORT);
+                // Set the update state and update result
+                packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
+                packageDownloader_SetFwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_COMMUNICATION_ERROR);
+                // Do not return, the FIFO should be opened in order to unblock the Download thread
+                ret = -1;
+                break;
         }
     }
 
+    // Open the FIFO file descriptor to read downloaded data, non blocking
     fd = open(dwlCtxPtr->fifoPtr, O_RDONLY | O_NONBLOCK, 0);
     if (-1 == fd)
     {
-        LE_ERROR("failed to open fifo %m");
-        return (void*)-1;
+        LE_ERROR("Failed to open FIFO %m");
+        return (void *)-1;
+    }
+
+    // There was an error during the FW update initialization, stop here
+    if (-1 == ret)
+    {
+        close(fd);
+        return (void*)&ret;
     }
 
     result = le_fwupdate_Download(fd);
     if (LE_OK != result)
     {
-        LE_ERROR("failed to update firmware %s", LE_RESULT_TXT(result));
-        close(fd);
+        LE_ERROR("Failed to update firmware: %s", LE_RESULT_TXT(result));
+        ret = -1;
 
+        // No further action required if the download is aborted
+        // by writing an empty update package URI
         if (DOWNLOAD_STATUS_ABORT != GetDownloadStatus())
         {
-            lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
-
             // Abort active download
             AbortDownload();
 
-            // Set the update result if not already done by LWM2M package downloader
-            if (   (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
-                && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult)
-               )
-            {
-                if (LE_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE))
-                {
-                    LE_ERROR("Error while setting FW Update State");
-                }
-                if (LE_OK != packageDownloader_SetFwUpdateResult(
-                                                   LWM2MCORE_FW_UPDATE_RESULT_UNSUPPORTED_PKG_TYPE))
-                {
-                    LE_ERROR("Error while setting FW Update Result");
-                }
-            }
+            // Set the update state and update
+            packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
+            packageDownloader_SetFwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_UNSUPPORTED_PKG_TYPE);
         }
-
-        return (void*)-1;
     }
 
     close(fd);
-
-    return (void*)0;
+    return (void*)&ret;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -828,7 +886,6 @@ le_result_t packageDownloader_StartDownload
     static lwm2mcore_PackageDownloader_t pkgDwl;
     static packageDownloader_DownloadCtx_t dwlCtx;
     lwm2mcore_PackageDownloaderData_t data;
-    le_thread_Ref_t dwlRef, storeRef;
     char* dwlType[2] = {
         [0] = "FW_UPDATE",
         [1] = "SW_UPDATE",
@@ -878,6 +935,7 @@ le_result_t packageDownloader_StartDownload
             }
             dwlCtx.storePackage = (void*)packageDownloader_StoreFwPackage;
             break;
+
         case LWM2MCORE_SW_UPDATE_TYPE:
             if (resume)
             {
@@ -885,8 +943,9 @@ le_result_t packageDownloader_StartDownload
                 avcApp_GetResumePosition(&pkgDwl.data.updateOffset);
                 LE_DEBUG("updateOffset: %llu", pkgDwl.data.updateOffset);
             }
-            dwlCtx.storePackage = (void*)avcApp_StoreSwPackage;
+            dwlCtx.storePackage = NULL;
             break;
+
         default:
             LE_ERROR("unknown download type");
             return LE_FAULT;
@@ -894,13 +953,9 @@ le_result_t packageDownloader_StartDownload
     dwlCtx.resume = resume;
     pkgDwl.ctxPtr = (void*)&dwlCtx;
 
-    dwlRef = le_thread_Create("Downloader", (void*)dwlCtx.downloadPackage,
-                (void*)&pkgDwl);
+    le_thread_Start(le_thread_Create("Downloader", (void*)dwlCtx.downloadPackage, (void*)&pkgDwl));
 
-    le_thread_Start(dwlRef);
-
-
-    if (type == LWM2MCORE_SW_UPDATE_TYPE)
+    if (LWM2MCORE_SW_UPDATE_TYPE == type)
     {
         // Spawning a new thread won't be a good idea for updateDaemon. For single installation
         // UpdateDaemon requires all its API to be called from same thread. If we spawn thread,
@@ -908,12 +963,11 @@ le_result_t packageDownloader_StartDownload
         // unwanted complexity.
         return avcApp_StoreSwPackage((void*)&pkgDwl);
     }
-    else
-    {
-        storeRef = le_thread_Create("Store", (void*)dwlCtx.storePackage,
-                        (void*)&pkgDwl);
-        le_thread_Start(storeRef);
-    }
+
+    // Start the Store thread for a FOTA update
+    dwlCtx.storeRef = le_thread_Create("Store", (void*)dwlCtx.storePackage, (void*)&pkgDwl);
+    le_thread_SetJoinable(dwlCtx.storeRef);
+    le_thread_Start(dwlCtx.storeRef);
 
     return LE_OK;
 }
