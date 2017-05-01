@@ -28,6 +28,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ *  Path to the lwm2m configurations in the Config Tree.
+ */
+//--------------------------------------------------------------------------------------------------
+#define CFG_AVC_CONFIG_PATH "system:/apps/avcService/config"
+
+//--------------------------------------------------------------------------------------------------
+/**
  * This ref is returned when a status handler is added/registered.  It is used when the handler is
  * removed.  Only one ref is needed, because only one handler can be registered at a time.
  */
@@ -43,6 +50,15 @@
  */
 //--------------------------------------------------------------------------------------------------
 #define BLOCKED_DEFER_TIME 3
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Max number of bytes of a retry timer name.
+ */
+//--------------------------------------------------------------------------------------------------
+#define TIMER_NAME_BYTES 10
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1900,27 +1916,6 @@ le_avc_SessionType_t le_avc_GetSessionType
 }
 
 
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Function to read the retry timers.
- *
- * @return
- *      - LE_OK on success.
- *      - LE_FAULT if not able to read the timers.
- *      - LE_UNSUPPORTED if the API is not supported.
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t le_avc_GetRetryTimers
-(
-    uint16_t* timerValuePtr,
-    size_t* numTimers
-)
-{
-    return LE_UNSUPPORTED;
-}
-
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Function to read APN configuration.
@@ -1929,22 +1924,57 @@ le_result_t le_avc_GetRetryTimers
  *      - LE_OK on success.
  *      - LE_FAULT if there is any error while reading.
  *      - LE_OVERFLOW if the buffer provided is too small.
- *      - LE_UNSUPPORTED if the API is not supported.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_GetApnConfig
 (
-    char* apnName,
-    size_t apnNameNumElements,
-    char* userName,
-    size_t uNameNumElements,
-    char* userPwd,
-    size_t userPwdNumElements
+    char* apnName,                 ///< [OUT] APN name
+    size_t apnNameNumElements,     ///< [IN]  APN name max bytes
+    char* userName,                ///< [OUT] User name
+    size_t userNameNumElements,    ///< [IN]  User name max bytes
+    char* userPassword,            ///< [OUT] Password
+    size_t userPasswordNumElements ///< [IN]  Password max bytes
 )
 {
-    return LE_UNSUPPORTED;
-}
+    le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn(CFG_AVC_CONFIG_PATH);
+    le_result_t result;
 
+    if (le_cfg_IsEmpty(iterRef, "apn"))
+    {
+        le_cfg_CancelTxn(iterRef);
+        return LE_FAULT;
+    }
+
+    le_cfg_GoToNode(iterRef, "apn");
+
+    result = le_cfg_GetString(iterRef, "name", apnName, apnNameNumElements, "");
+
+    if (result != LE_OK)
+    {
+        LE_ERROR("Failed to get APN Name.");
+        goto done;
+    }
+
+    result = le_cfg_GetString(iterRef, "userName", userName, userNameNumElements, "");
+
+    if (result != LE_OK)
+    {
+        LE_ERROR("Failed to get APN User Name.");
+        goto done;
+    }
+
+    result = le_cfg_GetString(iterRef, "password", userPassword, userPasswordNumElements, "");
+
+    if (result != LE_OK)
+    {
+        LE_ERROR("Failed to get APN Password.");
+        goto done;
+    }
+
+done:
+    le_cfg_CancelTxn(iterRef);
+    return result;
+}
 
 
 //--------------------------------------------------------------------------------------------------
@@ -1953,43 +1983,33 @@ le_result_t le_avc_GetApnConfig
  *
  * @return
  *      - LE_OK on success.
- *      - LE_FAULT if not able to write the APN configuration.
  *      - LE_OVERFLOW if one of the input strings is too long.
- *      - LE_UNSUPPORTED if the API is not supported.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_SetApnConfig
 (
-    const char* apnName,
-    const char* userName,
-    const char* userPwd
+    const char* apnName,     ///< [IN] APN name
+    const char* userName,    ///< [IN] User name
+    const char* userPassword ///< [IN] Password
 )
 {
-    return LE_UNSUPPORTED;
-}
+    if ((strlen(apnName) > LE_AVC_APN_NAME_MAX_LEN) ||
+        (strlen(userName) > LE_AVC_USERNAME_MAX_LEN) ||
+        (strlen(userPassword) > LE_AVC_PASSWORD_MAX_LEN))
+    {
+        return LE_OVERFLOW;
+    }
 
+    le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
 
+    le_cfg_GoToNode(iterRef, "apn");
+    le_cfg_SetString(iterRef, "name", apnName);
+    le_cfg_SetString(iterRef, "userName", userName);
+    le_cfg_SetString(iterRef, "password", userPassword);
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Function to set the retry timers.
- *
- * @return
- *      - LE_OK on success.
- *      - LE_FAULT if not able to read the timers.
- *      - LE_UNSUPPORTED if the API is not supported.
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t le_avc_SetRetryTimers
-(
-    const uint16_t* timerValuePtr,
-    size_t numTimers
-)
-{
-    if ( ! IsValidControlAppClient() )
-        return LE_FAULT;
+    le_cfg_CommitTxn(iterRef);
 
-    return pa_avc_SetRetryTimers(timerValuePtr, numTimers);
+    return LE_OK;
 }
 
 
@@ -2000,18 +2020,26 @@ le_result_t le_avc_SetRetryTimers
  * @return
  *      - LE_OK on success
  *      - LE_FAULT if not available
- *      - LE_UNSUPPORTED if the API is not supported.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_GetPollingTimer
 (
-    uint32_t* pollingTimerPtr
+    uint32_t* pollingTimerPtr  ///< [OUT] Polling timer
 )
 {
-    if ( ! IsValidControlAppClient() )
-        return LE_FAULT;
+    le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn(CFG_AVC_CONFIG_PATH);
 
-    return pa_avc_GetPollingTimer(pollingTimerPtr);
+    if (le_cfg_IsEmpty(iterRef, "pollingTimer"))
+    {
+        le_cfg_CancelTxn(iterRef);
+        return LE_FAULT;
+    }
+
+    *pollingTimerPtr = le_cfg_GetInt(iterRef, "pollingTimer", 0);
+
+    le_cfg_CancelTxn(iterRef);
+
+    return LE_OK;
 }
 
 
@@ -2021,19 +2049,20 @@ le_result_t le_avc_GetPollingTimer
  *
  * @return
  *      - LE_OK on success.
- *      - LE_FAULT if not able to read the timers.
- *      - LE_UNSUPPORTED if the API is not supported.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_SetPollingTimer
 (
-    uint32_t pollingTimer
+    uint32_t pollingTimer ///< [IN] Polling timer
 )
 {
-    if ( ! IsValidControlAppClient() )
-        return LE_FAULT;
+    le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
 
-    return pa_avc_SetPollingTimer(pollingTimer);
+    le_cfg_SetInt(iterRef, "pollingTimer", pollingTimer);
+
+    le_cfg_CommitTxn(iterRef);
+
+    return LE_OK;
 }
 
 
@@ -2077,6 +2106,30 @@ void avcServer_NotifyUserApp
         AvcErrorCode = errorCode;
     }
 }
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the default AVMS config, only if no config exists.
+ */
+//--------------------------------------------------------------------------------------------------
+static void SetDefaultAVMSConfig
+(
+    void
+)
+{
+    /* Default values */
+    uint32_t pollingTimer = 0;
+
+    // dummy variables used to see if there are any current configs present
+    uint32_t pollingTimerCurr = 0;
+
+    if (LE_FAULT == le_avc_GetPollingTimer(&pollingTimerCurr))
+    {
+        le_avc_SetPollingTimer(pollingTimer);
+    }
+}
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2122,5 +2175,8 @@ COMPONENT_INIT
     // Check to see if le_avc is bound, which means there is an installed control app.
     IsControlAppInstalled = IsAvcBound();
     LE_INFO("Is control app installed? %i", IsControlAppInstalled);
+
+    // Set default AVMS config values
+    SetDefaultAVMSConfig();
 }
 
