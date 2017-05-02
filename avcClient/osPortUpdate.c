@@ -105,6 +105,49 @@ static void LaunchUpdateTimerExpiryHandler
 }
 
 //--------------------------------------------------------------------------------------------------
+/* Check if FOTA download is in progress
+ *
+ * @return
+ *  true if FOTA download is in progress, false otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static bool IsFotaDownloading
+(
+    void
+)
+{
+    lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
+    lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
+
+    return ((LE_OK == packageDownloader_GetFwUpdateState(&fwUpdateState))
+            && (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
+            && (LWM2MCORE_FW_UPDATE_STATE_DOWNLOADING == fwUpdateState)
+            && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult));
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if SOTA download is in progress
+ *
+ * @return
+ *  true if SOTA download is in progress, false otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static bool IsSotaDownloading
+(
+    void
+)
+{
+    lwm2mcore_SwUpdateState_t swUpdateState = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
+    lwm2mcore_SwUpdateResult_t swUpdateResult = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
+
+    return ((LE_OK == packageDownloader_GetSwUpdateState(&swUpdateState))
+            && (LE_OK == packageDownloader_GetSwUpdateResult(&swUpdateResult))
+            && (LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED == swUpdateState)
+            && (LWM2MCORE_SW_UPDATE_RESULT_INITIAL == swUpdateResult));
+}
+
+//--------------------------------------------------------------------------------------------------
 /**
  * The server pushes a package to the LWM2M client
  *
@@ -292,6 +335,11 @@ lwm2mcore_Sid_t lwm2mcore_LaunchUpdate
                 else
                 {
                     sid = LWM2MCORE_ERR_COMPLETED_OK;
+                }
+
+                if (type == LWM2MCORE_SW_UPDATE_TYPE)
+                {
+                    SetSwUpdateInternalState(INTERNAL_STATE_INSTALL_REQUESTED);
                 }
             }
             break;
@@ -851,11 +899,7 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
 
     // Check if a download resume should be launched
-    if (   (LE_OK == packageDownloader_GetFwUpdateState(&fwUpdateState))
-        && (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
-        && (LWM2MCORE_FW_UPDATE_STATE_DOWNLOADING == fwUpdateState)
-        && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult)
-       )
+    if (IsFotaDownloading() || IsSotaDownloading())
     {
         uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
         size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;

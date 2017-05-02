@@ -39,7 +39,7 @@ typedef void (*avcServer_InstallHandlerFunc_t)
 //--------------------------------------------------------------------------------------------------
 typedef void (*avcServer_UninstallHandlerFunc_t)
 (
-    void
+    uint16_t instanceId             ///< [IN] Instance id.
 );
 
 
@@ -114,7 +114,8 @@ LE_SHARED void avcServer_ReportInstallProgress
 //--------------------------------------------------------------------------------------------------
 LE_SHARED le_result_t avcServer_QueryUninstall
 (
-    avcServer_UninstallHandlerFunc_t handlerRef  ///< [IN] Handler to receive uninstall response.
+    avcServer_UninstallHandlerFunc_t handlerRef,  ///< [IN] Handler to receive uninstall response.
+    uint16_t instanceId                           ///< Instance Id (0 for FW, any value for SW)
 );
 
 //--------------------------------------------------------------------------------------------------

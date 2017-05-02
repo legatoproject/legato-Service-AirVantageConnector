@@ -874,9 +874,9 @@ static le_result_t CreateAssetDataFromModel
 )
 {
     // LWM2M objects are hard-coded; the rest are taken from the ConfigDB
-    if ( strcmp( "lwm2m", appNamePtr ) == 0 )
+    if (0 == strcmp( LWM2M_NAME, appNamePtr))
     {
-        if ( assetId == 9 )
+        if ( assetId == LWM2M_OBJ9 )
         {
             if ( AddAssetData(appNamePtr, assetId, "Software Management", assetDataPtrPtr) != LE_OK )
             {
@@ -1780,6 +1780,108 @@ le_result_t static SetString
     CallFieldActionHandlers( instanceRef, fieldId, ASSET_DATA_ACTION_WRITE, isClient );
 
     return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get a list of the object 9 instances.
+ *
+ * @return:
+ *      - LE_OK on success
+ *      - LE_NOT_FOUND if no object9 instance is found
+ *      - LE_OVERFLOW if string value was truncated when copied to strBufPtr
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t assetData_GetObj9InstanceList
+(
+    char* strBufPtr,                            ///< [OUT] The returned list
+    size_t strBufNumBytes,                      ///< [IN] Size of strBuf
+    int* listNumBytesPtr,                       ///< [OUT] Size of returned list
+    int* numInstancePtr                         ///< [OUT] Number of instances
+)
+{
+    const char* nameIdPtr;
+    const AssetData_t* assetDataPtr;
+    InstanceData_t* assetInstancePtr;
+
+    le_hashmap_It_Ref_t iterRef;
+    le_dls_Link_t* linkPtr;
+    size_t bytesWritten;
+    char tempStr[100];
+    char nameStr[100];
+    char* delimterPtr = "";
+
+    int instanceCount = 0;
+
+    // These two pointers are used to determine the writable part of the strBuf:
+    //  - startBufPtr points to the next writable character
+    //  - endBufPtr points past the last character in strBuf
+    // The number of characters left is always (endBufPtr-startBufPtr)
+    char* startBufPtr = strBufPtr;
+    char* endBufPtr = strBufPtr + strBufNumBytes;
+
+    // Write all the asset instances, and if an asset has no instances, then write the asset
+    iterRef = le_hashmap_GetIterator(AssetMap);
+
+    while ( le_hashmap_NextNode(iterRef) == LE_OK )
+    {
+        nameIdPtr = le_hashmap_GetKey(iterRef);
+        assetDataPtr = le_hashmap_GetValue(iterRef);
+
+        le_utf8_CopyUpToSubStr(nameStr, nameIdPtr, "/", sizeof(nameStr), NULL);
+
+        if ((0 == (strcmp(nameStr, LWM2M_NAME))) && (LWM2M_OBJ9 == assetDataPtr->assetId))
+        {
+            // Get the start of the instance list
+            linkPtr = le_dls_Peek(&assetDataPtr->instanceList);
+
+            // If the asset has no instances, then just write the asset
+            if ( linkPtr == NULL )
+            {
+                LE_WARN("No object 9 instance");
+                return LE_NOT_FOUND;
+            }
+
+            // Otherwise, loop through the asset instances
+            while ( linkPtr != NULL )
+            {
+                assetInstancePtr = CONTAINER_OF(linkPtr, InstanceData_t, link);
+                FormatString(tempStr,
+                             sizeof(tempStr),
+                             "%s</%s/%i>",
+                             delimterPtr,
+                             nameIdPtr,
+                             assetInstancePtr->instanceId);
+                LE_PRINT_VALUE("%s", tempStr);
+
+                if ( le_utf8_Copy(startBufPtr,
+                                  tempStr,
+                                  endBufPtr-startBufPtr,
+                                  &bytesWritten) != LE_OK )
+                {
+                    return LE_OVERFLOW;
+                }
+
+                instanceCount++;
+
+                // Point to the character after the last one written
+                startBufPtr += bytesWritten;
+
+                linkPtr = le_dls_PeekNext(&assetDataPtr->instanceList, linkPtr);
+
+                // Add delimter for next item
+                delimterPtr = ",";
+            }
+            break;
+        }
+    }
+
+    // Set return values
+    *listNumBytesPtr = startBufPtr - strBufPtr;
+    *numInstancePtr = instanceCount;
+
+    return LE_OK;
 }
 
 

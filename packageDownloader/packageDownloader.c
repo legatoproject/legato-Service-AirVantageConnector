@@ -531,6 +531,150 @@ le_result_t packageDownloader_GetFwUpdateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Set software update state
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetSwUpdateState
+(
+    lwm2mcore_SwUpdateState_t swUpdateState     ///< [IN] New SW update state
+)
+{
+    le_result_t result;
+
+    result = WriteFs(SW_UPDATE_STATE_PATH,
+                     (uint8_t *)&swUpdateState,
+                     sizeof(lwm2mcore_SwUpdateState_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", SW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update result
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t swUpdateResult   ///< [IN] New SW update result
+)
+{
+    le_result_t result;
+
+    result = WriteFs(SW_UPDATE_RESULT_PATH,
+                     (uint8_t *)&swUpdateResult,
+                     sizeof(lwm2mcore_SwUpdateResult_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", SW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update state
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetSwUpdateState
+(
+    lwm2mcore_SwUpdateState_t* swUpdateStatePtr     ///< [INOUT] SW update state
+)
+{
+    lwm2mcore_SwUpdateState_t updateState;
+    size_t size;
+    le_result_t result;
+
+    if (!swUpdateStatePtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_FAULT;
+    }
+
+    size = sizeof(lwm2mcore_SwUpdateState_t);
+    result = ReadFs(SW_UPDATE_STATE_PATH, (uint8_t *)&updateState, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("SW update state not found");
+            *swUpdateStatePtr = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
+            return LE_OK;
+        }
+        LE_ERROR("Failed to read %s: %s", SW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    *swUpdateStatePtr = updateState;
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update result
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t* swUpdateResultPtr   ///< [INOUT] SW update result
+)
+{
+    lwm2mcore_SwUpdateResult_t updateResult;
+    size_t size;
+    le_result_t result;
+
+    if (!swUpdateResultPtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_BAD_PARAMETER;
+    }
+
+    size = sizeof(lwm2mcore_SwUpdateResult_t);
+    result = ReadFs(SW_UPDATE_RESULT_PATH, (uint8_t *)&updateResult, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("SW update result not found");
+            *swUpdateResultPtr = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
+            return LE_OK;
+        }
+        LE_ERROR("Failed to read %s: %s", SW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    *swUpdateResultPtr = updateResult;
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Download package thread function
  */
 //--------------------------------------------------------------------------------------------------
@@ -712,8 +856,8 @@ le_result_t packageDownloader_StartDownload
     pkgDwl.userAgreement = pkgDwlCb_UserAgreement;
     pkgDwl.setFwUpdateState = packageDownloader_SetFwUpdateState;
     pkgDwl.setFwUpdateResult = packageDownloader_SetFwUpdateResult;
-    pkgDwl.setSwUpdateState = avcApp_SetDownloadState;
-    pkgDwl.setSwUpdateResult = avcApp_SetDownloadResult;
+    pkgDwl.setSwUpdateState = packageDownloader_SetSwUpdateState;
+    pkgDwl.setSwUpdateResult = packageDownloader_SetSwUpdateResult;
     pkgDwl.download = pkgDwlCb_Download;
     pkgDwl.storeRange = pkgDwlCb_StoreRange;
     pkgDwl.endDownload = pkgDwlCb_EndDownload;
@@ -735,6 +879,12 @@ le_result_t packageDownloader_StartDownload
             dwlCtx.storePackage = (void*)packageDownloader_StoreFwPackage;
             break;
         case LWM2MCORE_SW_UPDATE_TYPE:
+            if (resume)
+            {
+                // Get swupdate offset before launching the download
+                avcApp_GetResumePosition(&pkgDwl.data.updateOffset);
+                LE_DEBUG("updateOffset: %llu", pkgDwl.data.updateOffset);
+            }
             dwlCtx.storePackage = (void*)avcApp_StoreSwPackage;
             break;
         default:
@@ -801,7 +951,7 @@ le_result_t packageDownloader_AbortDownload
             break;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
-            result = avcApp_SetDownloadState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
+            result = packageDownloader_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
             if (LE_OK != result)
             {
                 return result;

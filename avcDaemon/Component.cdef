@@ -62,6 +62,7 @@ sources:
     ../avcClient/os/legato/osTime.c
     ../avcClient/os/legato/osTimer.c
     ../avcClient/os/legato/osUdp.c
+    ../avcClient/os/legato/osSem.c
 
     // LWM2MCore
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/dtlsConnection.c

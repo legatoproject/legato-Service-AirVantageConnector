@@ -38,6 +38,21 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ *  LWM2M software object (i.e. object 9).
+ */
+//--------------------------------------------------------------------------------------------------
+#define LWM2M_OBJ9  9
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Name of the standard objects in LW M2M.
+ */
+//--------------------------------------------------------------------------------------------------
+#define LWM2M_NAME "lwm2m"
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Actions that can happen on field or asset
  */
 //--------------------------------------------------------------------------------------------------
@@ -940,6 +955,24 @@ LE_SHARED le_result_t assetData_GetAssetList
     size_t strBufNumBytes,                      ///< [IN] Size of strBuf
     int* listNumBytesPtr,                       ///< [OUT] Size of returned list
     int* numAssetsPtr                           ///< [OUT] Number of assets + instances
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get a list of the object 9 instances.
+ *
+ * @return:
+ *      - LE_OK on success
+ *      - LE_OVERFLOW if string value was truncated when copied to strBufPtr
+ */
+//--------------------------------------------------------------------------------------------------
+LE_SHARED le_result_t assetData_GetObj9InstanceList
+(
+    char* strBufPtr,                            ///< [OUT] The returned list
+    size_t strBufNumBytes,                      ///< [IN] Size of strBuf
+    int* listNumBytesPtr,                       ///< [OUT] Size of returned list
+    int* numInstancePtr                         ///< [OUT] Number of instances
 );
 
 

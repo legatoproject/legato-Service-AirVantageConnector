@@ -24,6 +24,10 @@ processes:
     }
 
     faultAction: restart
+
+    // Maximum size of the download file (50 MBytes)
+    // ToDo: Change this to "unlimited" when mktools support it
+    maxFileBytes: 50000K
 }
 
 extern:

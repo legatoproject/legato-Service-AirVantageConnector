@@ -12,6 +12,22 @@
 #include <lwm2mcore/update.h>
 #include <lwm2mcorePackageDownloader.h>
 
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Internal state of avc app update used to track of the commands received from AV server.
+ */
+//--------------------------------------------------------------------------------------------------
+typedef enum
+{
+    INTERNAL_STATE_INVALID = 0,             ///< Invalid internal state
+    INTERNAL_STATE_DOWNLOAD_REQUESTED,      ///< Download request from server received by device
+    INTERNAL_STATE_INSTALL_REQUESTED,       ///< Install request from server received by device
+    INTERNAL_STATE_UNINSTALL_REQUESTED      ///< Uninstall request from server received by device
+
+}
+avcApp_InternalState_t;
+
 //--------------------------------------------------------------------------------------------------
 /**
  *  Maximum allowed size for for a Legato framework version string.

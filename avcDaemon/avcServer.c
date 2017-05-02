@@ -89,6 +89,16 @@ typedef struct
 }
 PkgInstallContext_t;
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * SW uninstall context
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    uint16_t instanceId;            ///< Instance Id (0 for FW, any value for SW)
+}
+SwUninstallContext_t;
 
 //--------------------------------------------------------------------------------------------------
 // Data structures
@@ -251,6 +261,14 @@ static PkgDownloadContext_t PkgDownloadCtx;
  */
 //--------------------------------------------------------------------------------------------------
 static PkgInstallContext_t PkgInstallCtx;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Current SW uninstall context
+ */
+//--------------------------------------------------------------------------------------------------
+static SwUninstallContext_t SwUninstallCtx;
 
 
 //--------------------------------------------------------------------------------------------------
@@ -554,6 +572,7 @@ void avcServer_UpdateHandler
             CurrentTotalNumBytes = totalNumBytes;
             CurrentDownloadProgress = dloadProgress;
             CurrentUpdateType = updateType;
+            SetSwUpdateBytesDownloaded();
             break;
 
         case LE_AVC_UNINSTALL_PENDING:
@@ -1029,7 +1048,7 @@ void UninstallTimerExpiryHandler
         // Notify the registered handler to proceed with the uninstall; only called once.
         if (QueryUninstallHandlerRef != NULL)
         {
-            QueryUninstallHandlerRef();
+            QueryUninstallHandlerRef(SwUninstallCtx.instanceId);
             QueryUninstallHandlerRef = NULL;
         }
         else
@@ -1148,7 +1167,8 @@ le_result_t avcServer_QueryDownload
 //--------------------------------------------------------------------------------------------------
 le_result_t avcServer_QueryUninstall
 (
-    avcServer_UninstallHandlerFunc_t handlerRef  ///< [IN] Handler to receive install response.
+    avcServer_UninstallHandlerFunc_t handlerRef,  ///< [IN] Handler to receive install response.
+    uint16_t instanceId                           ///< Instance Id (0 for FW, any value for SW)
 )
 {
     le_result_t result;
@@ -1163,6 +1183,7 @@ le_result_t avcServer_QueryUninstall
     }
 
     // Update uninstall handler
+    SwUninstallCtx.instanceId = instanceId;
     QueryUninstallHandlerRef = handlerRef;
 
     result = QueryUninstall();
@@ -1511,7 +1532,7 @@ static le_result_t AcceptUninstallApplication
         CurrentState = AVC_UNINSTALL_IN_PROGRESS;
         if (QueryUninstallHandlerRef != NULL)
         {
-            QueryUninstallHandlerRef();
+            QueryUninstallHandlerRef(SwUninstallCtx.instanceId);
             QueryUninstallHandlerRef = NULL;
         }
         else
