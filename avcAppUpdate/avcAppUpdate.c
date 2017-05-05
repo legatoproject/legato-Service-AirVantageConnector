@@ -415,6 +415,10 @@ static void SetObj9State_
     LE_DEBUG("Save the state and result in a file for suspend / resume");
     avcApp_SetDownloadState(state);
     avcApp_SetDownloadResult(result);
+
+    // Send a registration update after changing the obj state/result of the device.
+    // This will trigger the server to query for the state/result.
+    avcClient_Update();
 }
 
 #define SetObj9State(insref, state, result) SetObj9State_(insref,       \

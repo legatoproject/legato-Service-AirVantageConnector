@@ -699,20 +699,37 @@ lwm2mcore_Sid_t lwm2mcore_LaunchSwUpdateUninstall
     size_t len                      ///< [IN] length of input buffer
 )
 {
+    le_result_t result;
+
     if ((NULL == bufferPtr) && len)
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
     // Here we are only delisting the app. The deletion of app will be called when deletion
-    // of object 9 instance is requested.
+    // of object 9 instance is requested. But get user agreement before delisting.
+    result = avcServer_QueryUninstall(avcApp_PrepareUninstall, instanceId);
 
-    if (avcApp_PrepareUninstall(instanceId) == LE_OK)
+    if (LE_OK == result)
     {
-        return LWM2MCORE_ERR_COMPLETED_OK;
+        LE_DEBUG("uninstall accepted");
+
+        if (avcApp_PrepareUninstall(instanceId) != LE_OK)
+        {
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+        }
+    }
+    else if (LE_BUSY == result)
+    {
+        LE_DEBUG("Wait for uninstall acceptance");
+    }
+    else
+    {
+        LE_ERROR("Unexpected error in Query uninstall.");
+        return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    return LWM2MCORE_ERR_GENERAL_ERROR;
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
