@@ -905,6 +905,7 @@ le_result_t packageDownloader_StartDownload
     data.packageSize = 0;
     data.updateType = type;
     data.updateOffset = 0;
+    data.isResume = resume;
     pkgDwl.data = data;
 
     // Set the package downloader callbacks

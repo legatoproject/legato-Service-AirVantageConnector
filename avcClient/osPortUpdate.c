@@ -895,44 +895,40 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     void
 )
 {
-    lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
-    lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
+    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
+    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
+    lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
+    bool downloadResume = false;
+    memset(downloadUri, 0, uriLen);
 
-    // Check if a download resume should be launched
-    if (IsFotaDownloading() || IsSotaDownloading())
+    // Check if an update package URI is stored
+    if (LE_OK != packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
     {
-        uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
-        size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
-        lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
-        memset(downloadUri, 0, uriLen);
-
-        LE_DEBUG("Download to resume");
-
-        // Retrieve resume information
-        if (LE_OK != packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
-        {
-            return LWM2MCORE_ERR_GENERAL_ERROR;
-        }
-
-        if (   (0 == strncmp(downloadUri, "", LWM2MCORE_PACKAGE_URI_MAX_LEN+1))
-            || (LWM2MCORE_MAX_UPDATE_TYPE == updateType)
-           )
-        {
-            LE_ERROR("Download to resume but no URI/updateType stored");
-            return LWM2MCORE_ERR_GENERAL_ERROR;
-        }
-
-        // Call API to launch the package download
-        if (LE_OK != packageDownloader_StartDownload(downloadUri, updateType, true))
-        {
-            return LWM2MCORE_ERR_GENERAL_ERROR;
-        }
-
+        LE_DEBUG("No download to resume");
         return LWM2MCORE_ERR_COMPLETED_OK;
     }
 
-    LE_DEBUG("No download to resume (update state %d, update result %d)",
-             fwUpdateState, fwUpdateResult);
+    LE_DEBUG("Download to resume");
+
+    if (   (0 == strncmp(downloadUri, "", LWM2MCORE_PACKAGE_URI_MAX_LEN+1))
+        || (LWM2MCORE_MAX_UPDATE_TYPE == updateType)
+       )
+    {
+        LE_ERROR("Download to resume but no URI/updateType stored");
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    // Check if a download was started
+    if (IsFotaDownloading() || IsSotaDownloading())
+    {
+        downloadResume = true;
+    }
+
+    // Call API to launch the package download
+    if (LE_OK != packageDownloader_StartDownload(downloadUri, updateType, downloadResume))
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
