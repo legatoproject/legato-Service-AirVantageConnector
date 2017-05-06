@@ -21,13 +21,6 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- *  String to return when an application does not include it's own version string.
- */
-//--------------------------------------------------------------------------------------------------
-#define VERSION_UNKNOWN "unknown"
-
-//--------------------------------------------------------------------------------------------------
-/**
  *  Maximum allowed size for application name strings.
  */
 //--------------------------------------------------------------------------------------------------
@@ -649,7 +642,7 @@ static void PopulateAppInfoObjects
 
             if (0 == strlen(versionBuffer))
             {
-                le_utf8_Copy(versionBuffer, VERSION_UNKNOWN, sizeof(versionBuffer), NULL);
+                le_appInfo_GetHash(appName, versionBuffer, sizeof(versionBuffer));
             }
 
             assetData_client_SetString(instanceRef, O9F_PKG_VERSION, versionBuffer);
@@ -785,7 +778,7 @@ static void AppInstallHandler
 
     if (0 == strlen(versionBuffer))
     {
-        le_utf8_Copy(versionBuffer, VERSION_UNKNOWN, sizeof(versionBuffer), NULL);
+        le_appInfo_GetHash(appNamePtr, versionBuffer, sizeof(versionBuffer));
     }
 
     assetData_client_SetString(instanceRef, O9F_PKG_VERSION, versionBuffer);
