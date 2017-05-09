@@ -170,17 +170,24 @@ static bool UpdateStarted = false;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Event ID to end update.
- */
-//--------------------------------------------------------------------------------------------------
-static le_event_Id_t UpdateEndEventId;
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Event ID to start download.
  */
 //--------------------------------------------------------------------------------------------------
 static le_event_Id_t DownloadEventId;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Event ID to start unpack.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_event_Id_t UnpackStartEventId;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Event ID to end update.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_event_Id_t UpdateEndEventId;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -352,10 +359,13 @@ static void DeletePackage
                 "Failed to recursively delete '%s'.",
                 AppDownloadPath);
 
-    // Remove the sw update workspace directory
-    LE_FATAL_IF(le_dir_RemoveRecursive(SW_UPDATE_INFO_DIR) != LE_OK,
-                "Failed to recursively delete '%s'.",
-                SW_UPDATE_INFO_DIR);
+    // Delete SW update workspace
+    DeleteFs(SW_UPDATE_STATE_PATH);
+    DeleteFs(SW_UPDATE_INSTANCE_PATH);
+    DeleteFs(SW_UPDATE_BYTES_DOWNLOADED_PATH);
+    DeleteFs(SW_UPDATE_PKGSIZE_PATH);
+    DeleteFs(SW_UPDATE_INTERNAL_STATE_PATH);
+    DeleteFs(SW_UPDATE_RESULT_PATH);
 }
 
 
@@ -369,6 +379,7 @@ void UpdateEndHandler
     void *reportPtr
 )
 {
+    LE_DEBUG("End Update");
     le_update_End();
 
     LE_DEBUG("Delete package downloaded.");
@@ -413,8 +424,9 @@ static void SetObj9State_
     LE_ASSERT_OK(assetData_client_SetInt(instanceRef, O9F_UPDATE_RESULT, result));
 
     LE_DEBUG("Save the state and result in a file for suspend / resume");
-    avcApp_SetDownloadState(state);
-    avcApp_SetDownloadResult(result);
+
+    avcApp_SetSwUpdateState(state);
+    avcApp_SetSwUpdateResult(result);
 
     // Send a registration update after changing the obj state/result of the device.
     // This will trigger the server to query for the state/result.
@@ -568,11 +580,10 @@ static assetData_InstanceDataRef_t GetObject9InstanceForApp
 
 //--------------------------------------------------------------------------------------------------
 /**
- *  Create instances of object 9 and the Legato objects for all currently installed applications.
- *
- */
+ *  Send a list of object 9 instances currently managed by legato to lwm2mcore
+  */
 //--------------------------------------------------------------------------------------------------
-static void NotifyAppObjLists
+static void NotifyObj9List
 (
     void
 )
@@ -698,7 +709,7 @@ static void PopulateAppInfoObjects
     }
 
     // Notify lwm2mcore the list of app objects
-    NotifyAppObjLists();
+    NotifyObj9List();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -738,7 +749,6 @@ static void AppInstallHandler
         if (CurrentObj9 != NULL)
         {
             instanceRef = CurrentObj9;
-            CurrentObj9 = NULL;
 
             // Use the current instance and check if the object instance exists
             LE_INFO("AVMS install, use existing object9 instance.");
@@ -782,8 +792,14 @@ static void AppInstallHandler
 
     appCfg_DeleteIter(appIterRef);
 
+    // Finished install operation, reinit object 9 instance reference.
+    CurrentObj9 = NULL;
+
+    //Delete SW update workspace
+    DeletePackage();
+
     // Notify lwm2mcore that an app is installed
-    NotifyAppObjLists();
+    NotifyObj9List();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -846,8 +862,11 @@ static void AppUninstallHandler
         }
     }
 
+    //Delete SW update workspace
+    DeletePackage();
+
     // Notify lwm2mcore that an app is uninstalled
-    NotifyAppObjLists();
+    NotifyObj9List();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -929,7 +948,6 @@ static le_result_t StartUninstall
 
     return result;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1013,7 +1031,7 @@ static void UpdateProgressHandler
             SetObj9State(CurrentObj9,
                          LWM2MCORE_SW_UPDATE_STATE_INITIAL,
                          LWM2MCORE_SW_UPDATE_RESULT_INSTALL_FAILURE);
-            le_update_End();
+
             CurrentObj9 = NULL;
             UpdateStarted = false;
         break;
@@ -1022,6 +1040,457 @@ static void UpdateProgressHandler
             LE_ERROR("Bad state: %d\n", updateState);
             break;
      }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update instance id
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t SetSwUpdateInstanceId
+(
+    int instanceId     ///< [IN] SW update instance id
+)
+{
+    le_result_t result;
+
+    result = WriteFs(SW_UPDATE_INSTANCE_PATH,
+                     (uint8_t *)&instanceId,
+                     sizeof(int));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", SW_UPDATE_INSTANCE_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update bytes downloaded
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t SetSwUpdateBytesDownloaded
+(
+    void
+)
+{
+    le_result_t result;
+
+    LE_INFO("TotalCount = %zd", TotalCount);
+
+    result = WriteFs(SW_UPDATE_BYTES_DOWNLOADED_PATH,
+                     (uint8_t *)&TotalCount,
+                     sizeof(size_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", SW_UPDATE_BYTES_DOWNLOADED_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update bytes downloaded
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t GetSwUpdateBytesDownloaded
+(
+    size_t* bytesDownloadedPtr     ///< [OUT] bytes downloaded
+)
+{
+    size_t size;
+    le_result_t result;
+    size_t bytesDownloaded;
+
+    if (!bytesDownloadedPtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_FAULT;
+    }
+
+    size = sizeof(size_t);
+    result = ReadFs(SW_UPDATE_BYTES_DOWNLOADED_PATH, (size_t*)&bytesDownloaded, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("SW update instance id not found");
+            *bytesDownloadedPtr = -1;
+            return LE_OK;
+        }
+        LE_ERROR("Failed to read %s: %s", SW_UPDATE_BYTES_DOWNLOADED_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    *bytesDownloadedPtr = bytesDownloaded;
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software internal state
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t SetSwUpdateInternalState
+(
+    avcApp_InternalState_t internalState   ///< [IN] internal state
+)
+{
+    le_result_t result;
+
+    result = WriteFs(SW_UPDATE_INTERNAL_STATE_PATH,
+                     (uint8_t *)&internalState,
+                     sizeof(int));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", SW_UPDATE_INTERNAL_STATE_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update package size
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t SetSwUpdatePackageSize
+(
+    size_t pkgSize   ///< [IN] package size
+)
+{
+    le_result_t result;
+
+    result = WriteFs(SW_UPDATE_PKGSIZE_PATH,
+                     (uint8_t *)&pkgSize,
+                     sizeof(int));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", SW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update state
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t SetSwUpdateState
+(
+    lwm2mcore_SwUpdateState_t swUpdateState     ///< [IN] New SW update state
+)
+{
+    le_result_t result;
+
+    result = WriteFs(SW_UPDATE_STATE_PATH,
+                     (uint8_t *)&swUpdateState,
+                     sizeof(lwm2mcore_SwUpdateState_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", SW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update result
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t SetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t swUpdateResult   ///< [IN] New SW update result
+)
+{
+    le_result_t result;
+
+    result = WriteFs(SW_UPDATE_RESULT_PATH,
+                     (uint8_t *)&swUpdateResult,
+                     sizeof(lwm2mcore_SwUpdateResult_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", SW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update instance ID
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t GetSwUpdateInstanceId
+(
+    int* instanceIdPtr     ///< [OUT] instance id
+)
+{
+    size_t size;
+    le_result_t result;
+    int instanceId;
+
+    if (!instanceIdPtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_FAULT;
+    }
+
+    size = sizeof(int);
+    result = ReadFs(SW_UPDATE_INSTANCE_PATH, (int*)&instanceId, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("SW update instance id not found");
+            *instanceIdPtr = -1;
+            return LE_OK;
+        }
+        LE_ERROR("Failed to read %s: %s", SW_UPDATE_INSTANCE_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    *instanceIdPtr = instanceId;
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update internal state
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t GetSwUpdateInternalState
+(
+    avcApp_InternalState_t* internalStatePtr     ///< [OUT] internal state
+)
+{
+    size_t size;
+    le_result_t result;
+    int internalState;
+
+    if (!internalStatePtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_FAULT;
+    }
+
+    size = sizeof(int);
+    result = ReadFs(SW_UPDATE_INTERNAL_STATE_PATH, (int*)&internalState, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("SW update internal state not found");
+            *internalStatePtr = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
+            return LE_OK;
+        }
+        LE_ERROR("Failed to read %s: %s", SW_UPDATE_INTERNAL_STATE_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    switch (internalState)
+    {
+        case INTERNAL_STATE_DOWNLOAD_REQUESTED:
+            *internalStatePtr = INTERNAL_STATE_DOWNLOAD_REQUESTED;
+            break;
+
+        case INTERNAL_STATE_INSTALL_REQUESTED:
+            *internalStatePtr = INTERNAL_STATE_INSTALL_REQUESTED;
+            break;
+
+        case INTERNAL_STATE_UNINSTALL_REQUESTED:
+            *internalStatePtr = INTERNAL_STATE_UNINSTALL_REQUESTED;
+            break;
+
+        default:
+            *internalStatePtr = INTERNAL_STATE_INVALID;
+            break;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update packageSize
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t GetSwUpdatePackageSize
+(
+    size_t* pkgSizePtr     ///< [OUT] package size
+)
+{
+    size_t size;
+    size_t pkgSize;
+    le_result_t result;
+
+    if (!pkgSizePtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_FAULT;
+    }
+
+    size = sizeof(size_t);
+    result = ReadFs(SW_UPDATE_PKGSIZE_PATH, (int*)&pkgSize, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("SW update package size not found");
+            *pkgSizePtr = -1;
+            return LE_OK;
+        }
+        LE_ERROR("Failed to read %s: %s", SW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    *pkgSizePtr = pkgSize;
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update state
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t GetSwUpdateState
+(
+    lwm2mcore_SwUpdateState_t* swUpdateStatePtr     ///< [OUT] SW update state
+)
+{
+    lwm2mcore_SwUpdateState_t updateState;
+    size_t size;
+    le_result_t result;
+
+    if (!swUpdateStatePtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_FAULT;
+    }
+
+    size = sizeof(lwm2mcore_SwUpdateState_t);
+    result = ReadFs(SW_UPDATE_STATE_PATH, (uint8_t *)&updateState, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("SW update state not found");
+            *swUpdateStatePtr = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
+            return LE_OK;
+        }
+        LE_ERROR("Failed to read %s: %s", SW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    *swUpdateStatePtr = updateState;
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update result
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t GetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t* swUpdateResultPtr   ///< [OUT] SW update result
+)
+{
+    lwm2mcore_SwUpdateResult_t updateResult;
+    size_t size;
+    le_result_t result;
+
+    if (!swUpdateResultPtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_BAD_PARAMETER;
+    }
+
+    size = sizeof(lwm2mcore_SwUpdateResult_t);
+    result = ReadFs(SW_UPDATE_RESULT_PATH, (uint8_t *)&updateResult, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("SW update result not found");
+            *swUpdateResultPtr = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
+            return LE_OK;
+        }
+        LE_ERROR("Failed to read %s: %s", SW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    *swUpdateResultPtr = updateResult;
+
+    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1070,7 +1539,6 @@ static void StopStoringPackage
         LE_INFO("Download Failed");
     }
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1121,6 +1589,43 @@ static void WriteBytesToFd
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Copy the downloaded bytes from UpdateReadFd to UpdateStoreFd.
+ */
+//--------------------------------------------------------------------------------------------------
+static ssize_t CopyBytesToFd
+(
+    void
+)
+{
+    uint8_t buffer[DWL_STORE_BUF_SIZE];
+    ssize_t readCount;
+
+    // Read the bytes, retrying if interrupted by a signal.
+    do
+    {
+        readCount = read(UpdateReadFd, buffer, sizeof(buffer));
+    }
+    while ((-1 == readCount) && (EINTR == errno));
+
+    // Write the bytes read to disk.
+    if (0 == readCount)
+    {
+        LE_DEBUG("Finished storing; %d bytes stored", TotalCount);
+    }
+    else if (readCount > 0)
+    {
+        WriteBytesToFd(UpdateStoreFd, buffer, readCount);
+    }
+    else
+    {
+        // for sonar
+    }
+
+    return readCount;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Event handler for the input fd when storing the bytes to disk.
  */
 //--------------------------------------------------------------------------------------------------
@@ -1130,61 +1635,16 @@ static void StoreFdEventHandler
     short events            ///< [IN] FD events
 )
 {
-    uint8_t buffer[DWL_STORE_BUF_SIZE];
-    ssize_t readCount;
-
-    if (events & POLLHUP)
+    if (events & POLLIN)
     {
-        // file descriptor has been closed
-        LE_DEBUG("file descriptor %d has been closed", fd);
-
-        // Store the remaining bytes to disk.
-        while(1)
-        {
-            readCount = read (fd, buffer,sizeof(buffer));
-            LE_DEBUG("read %d bytes", readCount);
-
-            // Write the bytes read to disk.
-            if (readCount > 0)
-            {
-                WriteBytesToFd(UpdateStoreFd, buffer, readCount);
-            }
-            else if (readCount < 0)
-            {
-                LE_ERROR("error reading fd");
-                StopStoringPackage(LE_OK);
-            }
-            else
-            {
-                LE_DEBUG("Finished writing; close store fd");
-                LE_INFO("%d bytes stored", TotalCount);
-                StopStoringPackage(LE_OK);
-
-                LE_DEBUG("Start unpacking.");
-                avcApp_StartUpdate();
-                break;
-            }
-        }
-    }
-    else if (events & EPOLLIN)
-    {
-        readCount = read (fd, buffer,sizeof(buffer));
-        LE_DEBUG("read %d bytes", readCount);
-
-        // Write the bytes read to disk.
-        if (readCount > 0)
-        {
-            WriteBytesToFd(UpdateStoreFd, buffer, readCount);
-        }
+        CopyBytesToFd();
     }
     else
     {
-        LE_WARN("unexpected event received 0x%x",
-                events & ~(POLLHUP|POLLIN));
+        LE_WARN("unexpected event received 0x%x", events & ~POLLIN);
         StopStoringPackage(LE_FAULT);
     }
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1288,20 +1748,18 @@ static le_result_t StartStoringPackage
         }
     }
 
-    // Init total count
-    TotalCount = 0;
+    // Total count should begin from the stored offset for resume.
+    TotalCount = offset;
 
     // Set fd as non blocking
     fd_SetNonBlocking(clientFd);
 
     // Create FD monitor for the input FD
     UpdateReadFd = clientFd;
-    StoreFdMonitor = le_fdMonitor_Create("store", UpdateReadFd,
-                                         StoreFdEventHandler, (POLLIN | POLLHUP));
+    StoreFdMonitor = le_fdMonitor_Create("store", UpdateReadFd, StoreFdEventHandler, POLLIN);
 
     return LE_OK;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1323,6 +1781,29 @@ static void DownloadHandler
 
     LE_DEBUG("contextPtr: %p", pkgDwlPtr);
 
+    // Initialize input and output pipe.
+    if (StoreFdMonitor != NULL)
+    {
+        LE_DEBUG("Delete Store Fd Monitor");
+        le_fdMonitor_Delete(StoreFdMonitor);
+        StoreFdMonitor = NULL;
+    }
+
+    if (UpdateReadFd != -1)
+    {
+        LE_DEBUG("Close downloader read pipe.");
+        fd_Close(UpdateReadFd);
+        UpdateReadFd = -1;
+    }
+
+    if (UpdateStoreFd != -1)
+    {
+        LE_DEBUG("Close store pipe.");
+        fd_Close(UpdateStoreFd);
+        UpdateStoreFd = -1;
+    }
+
+    // Open read pipe
     fd = open(dwlCtxPtr->fifoPtr, O_RDONLY, 0);
     LE_DEBUG("Opened fifo");
 
@@ -1348,9 +1829,179 @@ static void DownloadHandler
         StopStoringPackage(LE_FAULT);
         return;
     }
-
-    UpdateStarted = true;
 }
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Handler to start unpack once download completes.
+ */
+//--------------------------------------------------------------------------------------------------
+static void UnpackStartHandler
+(
+     void* contextPtr
+)
+{
+    LE_DEBUG("Stop package store");
+    StopStoringPackage(LE_OK);
+
+    LE_DEBUG("Start package unpack");
+    avcApp_StartUpdate();
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Launch install process
+ */
+//--------------------------------------------------------------------------------------------------
+static void LaunchSwUpdate
+(
+    lwm2mcore_UpdateType_t updateType,
+    uint16_t instanceId
+)
+{
+    avcApp_StartInstall(instanceId);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Restore the state of the AVC update process after reboot or session start
+ */
+//--------------------------------------------------------------------------------------------------
+void avcApp_SotaResume
+(
+    void
+)
+{
+    int instanceId = -1;
+    char uri[MAX_FILE_PATH_BYTES];
+    lwm2mcore_SwUpdateState_t restoreState;
+    lwm2mcore_SwUpdateResult_t restoreResult;
+    avcApp_InternalState_t internalState;
+    size_t pkgSize = 0;
+    assetData_InstanceDataRef_t instanceRef;
+    le_result_t result;
+    lwm2mcore_UpdateType_t updateType;
+
+    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
+    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
+
+    // Initialize user agreement.
+    avcServer_InitUserAgreement();
+
+    if ((LE_OK == GetSwUpdateState(&restoreState))
+        && (LE_OK == GetSwUpdateResult(&restoreResult))
+        && (LE_OK == GetSwUpdateInstanceId(&instanceId))
+        && (LE_OK == GetSwUpdateInternalState(&internalState)))
+    {
+        LE_PRINT_VALUE("%i", instanceId);
+        LE_PRINT_VALUE("%i", restoreState);
+        LE_PRINT_VALUE("%i", restoreResult);
+
+        if (instanceId == -1)
+        {
+            LE_DEBUG("Instance ID invalid");
+            return;
+        }
+
+        if (assetData_GetInstanceRefById(LWM2M_NAME,
+                                         LWM2M_OBJ9,
+                                         instanceId,
+                                         &instanceRef) == LE_OK)
+        {
+            LE_DEBUG("Object 9 instance exists.");
+        }
+        else
+        {
+            LE_DEBUG("Create a new object 9 instance.");
+            LE_ASSERT_OK(assetData_CreateInstanceById(LWM2M_NAME,
+                                         LWM2M_OBJ9, instanceId, &instanceRef));
+        }
+
+        // Restore the state of Object9
+        SetObj9State(instanceRef, restoreState, restoreResult);
+
+        // Notify lwm2mcore that a new instance is created.
+        NotifyObj9List();
+
+        // Force the type of the install to application install.
+        avcServer_SetUpdateType(LE_AVC_APPLICATION_UPDATE);
+
+        switch (restoreState)
+        {
+            case LWM2MCORE_SW_UPDATE_STATE_INITIAL:
+                if (internalState == INTERNAL_STATE_DOWNLOAD_REQUESTED)
+                {
+                    // Download requested from server but was not accepted yet by user. So we
+                    // start a fresh download and wait for user agreement again.
+                    LE_INFO("Resuming Download");
+                    CurrentObj9 = instanceRef;
+                }
+                break;
+
+            case LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED:
+                // Download accepted by user and in progress. This case is handled
+                // by package downloader.
+                break;
+
+            case LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED:
+                // Start unpacking the downloaded package and wait for install command from server
+                result = avcApp_StartUpdate();
+
+                if (LE_OK != result)
+                {
+                    LE_ERROR("Failed to resume unpack");
+                    DeletePackage();
+                }
+                break;
+
+            case LWM2MCORE_SW_UPDATE_STATE_DELIVERED:
+                // If we got interrupted after receiving the install command from the server,
+                // we will restart the install process, else we will wait for the server to
+                // send O9F_INSTALL
+                if (internalState == INTERNAL_STATE_INSTALL_REQUESTED)
+                {
+                    LE_INFO("Resuming Install.");
+                    // Query control app for permission to install.
+                    CurrentObj9 = instanceRef;
+                    AvmsInstall = true;
+                    result = avcServer_QueryInstall(LaunchSwUpdate,
+                                                    LWM2MCORE_SW_UPDATE_TYPE,
+                                                    instanceId);
+
+                    LE_FATAL_IF(result == LE_FAULT,
+                              "Unexpected error in query install: %s",
+                              LE_RESULT_TXT(result));
+
+                    if (result != LE_BUSY)
+                    {
+                        avcApp_StartInstall(instanceId);
+                    }
+                }
+                break;
+
+            case LWM2MCORE_SW_UPDATE_STATE_INSTALLED:
+                if (internalState == INTERNAL_STATE_UNINSTALL_REQUESTED)
+                {
+                    CurrentObj9 = instanceRef;
+                    LE_INFO("Resuming Uninstall.");
+
+                    result = avcServer_QueryUninstall(avcApp_PrepareUninstall, instanceId);
+
+                    if (result != LE_BUSY)
+                    {
+                        avcApp_PrepareUninstall(instanceId);
+                    }
+                }
+                break;
+
+            default:
+                LE_ERROR("Invalid Object 9 state");
+                break;
+        }
+    }
+}
+
 
 //--------------------------------------------------------------------------------------------------
 // Public functions
@@ -1414,7 +2065,6 @@ le_result_t avcApp_StartInstall
     return result;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Function called to unpack the downloaded package
@@ -1473,6 +2123,9 @@ le_result_t avcApp_StartUpdate
         return LE_FAULT;
     }
 
+    // Indicate update successfully started.
+    UpdateStarted = true;
+
     return LE_OK;
 }
 
@@ -1517,6 +2170,9 @@ le_result_t avcApp_PrepareUninstall
                  LWM2MCORE_SW_UPDATE_RESULT_INITIAL);
 
     CurrentObj9 = instanceRef;
+
+    //Delete SW update workspace
+    DeletePackage();
 
     return LE_OK;
 }
@@ -1794,8 +2450,8 @@ le_result_t avcApp_CreateObj9Instance
 
     SetSwUpdateInstanceId(instanceId);
     SetSwUpdateInternalState(INTERNAL_STATE_DOWNLOAD_REQUESTED);
-    packageDownloader_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
-    packageDownloader_SetSwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL);
+    SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
+    SetSwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL);
     return result;
 }
 
@@ -1968,7 +2624,7 @@ le_result_t avcApp_GetResumePosition
                                     LWM2M_OBJ9, instanceId, &CurrentObj9) == LE_OK);
 
             // Notify lwm2mcore that a new instance is created.
-            NotifyAppObjLists();
+            NotifyObj9List();
         }
         else
         {
@@ -1982,7 +2638,7 @@ le_result_t avcApp_GetResumePosition
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software download result
+ * Set software update result in asset data and SW update workspace.
  *
  * @return:
  *      - LE_OK on success
@@ -1990,7 +2646,7 @@ le_result_t avcApp_GetResumePosition
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t  avcApp_SetDownloadResult
+lwm2mcore_DwlResult_t  avcApp_SetSwUpdateResult
 (
     lwm2mcore_SwUpdateResult_t updateResult
 )
@@ -2031,13 +2687,17 @@ lwm2mcore_DwlResult_t  avcApp_SetDownloadResult
 
     }
 
+    // Set result in asset data
     LE_ASSERT_OK(assetData_client_SetInt(CurrentObj9, O9F_UPDATE_RESULT, updateResult));
+
+    // Save result in workspace for resume operation
+    SetSwUpdateResult(updateResult);
     return DWL_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software download state
+ * Set software update state in asset data and SW update workspace
  *
  * @return:
  *      - LE_OK on success
@@ -2045,7 +2705,7 @@ lwm2mcore_DwlResult_t  avcApp_SetDownloadResult
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t  avcApp_SetDownloadState
+lwm2mcore_DwlResult_t  avcApp_SetSwUpdateState
 (
     lwm2mcore_SwUpdateState_t updateState
 )
@@ -2057,7 +2717,11 @@ lwm2mcore_DwlResult_t  avcApp_SetDownloadState
         return DWL_FAULT;
     }
 
+    // Set state in asset data
     LE_ASSERT_OK(assetData_client_SetInt(CurrentObj9, O9F_UPDATE_STATE, updateState));
+
+    // Save state in workspace for resume operation
+    SetSwUpdateState(updateState);
 
     return DWL_OK;
 }
@@ -2072,7 +2736,7 @@ lwm2mcore_DwlResult_t  avcApp_SetDownloadState
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcApp_GetUpdateResult
+le_result_t avcApp_GetSwUpdateResult
 (
     uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
     uint8_t* updateResultPtr        ///< [OUT] Software update result
@@ -2126,7 +2790,7 @@ le_result_t avcApp_GetUpdateResult
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcApp_GetUpdateState
+le_result_t avcApp_GetSwUpdateState
 (
     uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
     uint8_t* updateStatePtr         ///< [OUT] Software update state
@@ -2170,70 +2834,58 @@ le_result_t avcApp_GetUpdateState
     return LE_OK;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software update instance id
+ * Set software update bytes downloaded to workspace
  *
  * @return
  *  - LE_OK     The function succeeded
  *  - LE_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t SetSwUpdateInstanceId
+le_result_t avcApp_SetSwUpdateBytesDownloaded
+(
+    void
+)
+{
+    return SetSwUpdateBytesDownloaded();
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update instance id to workspace
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_SetSwUpdateInstanceId
 (
     int instanceId     ///< [IN] SW update instance id
 )
 {
-    le_result_t result;
-
-    result = WriteFs(SW_UPDATE_INSTANCE_PATH,
-                     (uint8_t *)&instanceId,
-                     sizeof(int));
-    if (LE_OK != result)
-    {
-        LE_ERROR("Failed to write %s: %s", SW_UPDATE_INSTANCE_PATH, LE_RESULT_TXT(result));
-        return LE_FAULT;
-    }
-
-    return LE_OK;
+    return SetSwUpdateInstanceId(instanceId);
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software update bytes downloaded
- *
- * @return
- *  - LE_OK     The function succeeded
- *  - LE_FAULT  The function failed
+ * End download
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t SetSwUpdateBytesDownloaded
+void avcApp_EndDownload
 (
     void
 )
 {
-    le_result_t result;
+    LE_INFO("Download completed: Start unpacking package");
 
-    LE_INFO("TotalCount = %zd", TotalCount);
-
-    result = WriteFs(SW_UPDATE_BYTES_DOWNLOADED_PATH,
-                     (uint8_t *)&TotalCount,
-                     sizeof(size_t));
-    if (LE_OK != result)
-    {
-        LE_ERROR("Failed to write %s: %s", SW_UPDATE_BYTES_DOWNLOADED_PATH, LE_RESULT_TXT(result));
-        return LE_FAULT;
-    }
-
-    return LE_OK;
+    le_event_Report(UnpackStartEventId, NULL, 0);
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get software update bytes downloaded
+ * Save software update internal state to workspace for resume operation
  *
  * @return
  *  - LE_OK             The function succeeded
@@ -2241,383 +2893,101 @@ le_result_t SetSwUpdateBytesDownloaded
  *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t GetSwUpdateBytesDownloaded
+le_result_t avcApp_SetSwUpdateInternalState
 (
-    size_t* bytesDownloadedPtr     ///< [OUT] bytes downloaded
+    avcApp_InternalState_t internalState            ///< [IN] internal state
 )
 {
-    size_t size;
-    le_result_t result;
-    size_t bytesDownloaded;
-
-    if (!bytesDownloadedPtr)
-    {
-        LE_ERROR("Invalid input parameter");
-        return LE_FAULT;
-    }
-
-    size = sizeof(size_t);
-    result = ReadFs(SW_UPDATE_BYTES_DOWNLOADED_PATH, (size_t*)&bytesDownloaded, &size);
-    if (LE_OK != result)
-    {
-        if (LE_NOT_FOUND == result)
-        {
-            LE_ERROR("SW update instance id not found");
-            *bytesDownloadedPtr = -1;
-            return LE_OK;
-        }
-        LE_ERROR("Failed to read %s: %s", SW_UPDATE_BYTES_DOWNLOADED_PATH, LE_RESULT_TXT(result));
-        return result;
-    }
-
-    *bytesDownloadedPtr = bytesDownloaded;
-
-    return LE_OK;
-}
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Set software internal state
- *
- * @return
- *  - LE_OK     The function succeeded
- *  - LE_FAULT  The function failed
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t SetSwUpdateInternalState
-(
-    avcApp_InternalState_t internalState   ///< [IN] internal state
-)
-{
-    le_result_t result;
-
-    result = WriteFs(SW_UPDATE_INTERNAL_STATE_PATH,
-                     (uint8_t *)&internalState,
-                     sizeof(int));
-    if (LE_OK != result)
-    {
-        LE_ERROR("Failed to write %s: %s", SW_UPDATE_INTERNAL_STATE_PATH, LE_RESULT_TXT(result));
-        return LE_FAULT;
-    }
-
-    return LE_OK;
+    return SetSwUpdateInternalState(internalState);
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software update package size
- *
- * @return
- *  - LE_OK     The function succeeded
- *  - LE_FAULT  The function failed
+ * Delete SOTA workspace
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t SetSwUpdatePackageSize
-(
-    size_t pkgSize   ///< [IN] package size
-)
-{
-    le_result_t result;
-
-    result = WriteFs(SW_UPDATE_PKGSIZE_PATH,
-                     (uint8_t *)&pkgSize,
-                     sizeof(int));
-    if (LE_OK != result)
-    {
-        LE_ERROR("Failed to write %s: %s", SW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
-        return LE_FAULT;
-    }
-
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get software update instance ID
- *
- * @return
- *  - LE_OK             The function succeeded
- *  - LE_BAD_PARAMETER  Null pointer provided
- *  - LE_FAULT          The function failed
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t GetSwUpdateInstanceId
-(
-    int* instanceIdPtr     ///< [OUT] instance id
-)
-{
-    size_t size;
-    le_result_t result;
-    int instanceId;
-
-    if (!instanceIdPtr)
-    {
-        LE_ERROR("Invalid input parameter");
-        return LE_FAULT;
-    }
-
-    size = sizeof(lwm2mcore_SwUpdateState_t);
-    result = ReadFs(SW_UPDATE_INSTANCE_PATH, (int*)&instanceId, &size);
-    if (LE_OK != result)
-    {
-        if (LE_NOT_FOUND == result)
-        {
-            LE_ERROR("SW update instance id not found");
-            *instanceIdPtr = -1;
-            return LE_OK;
-        }
-        LE_ERROR("Failed to read %s: %s", SW_UPDATE_INSTANCE_PATH, LE_RESULT_TXT(result));
-        return result;
-    }
-
-    *instanceIdPtr = instanceId;
-
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get software update internal state
- *
- * @return
- *  - LE_OK             The function succeeded
- *  - LE_BAD_PARAMETER  Null pointer provided
- *  - LE_FAULT          The function failed
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t GetSwUpdateInternalState
-(
-    avcApp_InternalState_t* internalStatePtr     ///< [OUT] internal state
-)
-{
-    size_t size;
-    le_result_t result;
-    int internalState;
-
-    if (!internalStatePtr)
-    {
-        LE_ERROR("Invalid input parameter");
-        return LE_FAULT;
-    }
-
-    size = sizeof(int);
-    result = ReadFs(SW_UPDATE_INTERNAL_STATE_PATH, (int*)&internalState, &size);
-    if (LE_OK != result)
-    {
-        if (LE_NOT_FOUND == result)
-        {
-            LE_ERROR("SW update internal state not found");
-            *internalStatePtr = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
-            return LE_OK;
-        }
-        LE_ERROR("Failed to read %s: %s", SW_UPDATE_INTERNAL_STATE_PATH, LE_RESULT_TXT(result));
-        return result;
-    }
-
-    switch (internalState)
-    {
-        case INTERNAL_STATE_DOWNLOAD_REQUESTED:
-            *internalStatePtr = INTERNAL_STATE_DOWNLOAD_REQUESTED;
-            break;
-
-        case INTERNAL_STATE_INSTALL_REQUESTED:
-            *internalStatePtr = INTERNAL_STATE_INSTALL_REQUESTED;
-            break;
-
-        case INTERNAL_STATE_UNINSTALL_REQUESTED:
-            *internalStatePtr = INTERNAL_STATE_UNINSTALL_REQUESTED;
-            break;
-
-        default:
-            *internalStatePtr = INTERNAL_STATE_INVALID;
-    }
-
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get software update packageSize
- *
- * @return
- *  - LE_OK             The function succeeded
- *  - LE_BAD_PARAMETER  Null pointer provided
- *  - LE_FAULT          The function failed
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t GetSwUpdatePackageSize
-(
-    size_t* pkgSizePtr     ///< [OUT] package size
-)
-{
-    size_t size;
-    size_t pkgSize;
-    le_result_t result;
-
-    if (!pkgSizePtr)
-    {
-        LE_ERROR("Invalid input parameter");
-        return LE_FAULT;
-    }
-
-    size = sizeof(size_t);
-    result = ReadFs(SW_UPDATE_PKGSIZE_PATH, (int*)&pkgSize, &size);
-    if (LE_OK != result)
-    {
-        if (LE_NOT_FOUND == result)
-        {
-            LE_ERROR("SW update package size not found");
-            *pkgSizePtr = -1;
-            return LE_OK;
-        }
-        LE_ERROR("Failed to read %s: %s", SW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
-        return result;
-    }
-
-    *pkgSizePtr = pkgSize;
-
-    return LE_OK;
-}
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- *  Launch install process
- */
-//--------------------------------------------------------------------------------------------------
-static void LaunchSwUpdate
-(
-    lwm2mcore_UpdateType_t updateType,
-    uint16_t instanceId
-)
-{
-    avcApp_StartInstall(instanceId);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- *  Restore the state of the avc update process after a reboot or power cycle
- */
-//--------------------------------------------------------------------------------------------------
-static void RestoreAvcAppUpdateState
+void avcApp_DeletePackage
 (
     void
 )
 {
-    int instanceId = -1;
-    char uri[MAX_FILE_PATH_BYTES];
-    lwm2mcore_SwUpdateState_t restoreState;
-    lwm2mcore_SwUpdateResult_t restoreResult;
-    avcApp_InternalState_t internalState;
-    size_t pkgSize = 0;
-    assetData_InstanceDataRef_t instanceRef;
-    le_result_t result;
-    lwm2mcore_UpdateType_t updateType;
+    DeletePackage();
+}
 
-    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
-    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get saved software update state from workspace for resume operation
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_GetSwUpdateRestoreState
+(
+    lwm2mcore_SwUpdateState_t* swUpdateStatePtr     ///< [OUT] SW update state
+)
+{
+    return GetSwUpdateState(swUpdateStatePtr);
+}
 
-    if ((LE_OK == packageDownloader_GetSwUpdateState(&restoreState))
-        && (LE_OK == packageDownloader_GetSwUpdateResult(&restoreResult))
-        && (LE_OK == GetSwUpdateInstanceId(&instanceId))
-        && (LE_OK == GetSwUpdateInternalState(&internalState)))
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get saved software update result from workspace for resume operation
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_GetSwUpdateRestoreResult
+(
+    lwm2mcore_SwUpdateResult_t* swUpdateResultPtr     ///< [OUT] SW update result
+)
+{
+    return GetSwUpdateResult(swUpdateResultPtr);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Save software update state and result in SW update workspace
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_SaveSwUpdateStateResult
+(
+    lwm2mcore_SwUpdateState_t swUpdateState,     ///< [IN] New SW update state
+    lwm2mcore_SwUpdateResult_t swUpdateResult    ///< [IN] New SW update result
+)
+{
+    if ((LE_OK == SetSwUpdateState(swUpdateState))
+        && (LE_OK == SetSwUpdateResult(swUpdateResult)))
     {
-        LE_PRINT_VALUE("%i", instanceId);
-        LE_PRINT_VALUE("%i", restoreState);
-        LE_PRINT_VALUE("%i", restoreResult);
-        LE_PRINT_VALUE("%p", uri);
-
-        if (instanceId == -1)
-        {
-            LE_DEBUG("Instance ID invalid");
-            return;
-        }
-
-        // Do not restore if already installed
-        if ((restoreResult != LWM2MCORE_SW_UPDATE_STATE_INITIAL)
-            && (restoreResult != LWM2MCORE_SW_UPDATE_RESULT_INSTALLED)
-            && (restoreResult != LWM2MCORE_SW_UPDATE_RESULT_INSTALL_FAILURE))
-        {
-            LE_DEBUG("SW update not resumed: instanceId %d, result %d", instanceId, restoreResult);
-            return;
-        }
-
-        if (assetData_GetInstanceRefById(LWM2M_NAME,
-                                         LWM2M_OBJ9,
-                                         instanceId,
-                                         &instanceRef) == LE_OK)
-        {
-            LE_DEBUG("Object 9 instance exists.");
-        }
-        else
-        {
-            LE_DEBUG("Create a new object 9 instance.");
-            LE_ASSERT_OK(assetData_CreateInstanceById(LWM2M_NAME,
-                                         LWM2M_OBJ9, instanceId, &instanceRef));
-        }
-
-        // Restore the state of Object9
-        SetObj9State(instanceRef, restoreState, restoreResult);
-
-        // Notify lwm2mcore that a new instance is created.
-        NotifyAppObjLists();
-
-        // Force the type of the install to application install.
-        avcServer_SetUpdateType(LE_AVC_APPLICATION_UPDATE);
-
-        switch (restoreState)
-        {
-            case LWM2MCORE_SW_UPDATE_STATE_INITIAL:
-            case LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED:
-            case LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED:
-                break;
-
-            case LWM2MCORE_SW_UPDATE_STATE_DELIVERED:
-                // If we got interrupted after receiving the install command from the server,
-                // we will restart the install process, else we will wait for the server to
-                // send O9F_INSTALL
-                if (internalState == INTERNAL_STATE_INSTALL_REQUESTED)
-                {
-                    LE_INFO("Resuming Install.");
-                    // Query control app for permission to install.
-                    CurrentObj9 = instanceRef;
-                    AvmsInstall = true;
-                    result = avcServer_QueryInstall(LaunchSwUpdate,
-                                                    LWM2MCORE_SW_UPDATE_TYPE,
-                                                    instanceId);
-
-                    LE_FATAL_IF(result == LE_FAULT,
-                              "Unexpected error in query install: %s",
-                              LE_RESULT_TXT(result));
-
-                    if (result != LE_BUSY)
-                    {
-                        avcApp_StartInstall(instanceId);
-                    }
-                }
-                break;
-
-            case LWM2MCORE_SW_UPDATE_STATE_INSTALLED:
-                if (internalState == INTERNAL_STATE_UNINSTALL_REQUESTED)
-                {
-                    CurrentObj9 = instanceRef;
-                    LE_INFO("Resuming Uninstall.");
-
-                    result = avcServer_QueryUninstall(avcApp_PrepareUninstall, instanceId);
-
-                    if (result != LE_BUSY)
-                    {
-                        avcApp_PrepareUninstall(instanceId);
-                    }
-                }
-                break;
-
-            default:
-                LE_ERROR("Invalid Object 9 state");
-                break;
-        }
+        return LE_OK;
     }
+    else
+    {
+        LE_ERROR("Unable to set sw update state/result to workspace");
+        return LE_FAULT;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Send a list of object 9 instances currently managed by legato to lwm2mcore
+  */
+//--------------------------------------------------------------------------------------------------
+void avcApp_NotifyObj9List
+(
+    void
+)
+{
+    NotifyObj9List();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2639,15 +3009,14 @@ void avcApp_Init
     le_instStat_AddAppInstallEventHandler(AppInstallHandler, NULL);
     le_instStat_AddAppUninstallEventHandler(AppUninstallHandler, NULL);
 
-    UpdateEndEventId = le_event_CreateId("UpdateEnd", 0);
-    le_event_AddHandler("UpdateEndHandler", UpdateEndEventId, UpdateEndHandler);
-
     DownloadEventId = le_event_CreateId("DownloadEvent", sizeof(lwm2mcore_PackageDownloader_t));
     le_event_AddHandler("DownloadHandler", DownloadEventId, DownloadHandler);
 
-    PopulateAppInfoObjects();
+    UnpackStartEventId = le_event_CreateId("UnpackStartEvent", 0);
+    le_event_AddHandler("UnpackStartHandler", UnpackStartEventId, UnpackStartHandler);
 
-    // Restore the state of the update process, if avcService was rebooted or interrupted
-    // by a power failure while in the middle of an application update.
-    RestoreAvcAppUpdateState();
+    UpdateEndEventId = le_event_CreateId("UpdateEnd", 0);
+    le_event_AddHandler("UpdateEndHandler", UpdateEndEventId, UpdateEndHandler);
+
+    PopulateAppInfoObjects();
 }

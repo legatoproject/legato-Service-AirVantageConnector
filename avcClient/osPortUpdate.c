@@ -141,8 +141,8 @@ static bool IsSotaDownloading
     lwm2mcore_SwUpdateState_t swUpdateState = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
     lwm2mcore_SwUpdateResult_t swUpdateResult = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
 
-    return ((LE_OK == packageDownloader_GetSwUpdateState(&swUpdateState))
-            && (LE_OK == packageDownloader_GetSwUpdateResult(&swUpdateResult))
+    return ((LE_OK == avcApp_GetSwUpdateRestoreState(&swUpdateState))
+            && (LE_OK == avcApp_GetSwUpdateRestoreResult(&swUpdateResult))
             && (LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED == swUpdateState)
             && (LWM2MCORE_SW_UPDATE_RESULT_INITIAL == swUpdateResult));
 }
@@ -236,7 +236,7 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
             break;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
-            if (LE_OK != avcApp_SetDownloadResult(LWM2MCORE_SW_UPDATE_RESULT_INITIAL))
+            if (LE_OK != avcApp_SetSwUpdateResult(LWM2MCORE_SW_UPDATE_RESULT_INITIAL))
             {
                 return LWM2MCORE_ERR_GENERAL_ERROR;
             }
@@ -339,7 +339,7 @@ lwm2mcore_Sid_t lwm2mcore_LaunchUpdate
 
                 if (type == LWM2MCORE_SW_UPDATE_TYPE)
                 {
-                    SetSwUpdateInternalState(INTERNAL_STATE_INSTALL_REQUESTED);
+                    avcApp_SetSwUpdateInternalState(INTERNAL_STATE_INSTALL_REQUESTED);
                 }
             }
             break;
@@ -384,7 +384,7 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdateState
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
             if (LE_OK == packageDownloader_GetFwUpdateState(
-                                                        (lwm2mcore_FwUpdateState_t*)updateStatePtr))
+                                                (lwm2mcore_FwUpdateState_t*)updateStatePtr))
             {
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
                 LE_DEBUG("updateState : %d", *updateStatePtr);
@@ -396,8 +396,8 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdateState
             break;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
-            if (LE_OK == avcApp_GetUpdateState(instanceId,
-                                               (lwm2mcore_SwUpdateState_t*)updateStatePtr))
+            if (LE_OK == avcApp_GetSwUpdateState(instanceId,
+                                                (lwm2mcore_SwUpdateState_t*)updateStatePtr))
             {
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
                 LE_DEBUG("updateState : %d", *updateStatePtr);
@@ -460,8 +460,8 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdateResult
             break;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
-            if (LE_OK == avcApp_GetUpdateResult(instanceId,
-                                                (lwm2mcore_SwUpdateResult_t*)updateResultPtr))
+            if (LE_OK == avcApp_GetSwUpdateResult(instanceId,
+                                                 (lwm2mcore_SwUpdateResult_t*)updateResultPtr))
             {
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
                 LE_DEBUG("updateResult : %d", *updateResultPtr);
@@ -700,11 +700,35 @@ lwm2mcore_Sid_t lwm2mcore_LaunchSwUpdateUninstall
 )
 {
     le_result_t result;
+    uint8_t updateState;
+    uint8_t updateResult;
 
     if ((NULL == bufferPtr) && len)
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
+
+    // Save the uninstall request in SW update workspace
+    avcApp_SetSwUpdateInstanceId(instanceId);
+
+    // Read the state of this object9 instance and save it in SW update workspace
+    if (avcApp_GetSwUpdateState(instanceId, &updateState) != LE_OK)
+    {
+        LE_ERROR("Failed to read object9 state for instanceid %d", instanceId);
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    // Read the result of this object 9 instance and save it in SW update workspace
+    if (avcApp_GetSwUpdateResult(instanceId, &updateResult) != LE_OK)
+    {
+        LE_ERROR("Failed to read object9 result for instanceid %d", instanceId);
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    LE_DEBUG("Set the update state %d and result %d to workspace", updateState, updateResult);
+    avcApp_SaveSwUpdateStateResult(updateState, updateResult);
+
+    avcApp_SetSwUpdateInternalState(INTERNAL_STATE_UNINSTALL_REQUESTED);
 
     // Here we are only delisting the app. The deletion of app will be called when deletion
     // of object 9 instance is requested. But get user agreement before delisting.
@@ -917,6 +941,9 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
     bool downloadResume = false;
     memset(downloadUri, 0, uriLen);
+
+    // Resume SOTA
+    avcApp_SotaResume();
 
     // Check if an update package URI is stored
     if (LE_OK != packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))

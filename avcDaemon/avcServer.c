@@ -583,12 +583,32 @@ void avcServer_UpdateHandler
             break;
 
         case LE_AVC_DOWNLOAD_IN_PROGRESS:
+            LE_DEBUG("Update type for DOWNLOAD is %d", updateType);
+            CurrentTotalNumBytes = totalNumBytes;
+            CurrentDownloadProgress = dloadProgress;
+            CurrentUpdateType = updateType;
+
+            if (LE_AVC_APPLICATION_UPDATE == updateType)
+            {
+                // Set the bytes downloaded to workspace for resume operation
+                avcApp_SetSwUpdateBytesDownloaded();
+            }
+            break;
+
         case LE_AVC_DOWNLOAD_COMPLETE:
             LE_DEBUG("Update type for DOWNLOAD is %d", updateType);
             CurrentTotalNumBytes = totalNumBytes;
             CurrentDownloadProgress = dloadProgress;
             CurrentUpdateType = updateType;
-            SetSwUpdateBytesDownloaded();
+
+            if (LE_AVC_APPLICATION_UPDATE == updateType)
+            {
+                // Set the bytes downloaded to workspace for resume operation
+                avcApp_SetSwUpdateBytesDownloaded();
+
+                // End download and start unpack
+                avcApp_EndDownload();
+            }
             break;
 
         case LE_AVC_UNINSTALL_PENDING:
@@ -609,10 +629,19 @@ void avcServer_UpdateHandler
             // There is no longer any current update, so go back to idle
             AvcErrorCode = errorCode;
             CurrentState = AVC_IDLE;
+
+            if (LE_AVC_APPLICATION_UPDATE == updateType)
+            {
+                avcApp_DeletePackage();
+            }
+            break;
+
+        case LE_AVC_SESSION_STARTED:
+            // Update object9 list managed by legato to lwm2mcore
+            avcApp_NotifyObj9List();
             break;
 
         case LE_AVC_INSTALL_IN_PROGRESS:
-        case LE_AVC_SESSION_STARTED:
         case LE_AVC_SESSION_STOPPED:
             // These events do not cause a state transition
             break;
@@ -633,42 +662,6 @@ void avcServer_UpdateHandler
                           totalNumBytes,
                           dloadProgress,
                           StatusHandlerContextPtr);
-
-        // If the notification sent above is session started, the following block will send
-        // another notification reporting the pending states.
-        if ( updateStatus == LE_AVC_SESSION_STARTED )
-        {
-            // The currentState is really the previous state in case of session start, as we don't
-            // do a state change.
-            switch ( CurrentState )
-            {
-                case AVC_DOWNLOAD_PENDING:
-                    reportStatus = LE_AVC_DOWNLOAD_PENDING;
-                    break;
-                case AVC_INSTALL_PENDING:
-                    CurrentTotalNumBytes = -1;
-                    CurrentDownloadProgress = -1;
-                    reportStatus = LE_AVC_INSTALL_PENDING;
-                    break;
-                case AVC_UNINSTALL_PENDING:
-                    CurrentTotalNumBytes = -1;
-                    CurrentDownloadProgress = -1;
-                    reportStatus = LE_AVC_UNINSTALL_PENDING;
-                    break;
-                default:
-                    break;
-            }
-
-            // Notify pending state to registered control app for user acceptance.
-            if ( reportStatus != LE_AVC_NO_UPDATE )
-            {
-                LE_DEBUG("Reporting status  %d,", reportStatus);
-                StatusHandlerRef(reportStatus,
-                                 CurrentTotalNumBytes,
-                                 CurrentDownloadProgress,
-                                 StatusHandlerContextPtr);
-            }
-        }
     }
     else if ( IsControlAppInstalled )
     {
@@ -1166,6 +1159,27 @@ le_result_t avcServer_QueryDownload
     }
 
     return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initializes user agreement queries of download, install and uninstall. Used after a session
+ * start for SOTA resume.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcServer_InitUserAgreement
+(
+    void
+)
+{
+    StopDownloadDeferTimer();
+    QueryDownloadHandlerRef = NULL;
+
+    StopInstallDeferTimer();
+    QueryInstallHandlerRef = NULL;
+
+    StopUninstallDeferTimer();
+    QueryUninstallHandlerRef = NULL;
 }
 
 //--------------------------------------------------------------------------------------------------

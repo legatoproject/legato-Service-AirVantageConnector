@@ -150,7 +150,7 @@ le_result_t avcApp_GetActivationState
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcApp_GetUpdateResult
+le_result_t avcApp_GetSwUpdateResult
 (
     uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
     uint8_t* updateResultPtr        ///< [OUT] Software update result
@@ -167,12 +167,109 @@ le_result_t avcApp_GetUpdateResult
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcApp_GetUpdateState
+le_result_t avcApp_GetSwUpdateState
 (
     uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
     uint8_t* updateStatePtr         ///< [OUT] Software update state
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update bytes downloaded to workspace
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_SetSwUpdateBytesDownloaded
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update instance id to workspace
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_SetSwUpdateInstanceId
+(
+    int instanceId     ///< [IN] SW update instance id
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * End download
+ */
+//--------------------------------------------------------------------------------------------------
+void avcApp_EndDownload
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Save software update internal state to workspace for resume operation
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_SetSwUpdateInternalState
+(
+    avcApp_InternalState_t internalState            ///< [IN] Internal state
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get saved software update state from workspace for resume operation
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_GetSwUpdateRestoreState
+(
+    lwm2mcore_SwUpdateState_t* swUpdateStatePtr     ///< [OUT] SW update state
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get saved software update result from workspace for resume operation
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_GetSwUpdateRestoreResult
+(
+    lwm2mcore_SwUpdateResult_t* swUpdateResultPtr     ///< [OUT] SW update result
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Save software update state and result in SW update workspace
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_SaveSwUpdateStateResult
+(
+    lwm2mcore_SwUpdateState_t swUpdateState,     ///< [IN] New SW update state
+    lwm2mcore_SwUpdateResult_t swUpdateResult    ///< [IN] New SW update result
+);
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -212,7 +309,7 @@ le_result_t avcApp_GetPackageVersion
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software download state
+ * Set software update state in asset data and SW update workspace
  *
  * @return:
  *      - LE_OK on success
@@ -220,7 +317,7 @@ le_result_t avcApp_GetPackageVersion
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t  avcApp_SetDownloadState
+lwm2mcore_DwlResult_t  avcApp_SetSwUpdateState
 (
     lwm2mcore_SwUpdateState_t updateState
 );
@@ -228,7 +325,7 @@ lwm2mcore_DwlResult_t  avcApp_SetDownloadState
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software download result
+ * Set software update result in asset data and SW update workspace.
  *
  * @return:
  *      - LE_OK on success
@@ -236,7 +333,7 @@ lwm2mcore_DwlResult_t  avcApp_SetDownloadState
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t  avcApp_SetDownloadResult
+lwm2mcore_DwlResult_t  avcApp_SetSwUpdateResult
 (
     lwm2mcore_SwUpdateResult_t updateResult
 );
@@ -274,6 +371,15 @@ le_result_t avcApp_DeleteObj9Instance
     uint16_t instanceId            ///< [IN] object 9 instance id
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Send a list of object 9 instances currently managed by legato to lwm2mcore
+ */
+//--------------------------------------------------------------------------------------------------
+void avcApp_NotifyObj9List
+(
+    void
+);
 
 //--------------------------------------------------------------------------------------------------
 /**

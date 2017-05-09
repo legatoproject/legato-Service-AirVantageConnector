@@ -151,7 +151,16 @@ LE_SHARED le_result_t avcServer_QueryDownload
 );
 
 
-
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initializes user agreement queries of download, install and uninstall. Used after a session
+ * start for SOTA resume.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcServer_InitUserAgreement
+(
+    void
+);
 
 
 //--------------------------------------------------------------------------------------------------
