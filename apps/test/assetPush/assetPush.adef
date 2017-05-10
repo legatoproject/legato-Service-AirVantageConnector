@@ -1,0 +1,22 @@
+executables:
+{
+    assetpush = ( assetPushComponent )
+}
+
+processes:
+{
+    run:
+    {
+        // Normally should be executed with 'app runProc' using:
+        // app runProc assetPush --exe=assetpush -- x
+        // where x is the test case number.
+        //( ts )
+    }
+}
+
+start: manual
+
+bindings:
+{
+    assetpush.assetPushComponent.le_avdata -> avcService.le_avdata
+}

@@ -45,6 +45,7 @@ sources:
     avData.c
     avcServer.c
     timeseriesData.c
+    push.c
     avcFs.c
     // AVC
     ../avcClient/avcClient.c

@@ -10,14 +10,22 @@
 #include "interfaces.h"
 
 
-// push ack callback not supported yet.
+// push ack callback
 static void PushCallbackHandler
 (
     le_avdata_PushStatus_t status,
     void* contextPtr
 )
 {
-    LE_INFO("PushCallbackHandler");
+    switch (status)
+    {
+        case LE_AVDATA_PUSH_SUCCESS:
+            LE_INFO("LE_AVDATA_PUSH_SUCCESS");
+            break;
+        case LE_AVDATA_PUSH_FAILED:
+            LE_INFO("LE_AVDATA_PUSH_FAILED");
+            break;
+    }
 }
 
 
@@ -815,9 +823,120 @@ void PushMix_05()
 }
 
 
+static void PushCallbackRecord1
+(
+    le_avdata_PushStatus_t status,
+    void* contextPtr
+)
+{
+    int value = (int)contextPtr;
+    LE_INFO("PushCallbackRecord1: %d, value: %d", status, value);
+}
+
+static void PushCallbackRecord2
+(
+    le_avdata_PushStatus_t status,
+    void* contextPtr
+)
+{
+    int value = (int)contextPtr;
+    LE_INFO("PushCallbackRecord2: %d, value: %d", status, value);
+}
+
+
+// Pushing different records through different callbacks.
+// Verify if corresponding callback is returned with the correct contextPtr.
+void PushMix_06()
+{
+    le_avdata_RecordRef_t recRef = le_avdata_CreateRecord();
+    le_avdata_RecordRef_t recRef2 = le_avdata_CreateRecord();
+    LE_ASSERT(le_avdata_RecordInt(recRef, "TsVarInt", 123, 1485134812) == LE_OK);
+    LE_ASSERT(le_avdata_RecordInt(recRef2, "TsVarInt", 456, 1485134812) == LE_OK);
+    LE_ASSERT(le_avdata_PushRecord(recRef, PushCallbackRecord1, (void *)123) == LE_OK);
+    LE_ASSERT(le_avdata_PushRecord(recRef2, PushCallbackRecord2, (void *)456) == LE_OK);
+}
+
+
+// Push one big and small record
+void PushMix_07()
+{
+    le_avdata_RecordRef_t recRef = le_avdata_CreateRecord();
+    le_avdata_RecordRef_t recRef2 = le_avdata_CreateRecord();
+
+    le_result_t result = LE_OK;
+    uint64_t timestamp = 1412320402000;
+
+    // fill record 1
+    while (result != LE_NO_MEMORY)
+    {
+        int randSize = rand() % 10; // this number can be adjusted to fit more/less data
+        char buff[255];
+        gen_random(buff, randSize);
+        result = le_avdata_RecordString(recRef, "strOverflow", buff, timestamp);
+        timestamp += 100;
+    }
+
+    result = LE_OK;
+
+    int value = 0;
+    // fill record 2 (this one is relatively small once it's compressed)
+    while (result != LE_NO_MEMORY)
+    {
+        result = le_avdata_RecordInt(recRef2, "intOverflow", value, timestamp);
+        value++;
+        timestamp += 100;
+    }
+
+    // push both records
+    result = le_avdata_PushRecord(recRef, PushCallbackRecord1, (void *)1);
+    LE_INFO("Pushing first records: %s", LE_RESULT_TXT(result));
+
+    result = le_avdata_PushRecord(recRef2, PushCallbackRecord2, (void *)2);
+    LE_INFO("Pushing second records: %s", LE_RESULT_TXT(result));
+}
+
+
+// Push 2 big records
+void PushMix_08()
+{
+    le_avdata_RecordRef_t recRef = le_avdata_CreateRecord();
+    le_avdata_RecordRef_t recRef2 = le_avdata_CreateRecord();
+
+    le_result_t result = LE_OK;
+    uint64_t timestamp = 1412320402000;
+
+    // fill record 1
+    while (result != LE_NO_MEMORY)
+    {
+        int randSize = rand() % 10; // this number can be adjusted to fit more/less data
+        char buff[255];
+        gen_random(buff, randSize);
+        result = le_avdata_RecordString(recRef, "strOverflow", buff, timestamp);
+        timestamp += 100;
+    }
+
+    result = LE_OK;
+
+    while (result != LE_NO_MEMORY)
+    {
+        double value = rand_float(0,1);
+        result = le_avdata_RecordFloat(recRef2, "floatOverflow", value, timestamp);
+        timestamp += 100;
+    }
+
+    // push both records
+    result = le_avdata_PushRecord(recRef, PushCallbackRecord1, (void *)1);
+    LE_INFO("Pushing first records: %s", LE_RESULT_TXT(result));
+
+    result = le_avdata_PushRecord(recRef2, PushCallbackRecord2, (void *)2);
+    LE_INFO("Pushing second records: %s", LE_RESULT_TXT(result));
+}
+
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Component initializer.  Must return when done initializing.
+ * Note: Assumes session is opened.
  */
 //--------------------------------------------------------------------------------------------------
 COMPONENT_INIT
@@ -916,6 +1035,15 @@ COMPONENT_INIT
             break;
         case 28:
             PushMix_05();
+            break;
+        case 29:
+            PushMix_06();
+            break;
+        case 30:
+            PushMix_07();
+            break;
+        case 31:
+            PushMix_08();
             break;
         default:
             LE_INFO("Invalid test case");

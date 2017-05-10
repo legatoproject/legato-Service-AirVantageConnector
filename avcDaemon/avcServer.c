@@ -15,7 +15,7 @@
 #include "pa_avc.h"
 #include "avcServer.h"
 #include "avData.h"
-
+#include "push.h"
 #include "le_print.h"
 #include "avcAppUpdate.h"
 #include "packageDownloader.h"
@@ -2474,6 +2474,7 @@ COMPONENT_INIT
     avData_Init();
     avcApp_Init();
     timeSeries_Init();
+    push_Init();
     avcClient_Init();
 
     // Read the user defined timeout from config tree @ /apps/avcService/modemActivityTimeout

@@ -12,6 +12,7 @@
 
 #include "limit.h"
 #include "timeseriesData.h"
+#include "push.h"
 #include "le_print.h"
 
 #include "tinycbor/cbor.h"
@@ -71,14 +72,6 @@ static le_mem_PoolRef_t StringValuePoolRef = NULL;
  */
 //--------------------------------------------------------------------------------------------------
 static le_mem_PoolRef_t CborBufferPoolRef = NULL;
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Maximum number of bytes for CBOR encoded time series data
- */
-//--------------------------------------------------------------------------------------------------
-#define MAX_CBOR_BUFFER_NUMBYTES 4096 // TODO: verify value
 
 
 //--------------------------------------------------------------------------------------------------
@@ -1552,8 +1545,8 @@ le_result_t timeSeries_PushRecord
 {
 
     le_result_t result;
-    unsigned char compressedBuf[MAX_CBOR_BUFFER_NUMBYTES];
-    unsigned long int compressBufLength;
+    uint8_t buffer[MAX_CBOR_BUFFER_NUMBYTES];
+    size_t bufferLength;
     z_stream defstream;
 
     result = Encode(recRef);
@@ -1567,19 +1560,23 @@ le_result_t timeSeries_PushRecord
 
         defstream.avail_in = GetEncodedDataSize(recRef);
         defstream.next_in = (Bytef *)recRef->bufferPtr;
-        defstream.avail_out = (uInt)sizeof(compressedBuf);
-        defstream.next_out = (Bytef *)compressedBuf;
+        defstream.avail_out = (uInt)sizeof(buffer);
+        defstream.next_out = (Bytef *)buffer;
 
         deflateInit(&defstream, Z_BEST_COMPRESSION);
         deflate(&defstream, Z_FINISH);
         deflateEnd(&defstream);
 
-        compressBufLength = defstream.total_out;
+        bufferLength = defstream.total_out;
 
-        result = avcClient_Push(compressedBuf, compressBufLength, NULL);
+        result = PushBuffer(buffer,
+                            bufferLength,
+                            LWM2MCORE_PUSH_CONTENT_ZCBOR,
+                            handlerPtr,
+                            contextPtr);
 
         // if data was successfully pushed, reset our record
-        if (result == LE_OK)
+        if ((result == LE_OK) || (result == LE_BUSY))
         {
             LE_DEBUG("Data push success");
             ResetRecord(recRef); // clear all data accumulated for this record

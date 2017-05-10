@@ -21,10 +21,10 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Maximum expected number of asset data.  From AtlasCopco use cases.
+ * Maximum expected number of asset data.
  */
 //--------------------------------------------------------------------------------------------------
-#define MAX_EXPECTED_ASSETDATA 256
+#define MAX_EXPECTED_ASSETDATA 10000
 
 
 //--------------------------------------------------------------------------------------------------
@@ -1672,7 +1672,7 @@ static void AvServerRequestHandler
     // Partially fill in the response.
     memcpy(AVServerResponse.token, token, tokenLength);
     AVServerResponse.tokenLength = tokenLength;
-    AVServerResponse.contentType = LWM2M_CONTENT_CBOR;
+    AVServerResponse.contentType = LWM2MCORE_PUSH_CONTENT_CBOR;
 
     LE_DEBUG(">>>>> Request Uri is: [%s]", path);
 
@@ -2343,6 +2343,110 @@ void le_avdata_ReplyExecResult
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Push asset data to the server
+ *
+* @return:
+ *      - LE_OK on success.
+ *      - LE_NOT_FOUND if path doesn't exist.
+ *      - LE_BUSY if push is queued and will pushed later
+ *      - LE_NOT_POSSIBLE if push queue is full, try again later
+ *      - LE_FAULT on any other error
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avdata_Push
+(
+    const char* path,                          ///< [IN] Asset data path
+    le_avdata_CallbackResultFunc_t handlerPtr, ///< [IN] Push result callback
+    void* contextPtr                           ///< [IN] Context pointer
+)
+{
+    AssetValue_t assetValue;
+    le_avdata_DataType_t type;
+
+    if (!IsAssetDataPathValid(path))
+    {
+        return LE_FAULT;
+    }
+
+    le_result_t result = GetVal(path, &assetValue, &type, false);
+
+    char* pathArray[le_hashmap_Size(AssetDataMap)];
+    memset(pathArray, 0, sizeof(pathArray));
+    int pathArrayIdx = 0;
+
+    if (result == LE_OK)
+    {
+        pathArray[0] = path;
+        pathArrayIdx = 1;
+    }
+    else if (result == LE_NOT_FOUND)
+    {
+        // The path contain children nodes, so there might be multiple asset data under it.
+        if (IsPathParent(path))
+        {
+            LE_DEBUG(">>>>> path not found, but is parent path. Encoding all children nodes.");
+
+            // Gather all eligible paths in a path array.
+            AssetData_t* assetDataPtr;
+
+            le_hashmap_It_Ref_t iter = le_hashmap_GetIterator(AssetDataMap);
+            char* currentPath;
+
+            while (le_hashmap_NextNode(iter) == LE_OK)
+            {
+                currentPath = le_hashmap_GetKey(iter);
+                assetDataPtr = le_hashmap_GetValue(iter);
+
+                if ((le_path_IsSubpath(path, currentPath, "/")) &&
+                    ((assetDataPtr->serverAccess & LE_AVDATA_ACCESS_READ) == LE_AVDATA_ACCESS_READ))
+                {
+                    // Put the currentPath in the path array.
+                    pathArray[pathArrayIdx] = currentPath;
+                    pathArrayIdx++;
+                }
+            }
+
+            // Sort the path array. Note that the paths just need to be grouped at each level.
+            qsort(pathArray, pathArrayIdx, sizeof(*pathArray), CompareStrings);
+        }
+        else
+        {
+            // path does not exists
+            return LE_NOT_FOUND;
+        }
+    }
+    else
+    {
+        return LE_FAULT;
+    }
+
+    // compose the CBOR buffer
+    uint8_t buf[CBOR_DECODER_BUFFER_BYTES] = {0};
+    CborEncoder rootNode;
+    cbor_encoder_init(&rootNode, (uint8_t*)&buf, sizeof(buf), 0); // no error check needed.
+
+    result = EncodeMultiData(pathArray, &rootNode, 0, (pathArrayIdx - 1), 1);
+
+    if (result == LE_OK)
+    {
+        LE_DUMP(buf, cbor_encoder_get_buffer_size(&rootNode, buf));
+        result = PushBuffer(buf,
+                            cbor_encoder_get_buffer_size(&rootNode, buf),
+                            LWM2MCORE_PUSH_CONTENT_CBOR,
+                            handlerPtr,
+                            contextPtr);
+    }
+    else
+    {
+        LE_DEBUG(">>>>> Fail to encode multiple data points.");
+        result = LE_FAULT;
+    }
+
+    return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Get the real record ref from the safe ref
  */
 //--------------------------------------------------------------------------------------------------
@@ -2585,6 +2689,7 @@ le_result_t le_avdata_RecordString
  *
 * @return:
  *      - LE_OK on success.
+ *      - LE_BUSY if push is queued and will pushed later
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------

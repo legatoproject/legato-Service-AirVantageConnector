@@ -502,6 +502,7 @@ le_result_t avcClient_Update
  *
  * @return
  *      - LE_OK in case of success
+ *      - LE_BUSY if busy pushing data
  *      - LE_FAULT in case of failure
  */
 //--------------------------------------------------------------------------------------------------
@@ -509,21 +510,27 @@ le_result_t avcClient_Push
 (
     uint8_t* payload,
     size_t payloadLength,
-    void* callback
-
+    lwm2mcore_PushContent_t contentType,
+    uint16_t* midPtr
 )
 {
     LE_DEBUG("Push data");
 
-    if (true == lwm2mcore_Push(Lwm2mInstanceRef, payload, payloadLength, callback))
+    lwm2mcore_PushResult_t rc = lwm2mcore_Push(Lwm2mInstanceRef,
+                                               payload,
+                                               payloadLength,
+                                               contentType,
+                                               midPtr);
+
+    switch (rc)
     {
-        LE_DEBUG("Push success");
-        return LE_OK;
-    }
-    else
-    {
-        LE_INFO("Push failed");
-        return LE_FAULT;
+        case LWM2MCORE_PUSH_INITIATED:
+            return LE_OK;
+        case LWM2MCORE_PUSH_BUSY:
+            return LE_BUSY;
+        case LWM2MCORE_PUSH_FAILED:
+        default:
+            return LE_FAULT;
     }
 }
 
