@@ -55,6 +55,7 @@ bindings:
     avcDaemon.avcDaemon.le_data -> dataConnectionService.le_data
     avcDaemon.avcDaemon.le_fwupdate -> fwupdateService.le_fwupdate
     avcDaemon.avcDaemon.le_info -> modemService.le_info
+    avcDaemon.avcDaemon.le_ips  -> modemService.le_ips
     avcDaemon.avcDaemon.le_mdc  -> modemService.le_mdc
     avcDaemon.avcDaemon.le_mrc  -> modemService.le_mrc
     avcDaemon.avcDaemon.le_rtc  -> modemService.le_rtc

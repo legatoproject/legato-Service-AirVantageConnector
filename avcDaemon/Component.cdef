@@ -17,6 +17,7 @@ requires:
         le_cfg.api
         le_data.api
         modemServices/le_info.api
+        modemServices/le_ips.api
         modemServices/le_mdc.api
         modemServices/le_mrc.api
         modemServices/le_rtc.api

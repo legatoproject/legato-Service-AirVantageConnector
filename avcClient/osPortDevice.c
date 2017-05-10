@@ -737,12 +737,35 @@ lwm2mcore_Sid_t lwm2mcore_GetBatteryLevel
     uint8_t* valuePtr  ///< [INOUT] data buffer
 )
 {
+    le_ips_PowerSource_t powerSource;
+    uint8_t batteryLevel;
+
     if (!valuePtr)
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+    if (LE_OK != le_ips_GetPowerSource(&powerSource))
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    // Get the battery level only if the device is powered by a battery
+    if (LE_IPS_POWER_SOURCE_BATTERY != powerSource)
+    {
+        LE_DEBUG("Device is not powered by a battery");
+        return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+    }
+
+    if (LE_OK != le_ips_GetBatteryLevel(&batteryLevel))
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    LE_DEBUG("Battery level: %d%%", batteryLevel);
+    *valuePtr = batteryLevel;
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
