@@ -171,7 +171,7 @@ bool lwm2mcore_CheckCredential
     lwm2mcore_Sid_t result;
 
     result = lwm2mcore_GetCredential(credId, buffer, &bufferSz);
-    if ( (LWM2MCORE_ERR_COMPLETED_OK == result) && (buffer[0] != 0))
+    if ( (LWM2MCORE_ERR_COMPLETED_OK == result) && bufferSz)
     {
         ret = true;
         retTxt = "Present";
