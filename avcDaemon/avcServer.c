@@ -2015,6 +2015,98 @@ le_result_t le_avc_SetApnConfig
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Function to read the retry timers.
+ *
+ * @return
+ *      - LE_OK on success.
+ *      - LE_FAULT if not able to read the timers.
+ *
+ * @deprecated This API should not be used for new applications and will be removed in the future
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avc_GetRetryTimers
+(
+    uint16_t* timerValuePtr,  ///< [OUT] Retry timer array
+    size_t* numTimers         ///< [IN/OUT] Max num of timers to get/num of timers retrieved
+)
+{
+    if (numTimers < LE_AVC_NUM_RETRY_TIMERS)
+    {
+        LE_ERROR("Supplied retry timer array too small (%d). Expected %d.",
+                 numTimers, LE_AVC_NUM_RETRY_TIMERS);
+        return LE_FAULT;
+    }
+
+    le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn(CFG_AVC_CONFIG_PATH);
+
+    if (le_cfg_IsEmpty(iterRef, "retryTimers"))
+    {
+        le_cfg_CancelTxn(iterRef);
+        return LE_FAULT;
+    }
+
+    le_cfg_GoToNode(iterRef, "retryTimers");
+
+    char timerName[TIMER_NAME_BYTES] = {0};
+    int i;
+    for (i = 0; i < LE_AVC_NUM_RETRY_TIMERS; i++)
+    {
+        snprintf(timerName, TIMER_NAME_BYTES, "%d", i);
+        timerValuePtr[i] = le_cfg_GetInt(iterRef, timerName, 0);
+    }
+
+    le_cfg_CancelTxn(iterRef);
+
+    *numTimers = LE_AVC_NUM_RETRY_TIMERS;
+
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to set the retry timers.
+ *
+ * @return
+ *      - LE_OK on success.
+ *      - LE_FAULT if not able to read the timers.
+ *
+ * @deprecated This API should not be used for new applications and will be removed in the future
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avc_SetRetryTimers
+(
+    const uint16_t* timerValuePtr, ///< [IN] Retry timer array
+    size_t numTimers               ///< [IN] Number of retry timers
+)
+{
+    if (numTimers < LE_AVC_NUM_RETRY_TIMERS)
+    {
+        LE_ERROR("Supplied retry timer array too small (%d). Expected %d.",
+                 numTimers, LE_AVC_NUM_RETRY_TIMERS);
+        return LE_FAULT;
+    }
+
+    le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
+
+    le_cfg_GoToNode(iterRef, "retryTimers");
+
+    char timerName[TIMER_NAME_BYTES] = {0};
+    int i;
+    for (i = 0; i < LE_AVC_NUM_RETRY_TIMERS; i++)
+    {
+        snprintf(timerName, TIMER_NAME_BYTES, "%d", i);
+        le_cfg_SetInt(iterRef, timerName, timerValuePtr[i]);
+    }
+
+    le_cfg_CommitTxn(iterRef);
+
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Function to read the polling timer.
  *
  * @return
@@ -2120,13 +2212,22 @@ static void SetDefaultAVMSConfig
 {
     /* Default values */
     uint32_t pollingTimer = 0;
+    uint16_t timerValue[LE_AVC_NUM_RETRY_TIMERS] = {0};
+    size_t numTimers = LE_AVC_NUM_RETRY_TIMERS;
 
     // dummy variables used to see if there are any current configs present
     uint32_t pollingTimerCurr = 0;
+    uint16_t timerValueCurr[LE_AVC_NUM_RETRY_TIMERS] = {0};
+    size_t numTimersCurr = 0;
 
     if (LE_FAULT == le_avc_GetPollingTimer(&pollingTimerCurr))
     {
         le_avc_SetPollingTimer(pollingTimer);
+    }
+
+    if (LE_FAULT == le_avc_GetRetryTimers(timerValueCurr, &numTimersCurr))
+    {
+        le_avc_SetRetryTimers(timerValue, numTimers);
     }
 }
 
