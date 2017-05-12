@@ -591,7 +591,8 @@ static void NotifyObj9List
                                            &obj9ListLen,
                                            &numObjInstances);
 
-    if (result != LE_OK)
+    // If no object 9 instance exists, send the empty list down to lwm2mcore
+    if ((result != LE_OK) && (result != LE_NOT_FOUND))
     {
         LE_ERROR("Error retrieving object 9 list");
         return;
@@ -928,15 +929,23 @@ static le_result_t StartUninstall
 {
     LE_DEBUG("Application '%s' uninstall requested", appNamePtr);
 
+    avcServer_UpdateHandler(LE_AVC_UNINSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
+                            -1, -1, LE_AVC_ERR_NONE);
+
     le_result_t result = le_appRemove_Remove(appNamePtr);
 
     if (result == LE_OK)
     {
         LE_DEBUG("Uninstall of application completed.");
+        avcServer_UpdateHandler(LE_AVC_UNINSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
+                                -1, -1, LE_AVC_ERR_NONE);
+
     }
     else
     {
         LE_ERROR("Uninstall of application failed (%s).", LE_RESULT_TXT(result));
+        avcServer_UpdateHandler(LE_AVC_UNINSTALL_FAILED, LE_AVC_APPLICATION_UPDATE,
+                                -1, -1, LE_AVC_ERR_INTERNAL);
     }
 
     return result;
