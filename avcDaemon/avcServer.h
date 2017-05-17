@@ -224,5 +224,33 @@ LE_SHARED void avcServer_UpdateHandler
     le_avc_ErrorCode_t errorCode
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Request the avcServer to open a AV session.
+ *
+ * @return
+ *      - LE_OK if able to initiate a session open
+ *      - LE_FAULT on error
+ */
+//--------------------------------------------------------------------------------------------------
+LE_SHARED le_result_t avcServer_RequestSession
+(
+    void
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Request the avcServer to close a AV session.
+ *
+ * @return
+ *      - LE_OK if able to initiate a session close
+ *      - LE_FAULT on error
+ */
+//--------------------------------------------------------------------------------------------------
+LE_SHARED le_result_t avcServer_ReleaseSession
+(
+    void
+);
 
 #endif // LEGATO_AVC_SERVER_INCLUDE_GUARD

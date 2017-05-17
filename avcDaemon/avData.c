@@ -15,6 +15,8 @@
 #include "legato.h"
 #include "interfaces.h"
 #include "timeseriesData.h"
+#include "avcServer.h"
+#include "le_print.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -224,9 +226,49 @@ static le_mem_PoolRef_t RecordRefDataPoolRef = NULL;
 static le_ref_MapRef_t RecordRefMap;
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Safe reference map for the avms session request.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_ref_MapRef_t AvSessionRequestRefMap;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * This timer is used to delay releasing the session.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t SessionReleaseTimerRef;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Event for sending session state to registered applications.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_event_Id_t SessionStateEvent;
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /* Helper funcitons                                                                               */
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Session release timer expired
+ */
+//--------------------------------------------------------------------------------------------------
+static void SessionReleaseTimerHandler
+(
+    le_timer_Ref_t timerRef    ///< This timer has expired
+)
+{
+    LE_INFO("SessionRelease timer expired; close session");
+
+    avcServer_ReleaseSession();
+}
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -255,6 +297,17 @@ static void ClientCloseSessionHandler
             // Delete safe reference and associated data
             le_mem_Release((void*)recRefDataPtr);
             le_ref_DeleteRef( RecordRefMap, (void*)le_ref_GetSafeRef(iterRef) );
+        }
+    }
+
+    // Search for the session request reference(s) used by the closed client, and clean up any data.
+    iterRef = le_ref_GetIterator(AvSessionRequestRefMap);
+
+    while (le_ref_NextNode(iterRef) == LE_OK)
+    {
+        if (le_ref_GetValue(iterRef) == sessionRef)
+        {
+            le_avdata_ReleaseSession((void*)le_ref_GetSafeRef(iterRef));
         }
     }
 }
@@ -2556,6 +2609,161 @@ le_result_t le_avdata_PushRecord
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Called by avcServer when the session started or stopped.
+ */
+//--------------------------------------------------------------------------------------------------
+void avData_ReportSessionState
+(
+    le_avdata_SessionState_t sessionState
+)
+{
+    LE_DEBUG("Reporting session state %d", sessionState);
+
+    // Send the event to interested applications
+    le_event_Report(SessionStateEvent, &sessionState, sizeof(sessionState));
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * The first-layer Session State Handler
+ */
+//--------------------------------------------------------------------------------------------------
+static void FirstLayerSessionStateHandler
+(
+    void* reportPtr,
+    void* secondLayerHandlerFunc
+)
+{
+    bool* eventDataPtr = reportPtr;
+    le_avdata_SessionStateHandlerFunc_t clientHandlerFunc = secondLayerHandlerFunc;
+
+    clientHandlerFunc(*eventDataPtr, le_event_GetContextPtr());
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * This function adds a handler ...
+ */
+//--------------------------------------------------------------------------------------------------
+le_avdata_SessionStateHandlerRef_t le_avdata_AddSessionStateHandler
+(
+    le_avdata_SessionStateHandlerFunc_t handlerPtr,
+    void* contextPtr
+)
+{
+    LE_PRINT_VALUE("%p", handlerPtr);
+    LE_PRINT_VALUE("%p", contextPtr);
+
+    le_event_HandlerRef_t handlerRef = le_event_AddLayeredHandler("AVSessionState",
+                                                                  SessionStateEvent,
+                                                                  FirstLayerSessionStateHandler,
+                                                                  (le_event_HandlerFunc_t)handlerPtr);
+
+    le_event_SetContextPtr(handlerRef, contextPtr);
+
+    return (le_avdata_SessionStateHandlerRef_t)(handlerRef);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * This function removes a handler ...
+ */
+//--------------------------------------------------------------------------------------------------
+void le_avdata_RemoveSessionStateHandler
+(
+    le_avdata_SessionStateHandlerRef_t addHandlerRef
+)
+{
+    le_event_RemoveHandler((le_event_HandlerRef_t)addHandlerRef);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Request to open an avms session.
+ */
+//--------------------------------------------------------------------------------------------------
+le_avdata_RequestSessionObjRef_t le_avdata_RequestSession
+(
+    void
+)
+{
+    le_result_t result = LE_OK;
+
+    // If this is a duplicate request send the existing reference.
+    le_ref_IterRef_t iterRef = le_ref_GetIterator(AvSessionRequestRefMap);
+
+    while (le_ref_NextNode(iterRef) == LE_OK)
+    {
+        if (le_ref_GetValue(iterRef) == le_avdata_GetClientSessionRef())
+        {
+            LE_DEBUG("Duplicate session request from client.");
+            return (le_avdata_RequestSessionObjRef_t) le_ref_GetSafeRef(iterRef);
+        }
+    }
+
+    le_timer_Stop(SessionReleaseTimerRef);
+
+    // Ask the avc server to pass the request to control app or to initiate a session.
+    result = avcServer_RequestSession();
+
+    // If the fresh request fails, return NULL.
+    if (result != LE_OK)
+    {
+        return NULL;
+    }
+
+    // Need to return a unique reference that will be used by release. Use the client session ref
+    // as the data, since we need to delete the ref when the client closes.
+    le_avdata_RequestSessionObjRef_t requestRef = le_ref_CreateRef(AvSessionRequestRefMap,
+                                                                   le_avdata_GetClientSessionRef());
+
+    return requestRef;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Request to close an avms session.
+ */
+//--------------------------------------------------------------------------------------------------
+void le_avdata_ReleaseSession
+(
+    le_avdata_RequestSessionObjRef_t  sessionRequestRef
+)
+{
+    le_ref_IterRef_t iterRef;
+
+    // Look up the reference.  If it is NULL, then the reference is not valid.
+    // Otherwise, delete the reference and request avcServer to release session.
+    void* sessionPtr = le_ref_Lookup(AvSessionRequestRefMap, sessionRequestRef);
+    if (sessionPtr == NULL)
+    {
+        LE_ERROR("Invalid session request reference %p", sessionPtr);
+        return;
+    }
+    else
+    {
+        LE_PRINT_VALUE("%p", sessionPtr);
+        le_ref_DeleteRef(AvSessionRequestRefMap, sessionRequestRef);
+    }
+
+    // Stop the session when all clients release their session reference.
+    iterRef = le_ref_GetIterator(AvSessionRequestRefMap);
+
+    if (le_ref_NextNode(iterRef) == LE_NOT_FOUND)
+    {
+        // Close the session if there is no new open request for 2 seconds.
+        le_timer_Restart(SessionReleaseTimerRef);
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Initialize the avData module
  */
 //--------------------------------------------------------------------------------------------------
@@ -2581,7 +2789,8 @@ void avData_Init
     ArgListRefMap = le_ref_CreateMap("Argument List Ref Map", 1);
 
     // Create map to store the resource event handler.
-    ResourceEventHandlerMap = le_ref_CreateMap("Resource Event Handler Map", MAX_EXPECTED_ASSETDATA);
+    ResourceEventHandlerMap = le_ref_CreateMap("Resource Event Handler Map",
+                                               MAX_EXPECTED_ASSETDATA);
 
     RecordRefMap = le_ref_CreateMap("RecRefMap", 300);
 
@@ -2590,4 +2799,17 @@ void avData_Init
 
     // Add a handler for client session closes
     le_msg_AddServiceCloseHandler( le_avdata_GetServiceRef(), ClientCloseSessionHandler, NULL );
+
+    SessionStateEvent = le_event_CreateId("Session state", sizeof(le_avdata_SessionState_t));
+
+    // Create safe reference map for session request references. The size of the map should be based
+    // on the expected number of simultaneous requests for session. 5 of them seems reasonable.
+    AvSessionRequestRefMap = le_ref_CreateMap("AVSessionRequestRef", 5);
+
+    // Use a timer to delay releasing the session for 2 seconds.
+    le_clk_Time_t timerInterval = { .sec=2, .usec=0 };
+
+    SessionReleaseTimerRef = le_timer_Create("Session Release timer");
+    le_timer_SetInterval(SessionReleaseTimerRef, timerInterval);
+    le_timer_SetHandler(SessionReleaseTimerRef, SessionReleaseTimerHandler);
 }
