@@ -1948,6 +1948,7 @@ void avcApp_SotaResume
 
             case LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED:
                 // Start unpacking the downloaded package and wait for install command from server
+                CurrentObj9 = instanceRef;
                 result = avcApp_StartUpdate();
 
                 if (LE_OK != result)
