@@ -2563,6 +2563,11 @@ le_result_t le_avdata_RecordInt
     // Map safeRef to desired data
     recordRef = GetRecRefFromSafeRef(recordRef, __func__);
 
+    if (recordRef == NULL)
+    {
+        return LE_FAULT;
+    }
+
     result = timeSeries_AddInt(recordRef, path, value, timestamp);
 
     return result;
@@ -2600,6 +2605,11 @@ le_result_t le_avdata_RecordFloat
 
     // Map safeRef to desired data
     recordRef = GetRecRefFromSafeRef(recordRef, __func__);
+
+    if (recordRef == NULL)
+    {
+        return LE_FAULT;
+    }
 
     result = timeSeries_AddFloat(recordRef, path, value, timestamp);
 
@@ -2639,6 +2649,11 @@ le_result_t le_avdata_RecordBool
     // Map safeRef to desired data
     recordRef = GetRecRefFromSafeRef(recordRef, __func__);
 
+    if (recordRef == NULL)
+    {
+        return LE_FAULT;
+    }
+
     result = timeSeries_AddBool(recordRef, path, value, timestamp);
 
     return result;
@@ -2677,6 +2692,11 @@ le_result_t le_avdata_RecordString
     // Map safeRef to desired data
     recordRef = GetRecRefFromSafeRef(recordRef, __func__);
 
+    if (recordRef == NULL)
+    {
+        return LE_FAULT;
+    }
+
     result = timeSeries_AddString(recordRef, path, value, timestamp);
 
     return result;
@@ -2706,8 +2726,17 @@ le_result_t le_avdata_PushRecord
 )
 {
     le_result_t result;
+
+    // Map safeRef to desired data
     recordRef = GetRecRefFromSafeRef(recordRef, __func__);
+
+    if (recordRef == NULL)
+    {
+        return LE_FAULT;
+    }
+
     result = timeSeries_PushRecord(recordRef, handlerPtr, contextPtr);
+
     return result;
 }
 
