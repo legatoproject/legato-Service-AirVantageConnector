@@ -103,6 +103,65 @@ le_result_t packageDownloader_GetFwUpdateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Get firmware update install pending status
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetFwUpdateInstallPending
+(
+    bool* isFwInstallPendingPtr                  ///< [OUT] Is FW install pending?
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set firmware update install pending status
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetFwUpdateInstallPending
+(
+    bool isFwInstallPending                     ///< [IN] Is FW install pending?
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update state
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetSwUpdateState
+(
+    lwm2mcore_SwUpdateState_t* swUpdateStatePtr     ///< [INOUT] SW update state
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update result
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t* swUpdateResultPtr   ///< [INOUT] SW update result
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Download package thread function
  */
 //--------------------------------------------------------------------------------------------------

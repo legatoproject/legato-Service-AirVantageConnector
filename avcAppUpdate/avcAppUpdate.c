@@ -1183,16 +1183,14 @@ static le_result_t SetSwUpdateInternalState
  *  - LE_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-static le_result_t SetSwUpdatePackageSize
+le_result_t SetSwUpdatePackageSize
 (
-    size_t pkgSize   ///< [IN] package size
+    uint64_t pkgSize    ///< [IN] package size
 )
 {
     le_result_t result;
 
-    result = WriteFs(SW_UPDATE_PKGSIZE_PATH,
-                     (uint8_t *)&pkgSize,
-                     sizeof(int));
+    result = WriteFs(SW_UPDATE_PKGSIZE_PATH, &pkgSize, sizeof(uint64_t));
     if (LE_OK != result)
     {
         LE_ERROR("Failed to write %s: %s", SW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
@@ -1373,13 +1371,13 @@ static le_result_t GetSwUpdateInternalState
  *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
-static le_result_t GetSwUpdatePackageSize
+le_result_t GetSwUpdatePackageSize
 (
-    size_t* pkgSizePtr     ///< [OUT] package size
+    uint64_t* pkgSizePtr    ///< [OUT] package size
 )
 {
     size_t size;
-    size_t pkgSize;
+    uint64_t pkgSize;
     le_result_t result;
 
     if (!pkgSizePtr)
@@ -1388,14 +1386,14 @@ static le_result_t GetSwUpdatePackageSize
         return LE_FAULT;
     }
 
-    size = sizeof(size_t);
-    result = ReadFs(SW_UPDATE_PKGSIZE_PATH, (int*)&pkgSize, &size);
+    size = sizeof(uint64_t);
+    result = ReadFs(SW_UPDATE_PKGSIZE_PATH, &pkgSize, &size);
     if (LE_OK != result)
     {
         if (LE_NOT_FOUND == result)
         {
             LE_ERROR("SW update package size not found");
-            *pkgSizePtr = -1;
+            *pkgSizePtr = 0;
             return LE_OK;
         }
         LE_ERROR("Failed to read %s: %s", SW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
@@ -1880,16 +1878,12 @@ void avcApp_SotaResume
     lwm2mcore_SwUpdateState_t restoreState;
     lwm2mcore_SwUpdateResult_t restoreResult;
     avcApp_InternalState_t internalState;
-    size_t pkgSize = 0;
     assetData_InstanceDataRef_t instanceRef;
     le_result_t result;
     lwm2mcore_UpdateType_t updateType;
 
     uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
     size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
-
-    // Initialize user agreement.
-    avcServer_InitUserAgreement();
 
     if ((LE_OK == GetSwUpdateState(&restoreState))
         && (LE_OK == GetSwUpdateResult(&restoreResult))

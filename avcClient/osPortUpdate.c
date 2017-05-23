@@ -61,6 +61,13 @@ static void LaunchUpdate(lwm2mcore_UpdateType_t updateType, uint16_t instanceId)
                 return;
             }
 
+            // Install pending is accepted by user. So, clear the install pending flag
+            if (LE_OK != packageDownloader_SetFwUpdateInstallPending(false))
+            {
+                LE_ERROR("Unable to clear fw update install pending flag");
+                return;
+            }
+
             // This function returns only if there was an error
             if (LE_OK != le_fwupdate_Install())
             {
@@ -340,6 +347,14 @@ lwm2mcore_Sid_t lwm2mcore_LaunchUpdate
                 if (type == LWM2MCORE_SW_UPDATE_TYPE)
                 {
                     avcApp_SetSwUpdateInternalState(INTERNAL_STATE_INSTALL_REQUESTED);
+                }
+                else
+                {
+                    if (LE_OK != packageDownloader_SetFwUpdateInstallPending(true))
+                    {
+                        LE_ERROR("Unable to set fw update install pending flag");
+                        return LWM2MCORE_ERR_GENERAL_ERROR;
+                    }
                 }
             }
             break;
@@ -942,6 +957,8 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     bool downloadResume = false;
     memset(downloadUri, 0, uriLen);
 
+    LE_INFO("lwm2mcore_ResumePackageDownload");
+
     // Resume SOTA
     avcApp_SotaResume();
 
@@ -963,15 +980,70 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     }
 
     // Check if a download was started
-    if (IsFotaDownloading() || IsSotaDownloading())
+    if (IsFotaDownloading() || IsSotaDownloading() || IsDownloadAccepted())
     {
         downloadResume = true;
     }
+    LE_INFO("downloadResume %d", downloadResume);
+
+
 
     // Call API to launch the package download
     if (LE_OK != packageDownloader_StartDownload(downloadUri, updateType, downloadResume))
     {
         return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Resume firmware install if necessary
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t ResumeFwInstall
+(
+    void
+)
+{
+    le_result_t result;
+    bool isFwInstallPending;
+
+    result = packageDownloader_GetFwUpdateInstallPending(&isFwInstallPending);
+
+    if (LE_OK != result)
+    {
+        LE_ERROR("Error reading FW update install pending status");
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    if (isFwInstallPending)
+    {
+        result = avcServer_QueryInstall(LaunchUpdate, LWM2MCORE_FW_UPDATE_TYPE, 0);
+
+        if (LE_OK == result)
+        {
+            LE_DEBUG("install accepted");
+            LaunchUpdate(LWM2MCORE_FW_UPDATE_TYPE, 0);
+        }
+        else if (LE_BUSY == result)
+        {
+            LE_DEBUG("Wait for install acceptance");
+        }
+        else
+        {
+            LE_ERROR("Unexpected error in Query install %d", result);
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+        }
+    }
+    else
+    {
+        LE_DEBUG("No FW install to resume");
     }
 
     return LWM2MCORE_ERR_COMPLETED_OK;

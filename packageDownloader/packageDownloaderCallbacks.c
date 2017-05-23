@@ -306,8 +306,17 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
     LE_DEBUG("using: %s", pkgInfoPtr->curlVersion);
     LE_DEBUG("connection status: %ld", pkgInfoPtr->httpRespCode);
     LE_DEBUG("package full size: %g MiB", pkgInfoPtr->totalSize / MEBIBYTE);
+    LE_DEBUG("updateType: %d", dataPtr->updateType);
 
     dataPtr->packageSize = (uint64_t)pkgInfoPtr->totalSize;
+    if(LWM2MCORE_FW_UPDATE_TYPE == dataPtr->updateType)
+    {
+        packageDownloader_SetFwUpdatePackageSize(dataPtr->packageSize);
+    }
+    else
+    {
+        LE_ERROR("incorrect update type");
+    }
 
     return DWL_OK;
 }

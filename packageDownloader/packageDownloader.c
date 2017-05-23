@@ -283,6 +283,13 @@ static le_result_t DeleteResumeInfo
         return result;
     }
 
+    result = DeleteFs(FW_UPDATE_PKGSIZE_PATH);
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to delete %s: %s", FW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
     return LE_OK;
 }
 
@@ -411,7 +418,7 @@ le_result_t packageDownloader_SetFwUpdateState
     le_result_t result;
 
     result = WriteFs(FW_UPDATE_STATE_PATH,
-                     (uint8_t *)&fwUpdateState,
+                     (uint8_t*)&fwUpdateState,
                      sizeof(lwm2mcore_FwUpdateState_t));
     if (LE_OK != result)
     {
@@ -439,7 +446,7 @@ le_result_t packageDownloader_SetFwUpdateResult
     le_result_t result;
 
     result = WriteFs(FW_UPDATE_RESULT_PATH,
-                     (uint8_t *)&fwUpdateResult,
+                     (uint8_t*)&fwUpdateResult,
                      sizeof(lwm2mcore_FwUpdateResult_t));
     if (LE_OK != result)
     {
@@ -476,7 +483,7 @@ le_result_t packageDownloader_GetFwUpdateState
     }
 
     size = sizeof(lwm2mcore_FwUpdateState_t);
-    result = ReadFs(FW_UPDATE_STATE_PATH, (uint8_t *)&updateState, &size);
+    result = ReadFs(FW_UPDATE_STATE_PATH, (uint8_t*)&updateState, &size);
     if (LE_OK != result)
     {
         if (LE_NOT_FOUND == result)
@@ -488,6 +495,7 @@ le_result_t packageDownloader_GetFwUpdateState
         LE_ERROR("Failed to read %s: %s", FW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
         return result;
     }
+    LE_DEBUG("FW Update state %d", updateState);
 
     *fwUpdateStatePtr = updateState;
 
@@ -520,7 +528,7 @@ le_result_t packageDownloader_GetFwUpdateResult
     }
 
     size = sizeof(lwm2mcore_FwUpdateResult_t);
-    result = ReadFs(FW_UPDATE_RESULT_PATH, (uint8_t *)&updateResult, &size);
+    result = ReadFs(FW_UPDATE_RESULT_PATH, (uint8_t*)&updateResult, &size);
     if (LE_OK != result)
     {
         if (LE_NOT_FOUND == result)
@@ -532,8 +540,231 @@ le_result_t packageDownloader_GetFwUpdateResult
         LE_ERROR("Failed to read %s: %s", FW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
         return result;
     }
+    LE_DEBUG("FW Update result %d", updateResult);
 
     *fwUpdateResultPtr = updateResult;
+
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get firmware update install pending status
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetFwUpdateInstallPending
+(
+    bool* isFwInstallPendingPtr                  ///< [OUT] Is FW install pending?
+)
+{
+    size_t size;
+    bool isInstallPending;
+    le_result_t result;
+
+    if (!isFwInstallPendingPtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_BAD_PARAMETER;
+    }
+
+    size = sizeof(bool);
+    result = ReadFs(FW_UPDATE_INSTALL_PENDING_PATH, (uint8_t*)&isInstallPending, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("FW update install pending not found");
+            *isFwInstallPendingPtr = false;
+            return LE_OK;
+        }
+        LE_ERROR("Failed to read %s: %s", FW_UPDATE_INSTALL_PENDING_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+    LE_DEBUG("FW Install pending %d", isInstallPending);
+
+    *isFwInstallPendingPtr = isInstallPending;
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set firmware update install pending status
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetFwUpdateInstallPending
+(
+    bool isFwInstallPending                     ///< [IN] Is FW install pending?
+)
+{
+    le_result_t result;
+    LE_DEBUG("packageDownloader_SetFwUpdateInstallPending set %d", isFwInstallPending);
+
+    result = WriteFs(FW_UPDATE_INSTALL_PENDING_PATH, (uint8_t*)&isFwInstallPending, sizeof(bool));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", FW_UPDATE_INSTALL_PENDING_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Save firmware package size
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetFwUpdatePackageSize
+(
+    uint64_t size           ///< [IN] Package size
+)
+{
+    le_result_t result;
+
+    result = WriteFs(FW_UPDATE_PKGSIZE_PATH, (uint64_t*)&size, sizeof(uint64_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", FW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get firmware package size
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetFwUpdatePackageSize
+(
+    uint64_t* packageSizePtr        ///< [OUT] Package size
+)
+{
+    le_result_t result;
+    uint64_t packageSize;
+    size_t size = sizeof(uint64_t);
+
+    if (!packageSizePtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_FAULT;
+    }
+
+    result = ReadFs(FW_UPDATE_PKGSIZE_PATH, (uint64_t*)&packageSize, &size);
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to read %s: %s", FW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+    *packageSizePtr = packageSize;
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update state
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetSwUpdateState
+(
+    lwm2mcore_SwUpdateState_t* swUpdateStatePtr     ///< [INOUT] SW update state
+)
+{
+    lwm2mcore_SwUpdateState_t updateState;
+    size_t size;
+    le_result_t result;
+
+    if (!swUpdateStatePtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_FAULT;
+    }
+
+    size = sizeof(lwm2mcore_SwUpdateState_t);
+    result = ReadFs(SW_UPDATE_STATE_PATH, (uint8_t *)&updateState, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("SW update state not found");
+            *swUpdateStatePtr = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
+            return LE_OK;
+        }
+        LE_ERROR("Failed to read %s: %s", SW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    *swUpdateStatePtr = updateState;
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get software update result
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t* swUpdateResultPtr   ///< [INOUT] SW update result
+)
+{
+    lwm2mcore_SwUpdateResult_t updateResult;
+    size_t size;
+    le_result_t result;
+
+    if (!swUpdateResultPtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_BAD_PARAMETER;
+    }
+
+    size = sizeof(lwm2mcore_SwUpdateResult_t);
+    result = ReadFs(SW_UPDATE_RESULT_PATH, (uint8_t *)&updateResult, &size);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_ERROR("SW update result not found");
+            *swUpdateResultPtr = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
+            return LE_OK;
+        }
+        LE_ERROR("Failed to read %s: %s", SW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    *swUpdateResultPtr = updateResult;
 
     return LE_OK;
 }
