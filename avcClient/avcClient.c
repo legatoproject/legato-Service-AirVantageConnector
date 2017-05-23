@@ -442,6 +442,7 @@ le_result_t avcClient_Disconnect
 )
 {
     LE_DEBUG("Disconnect");
+    le_result_t result = LE_FAULT;
 
     /* If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active */
     if (true == lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
@@ -462,12 +463,11 @@ le_result_t avcClient_Disconnect
             /* Remove the data handler */
             le_data_RemoveConnectionStateHandler(DataHandler);
 
-            return LE_OK;
+            result = LE_OK;
         }
-        return LE_FAULT;
     }
 
-    return LE_OK;
+    return result;
 }
 
 //--------------------------------------------------------------------------------------------------
