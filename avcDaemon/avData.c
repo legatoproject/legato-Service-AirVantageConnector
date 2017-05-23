@@ -1327,7 +1327,7 @@ static le_result_t CreateArgList
 //--------------------------------------------------------------------------------------------------
 static void RespondToAvServer
 (
-    CoapResponseCode_t code,
+    lwm2mcore_CoapResponseCode_t code,
     uint8_t* payload,
     size_t payloadLength
 )
@@ -1532,7 +1532,7 @@ static void ProcessAvServerWriteRequest
         le_result_t result;
         le_avdata_DataType_t type;
         AssetValue_t assetValue;
-        CoapResponseCode_t code;
+        lwm2mcore_CoapResponseCode_t code;
 
         if (LE_OK != DecodeAssetData(&type, &assetValue, &value))
         {
