@@ -1048,3 +1048,26 @@ lwm2mcore_Sid_t ResumeFwInstall
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Suspend a package download if necessary
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_SuspendPackageDownload
+(
+    void
+)
+{
+    // Check if a download was started and suspend the download
+    if ((IsFotaDownloading() || IsSotaDownloading())
+     && (LE_OK == packageDownloader_SuspendDownload()))
+    {
+        return LWM2MCORE_ERR_COMPLETED_OK;
+    }
+    return LWM2MCORE_ERR_GENERAL_ERROR;
+}

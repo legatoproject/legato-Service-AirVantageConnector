@@ -214,6 +214,16 @@ bool packageDownloader_CurrentDownloadToAbort
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Check if the current download should be suspended
+ */
+//--------------------------------------------------------------------------------------------------
+bool packageDownloader_CheckDownloadToSuspend
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Retrieve package information necessary to resume a download (URI and package type)
  *
  * @return
@@ -227,6 +237,20 @@ le_result_t packageDownloader_GetResumeInfo
     char* uriPtr,                       ///< [INOUT] package URI
     size_t* uriLenPtr,                  ///< [INOUT] package URI length
     lwm2mcore_UpdateType_t* typePtr     ///< [INOUT] Update type
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Suspend a package download
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SuspendDownload
+(
+    void
 );
 
 #endif /*_PACKAGEDOWNLOADER_H */

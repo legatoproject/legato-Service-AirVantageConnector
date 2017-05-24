@@ -108,6 +108,13 @@ static size_t Write
         return 0;
     }
 
+    // Check if the download should be suspended
+    if (true == packageDownloader_CheckDownloadToSuspend())
+    {
+        LE_ERROR("Download suspended");
+        return 0;
+    }
+
     // Process the downloaded data
     if (DWL_OK != lwm2mcore_PackageDownloaderReceiveData(contentsPtr, count))
     {
@@ -438,6 +445,12 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
     {
         // Download is aborted: stop the parser by returning a download error
         return DWL_FAULT;
+    }
+
+    if (true == packageDownloader_CheckDownloadToSuspend())
+    {
+        // Download is suspended
+        return DWL_OK;
     }
 
     if (   (CURLE_OK != rc)

@@ -27,6 +27,21 @@
 #define DOWNLOAD_STATUS_IDLE        0x00
 #define DOWNLOAD_STATUS_ACTIVE      0x01
 #define DOWNLOAD_STATUS_ABORT       0x02
+#define DOWNLOAD_STATUS_SUSPEND     0x03
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Static downloader thread reference.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_thread_Ref_t downloaderRef;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Static package downloader structure
+ */
+//--------------------------------------------------------------------------------------------------
+static lwm2mcore_PackageDownloader_t PkgDwl;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -127,6 +142,23 @@ bool packageDownloader_CurrentDownloadToAbort
 )
 {
     if (DOWNLOAD_STATUS_ABORT == GetDownloadStatus())
+    {
+        return true;
+    }
+
+    return false;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if the current download should be suspended
+ */
+//--------------------------------------------------------------------------------------------------
+bool packageDownloader_CheckDownloadToSuspend
+(
+    void
+){
+    if (DOWNLOAD_STATUS_SUSPEND == GetDownloadStatus())
     {
         return true;
     }
@@ -791,6 +823,7 @@ void* packageDownloader_DownloadPackage
 
     // Open the FIFO file descriptor to write downloaded data, blocking
     dwlCtxPtr->downloadFd = open(dwlCtxPtr->fifoPtr, O_WRONLY);
+
     if (-1 != dwlCtxPtr->downloadFd)
     {
         // Initialize the package downloader, except for a download resume
@@ -812,14 +845,14 @@ void* packageDownloader_DownloadPackage
                 ret = -1;
                 // An error occurred, close the file descriptor in order to stop the Store thread
                 close(dwlCtxPtr->downloadFd);
-                dwlCtxPtr->downloadFd = -1;
             }
         }
 
         le_sem_Post(DownloadAbortSemaphore);
 
-        // Download finished or aborted: delete stored URI and update type
-        if (LE_OK != DeleteResumeInfo())
+        // If package download is finished or aborted: delete stored URI and update type
+        if ((DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus())
+         && (LE_OK != DeleteResumeInfo()))
         {
             ret = -1;
         }
@@ -831,8 +864,11 @@ void* packageDownloader_DownloadPackage
             LE_DEBUG("Store thread joined");
         }
 
-        // Reset download status
-        SetDownloadStatus(DOWNLOAD_STATUS_IDLE);
+        if (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus())
+        {
+            // Reset download status if the package download is not suspended
+            SetDownloadStatus(DOWNLOAD_STATUS_IDLE);
+        }
 
         // Close the file descriptor if necessary
         if (-1 != dwlCtxPtr->downloadFd)
@@ -863,9 +899,12 @@ void* packageDownloader_DownloadPackage
         }
     }
 
-    // Trigger a connection to the server: the update state and result will be read to determine
-    // if the download was successful
-    le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
+    if (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus())
+    {
+        // Trigger a connection to the server: the update state and result will be read to determine
+        // if the download was successful
+        le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
+    }
 
     return (void*)&ret;
 }
@@ -943,7 +982,8 @@ void* packageDownloader_StoreFwPackage
 
         // No further action required if the download is aborted
         // by writing an empty update package URI
-        if (DOWNLOAD_STATUS_ABORT != GetDownloadStatus())
+        if ((DOWNLOAD_STATUS_ABORT != GetDownloadStatus())
+         && (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus()))
         {
             // Abort active download
             AbortDownload();
@@ -970,7 +1010,6 @@ le_result_t packageDownloader_StartDownload
     bool                   resume   ///< Indicates if it is a download resume
 )
 {
-    static lwm2mcore_PackageDownloader_t pkgDwl;
     static packageDownloader_DownloadCtx_t dwlCtx;
     lwm2mcore_PackageDownloaderData_t data;
     char* dwlType[2] = {
@@ -993,19 +1032,19 @@ le_result_t packageDownloader_StartDownload
     data.updateType = type;
     data.updateOffset = 0;
     data.isResume = resume;
-    pkgDwl.data = data;
+    PkgDwl.data = data;
 
     // Set the package downloader callbacks
-    pkgDwl.initDownload = pkgDwlCb_InitDownload;
-    pkgDwl.getInfo = pkgDwlCb_GetInfo;
-    pkgDwl.userAgreement = pkgDwlCb_UserAgreement;
-    pkgDwl.setFwUpdateState = packageDownloader_SetFwUpdateState;
-    pkgDwl.setFwUpdateResult = packageDownloader_SetFwUpdateResult;
-    pkgDwl.setSwUpdateState = avcApp_SetSwUpdateState;
-    pkgDwl.setSwUpdateResult = avcApp_SetSwUpdateResult;
-    pkgDwl.download = pkgDwlCb_Download;
-    pkgDwl.storeRange = pkgDwlCb_StoreRange;
-    pkgDwl.endDownload = pkgDwlCb_EndDownload;
+    PkgDwl.initDownload = pkgDwlCb_InitDownload;
+    PkgDwl.getInfo = pkgDwlCb_GetInfo;
+    PkgDwl.userAgreement = pkgDwlCb_UserAgreement;
+    PkgDwl.setFwUpdateState = packageDownloader_SetFwUpdateState;
+    PkgDwl.setFwUpdateResult = packageDownloader_SetFwUpdateResult;
+    PkgDwl.setSwUpdateState = avcApp_SetSwUpdateState;
+    PkgDwl.setSwUpdateResult = avcApp_SetSwUpdateResult;
+    PkgDwl.download = pkgDwlCb_Download;
+    PkgDwl.storeRange = pkgDwlCb_StoreRange;
+    PkgDwl.endDownload = pkgDwlCb_EndDownload;
 
     dwlCtx.fifoPtr = FIFO_PATH;
     dwlCtx.mainRef = le_thread_GetCurrent();
@@ -1018,8 +1057,8 @@ le_result_t packageDownloader_StartDownload
             {
                 // Get fwupdate offset before launching the download
                 // and the blocking call to le_fwupdate_Download()
-                le_fwupdate_GetResumePosition(&pkgDwl.data.updateOffset);
-                LE_DEBUG("updateOffset: %llu", pkgDwl.data.updateOffset);
+                le_fwupdate_GetResumePosition(&PkgDwl.data.updateOffset);
+                LE_DEBUG("updateOffset: %llu", PkgDwl.data.updateOffset);
             }
             dwlCtx.storePackage = (void*)packageDownloader_StoreFwPackage;
             break;
@@ -1028,8 +1067,8 @@ le_result_t packageDownloader_StartDownload
             if (resume)
             {
                 // Get swupdate offset before launching the download
-                avcApp_GetResumePosition(&pkgDwl.data.updateOffset);
-                LE_DEBUG("updateOffset: %llu", pkgDwl.data.updateOffset);
+                avcApp_GetResumePosition(&PkgDwl.data.updateOffset);
+                LE_DEBUG("updateOffset: %llu", PkgDwl.data.updateOffset);
             }
             dwlCtx.storePackage = NULL;
             break;
@@ -1039,9 +1078,10 @@ le_result_t packageDownloader_StartDownload
             return LE_FAULT;
     }
     dwlCtx.resume = resume;
-    pkgDwl.ctxPtr = (void*)&dwlCtx;
+    PkgDwl.ctxPtr = (void*)&dwlCtx;
 
-    le_thread_Start(le_thread_Create("Downloader", (void*)dwlCtx.downloadPackage, (void*)&pkgDwl));
+    downloaderRef = le_thread_Create("Downloader", (void*)dwlCtx.downloadPackage, (void*)&PkgDwl);
+    le_thread_Start(downloaderRef);
 
     if (LWM2MCORE_SW_UPDATE_TYPE == type)
     {
@@ -1049,11 +1089,11 @@ le_result_t packageDownloader_StartDownload
         // UpdateDaemon requires all its API to be called from same thread. If we spawn thread,
         // both download and installation has to be done from the same thread which will bring
         // unwanted complexity.
-        return avcApp_StoreSwPackage((void*)&pkgDwl);
+        return avcApp_StoreSwPackage((void*)&PkgDwl);
     }
 
     // Start the Store thread for a FOTA update
-    dwlCtx.storeRef = le_thread_Create("Store", (void*)dwlCtx.storePackage, (void*)&pkgDwl);
+    dwlCtx.storeRef = le_thread_Create("Store", (void*)dwlCtx.storePackage, (void*)&PkgDwl);
     le_thread_SetJoinable(dwlCtx.storeRef);
     le_thread_Start(dwlCtx.storeRef);
 
@@ -1105,5 +1145,42 @@ le_result_t packageDownloader_AbortDownload
             return LE_FAULT;
     }
 
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Suspend a package download
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SuspendDownload
+(
+    void
+)
+{
+    LE_DEBUG("GetDownloadStatus() %d", GetDownloadStatus());
+
+    if (DOWNLOAD_STATUS_ACTIVE == GetDownloadStatus())
+    {
+        packageDownloader_DownloadCtx_t* dwlCtxPtr;
+        dwlCtxPtr = (packageDownloader_DownloadCtx_t*)PkgDwl.ctxPtr;
+
+        // Suspend ongoing download
+        SetDownloadStatus(DOWNLOAD_STATUS_SUSPEND);
+
+        // Stop the downloader thread
+        le_thread_Cancel(downloaderRef);
+        le_thread_Join(downloaderRef, NULL);
+
+        // Close the store file descriptor if necessary to stop the Store thread
+        if ( (NULL != dwlCtxPtr) && (-1 != dwlCtxPtr->downloadFd) )
+        {
+            close(dwlCtxPtr->downloadFd);
+        }
+    }
     return LE_OK;
 }
