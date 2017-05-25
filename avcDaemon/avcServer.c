@@ -818,7 +818,7 @@ static void ClientCloseSessionHandler
     // Release session owned by control app.
     if (IsControlAppSession)
     {
-        pa_avc_StopSession();
+        avcClient_Disconnect();
         IsControlAppSession = false;
     }
 }
@@ -1378,7 +1378,7 @@ le_result_t avcServer_RequestSession
     else if (!IsControlAppSession)
     {
         LE_DEBUG("Automatically accepting request to open session.");
-        result = pa_avc_StartSession();
+        result = avcClient_Connect();
     }
     else
     {
@@ -1416,7 +1416,7 @@ le_result_t avcServer_ReleaseSession
     else if (!IsControlAppSession)
     {
         LE_DEBUG("Releasing session opened by user app.");
-        result = pa_avc_StopSession();
+        result = avcClient_Disconnect();
     }
     else
     {
