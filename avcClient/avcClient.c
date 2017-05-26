@@ -476,6 +476,7 @@ le_result_t avcClient_Disconnect
  *
  * @return
  *      - LE_OK in case of success
+ *      - LE_UNAVAILABLE when session closed.
  *      - LE_FAULT in case of failure
  */
 //--------------------------------------------------------------------------------------------------
@@ -485,6 +486,12 @@ le_result_t avcClient_Update
 )
 {
     LE_DEBUG("Registration update");
+
+    if (Lwm2mInstanceRef == NULL)
+    {
+        LE_DEBUG("Session closed");
+        return LE_UNAVAILABLE;
+    }
 
     if (true == lwm2mcore_Update(Lwm2mInstanceRef))
     {

@@ -94,6 +94,13 @@ static int UpdateStoreFd = -1;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Flag to indicate whether install was requested (used during sota resume).
+ */
+//--------------------------------------------------------------------------------------------------
+static bool ResumeInstall = false;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Reference to the FD Monitor for the input stream
  */
 //--------------------------------------------------------------------------------------------------
@@ -181,6 +188,13 @@ static le_event_Id_t UnpackStartEventId;
  */
 //--------------------------------------------------------------------------------------------------
 static le_event_Id_t UpdateEndEventId;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Event ID to resume install.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_event_Id_t InstallResumeEventId;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -367,7 +381,7 @@ static void DeletePackage
  *  Handler to terminate an ongoing update.
  */
 //--------------------------------------------------------------------------------------------------
-void UpdateEndHandler
+static void UpdateEndHandler
 (
     void *reportPtr
 )
@@ -953,6 +967,33 @@ static le_result_t StartUninstall
 
 //--------------------------------------------------------------------------------------------------
 /**
+ *  Launch install process
+ */
+//--------------------------------------------------------------------------------------------------
+static void LaunchSwUpdate
+(
+    lwm2mcore_UpdateType_t updateType,
+    uint16_t instanceId
+)
+{
+    LE_DEBUG("Doing package unpack.");
+
+    le_result_t result = avcApp_StartUpdate();
+
+    if (LE_OK != result)
+    {
+        ResumeInstall = false;
+        LE_ERROR("Failed to resume unpack");
+        DeletePackage();
+    }
+    {
+        ResumeInstall = true;
+    }
+
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  *  Called during an application install.
  */
 //--------------------------------------------------------------------------------------------------
@@ -977,6 +1018,9 @@ static void UpdateProgressHandler
                           LWM2MCORE_SW_UPDATE_STATE_DELIVERED,
                           LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED);
             LE_INFO("Package delivered");
+
+            // Check and resume install if necessary.
+            le_event_Report(InstallResumeEventId, NULL, 0);
             break;
 
         case LE_UPDATE_STATE_APPLYING:
@@ -1183,7 +1227,7 @@ static le_result_t SetSwUpdateInternalState
  *  - LE_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t SetSwUpdatePackageSize
+static le_result_t SetSwUpdatePackageSize
 (
     uint64_t pkgSize    ///< [IN] package size
 )
@@ -1371,7 +1415,7 @@ static le_result_t GetSwUpdateInternalState
  *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t GetSwUpdatePackageSize
+static le_result_t GetSwUpdatePackageSize
 (
     uint64_t* pkgSizePtr    ///< [OUT] package size
 )
@@ -1651,7 +1695,7 @@ static void StoreFdEventHandler
  * Prepare the app download directory (delete any old one and create a fresh empty one).
  */
 //--------------------------------------------------------------------------------------------------
-void PrepareDownloadDirectory
+static void PrepareDownloadDirectory
 (
     char *downloadPathPtr
 )
@@ -1831,7 +1875,6 @@ static void DownloadHandler
     }
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  *  Handler to start unpack once download completes.
@@ -1851,16 +1894,36 @@ static void UnpackStartHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
- *  Launch install process
+ * Resume SOTA install
  */
 //--------------------------------------------------------------------------------------------------
-static void LaunchSwUpdate
+static void InstallResumeHandler
 (
-    lwm2mcore_UpdateType_t updateType,
-    uint16_t instanceId
+    void *ctxPtr
 )
 {
-    avcApp_StartInstall(instanceId);
+    le_result_t result;
+    int instanceId = -1;
+
+    // Continue installation if install resume is requested
+    if (ResumeInstall)
+    {
+        LE_INFO("Resuming Install.");
+        ResumeInstall = false;
+
+        if (LE_OK != GetSwUpdateInstanceId(&instanceId))
+        {
+            LE_ERROR("Failed to retrieve instance id");
+            return;
+        }
+
+        LE_INFO("Install on instance id %d", instanceId);
+        avcApp_StartInstall(instanceId);
+    }
+    else
+    {
+        LE_DEBUG("No install resume");
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1868,7 +1931,7 @@ static void LaunchSwUpdate
  *  Restore the state of the AVC update process after reboot or session start
  */
 //--------------------------------------------------------------------------------------------------
-void avcApp_SotaResume
+static void SotaResume
 (
     void
 )
@@ -1958,10 +2021,12 @@ void avcApp_SotaResume
                 // send O9F_INSTALL
                 if (internalState == INTERNAL_STATE_INSTALL_REQUESTED)
                 {
-                    LE_INFO("Resuming Install.");
-                    // Query control app for permission to install.
+
+                    LE_INFO("Resuming unpack and install.");
+
                     CurrentObj9 = instanceRef;
-                    AvmsInstall = true;
+
+                    // Query control app for permission to install.
                     result = avcServer_QueryInstall(LaunchSwUpdate,
                                                     LWM2MCORE_SW_UPDATE_TYPE,
                                                     instanceId);
@@ -1972,7 +2037,7 @@ void avcApp_SotaResume
 
                     if (result != LE_BUSY)
                     {
-                        avcApp_StartInstall(instanceId);
+                        LaunchSwUpdate(LWM2MCORE_SW_UPDATE_TYPE, instanceId);
                     }
                 }
                 break;
@@ -2949,6 +3014,24 @@ le_result_t avcApp_GetSwUpdateRestoreResult
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Get software update internal state
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_GetSwUpdateInternalState
+(
+    avcApp_InternalState_t* internalStatePtr     ///< [OUT] internal state
+)
+{
+    return GetSwUpdateInternalState(internalStatePtr);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Save software update state and result in SW update workspace
  *
  * @return
@@ -3015,5 +3098,11 @@ void avcApp_Init
     UpdateEndEventId = le_event_CreateId("UpdateEnd", 0);
     le_event_AddHandler("UpdateEndHandler", UpdateEndEventId, UpdateEndHandler);
 
+    InstallResumeEventId = le_event_CreateId("InstallResume", 0);
+    le_event_AddHandler("InstallResumeHandler", InstallResumeEventId, InstallResumeHandler);
+
     PopulateAppInfoObjects();
+
+    // Resume SOTA
+    SotaResume();
 }

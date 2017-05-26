@@ -273,6 +273,21 @@ le_result_t avcApp_SaveSwUpdateStateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Get software update internal state
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_GetSwUpdateInternalState
+(
+    avcApp_InternalState_t* internalStatePtr     ///< [OUT] internal state
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
  *  Function to get package name (application name).
  *
  *  @return

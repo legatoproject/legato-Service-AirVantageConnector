@@ -536,7 +536,7 @@ static le_result_t AcceptDownloadPackage
             // Connect to the server.
             // When the device is connected, the package download will be launched.
             DownloadAgreement = true;
-            le_avc_StartSession();
+            avcClient_Connect();
         }
     }
 
@@ -2555,6 +2555,7 @@ static void CheckNotificationAtStartup
     uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
     size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
     lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
+    avcApp_InternalState_t internalState;
 
     lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
     lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
@@ -2584,6 +2585,26 @@ static void CheckNotificationAtStartup
                        && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult))
                 {
                     // A Package URI is stored but the download is not launched
+                    // Send a notification: LE_AVC_DOWNLOAD_PENDING
+                    updateStatus = LE_AVC_DOWNLOAD_PENDING;
+                }
+            }
+            else if (LWM2MCORE_SW_UPDATE_TYPE == updateType)
+            {
+                LE_DEBUG("SW update type");
+
+                // Check if a SW update was ongoing
+                if ((LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED == swUpdateState)
+                    && (LWM2MCORE_SW_UPDATE_RESULT_INITIAL == swUpdateResult))
+                {
+                    updateStatus = LE_AVC_DOWNLOAD_IN_PROGRESS;
+                }
+
+                if ((LWM2MCORE_SW_UPDATE_STATE_INITIAL == swUpdateState)
+                    && (LE_OK == avcApp_GetSwUpdateInternalState(&internalState))
+                    && (INTERNAL_STATE_DOWNLOAD_REQUESTED == internalState))
+                {
+                    // Download requested from the server
                     // Send a notification: LE_AVC_DOWNLOAD_PENDING
                     updateStatus = LE_AVC_DOWNLOAD_PENDING;
                 }
@@ -2661,7 +2682,6 @@ COMPONENT_INIT
 
     assetData_Init();
     avData_Init();
-    avcApp_Init();
     timeSeries_Init();
     push_Init();
     avcClient_Init();
@@ -2684,5 +2704,7 @@ COMPONENT_INIT
     // Check if any notification needs to be sent to the application concerning
     // firmware update and application update
     CheckNotificationAtStartup();
+
+    avcApp_Init();
 }
 

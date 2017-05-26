@@ -959,9 +959,6 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
 
     LE_INFO("lwm2mcore_ResumePackageDownload");
 
-    // Resume SOTA
-    avcApp_SotaResume();
-
     // Check if an update package URI is stored
     if (LE_OK != packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
     {
