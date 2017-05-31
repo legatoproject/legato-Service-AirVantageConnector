@@ -603,7 +603,7 @@ void BsFailureHandler
     void* reportPtr
 )
 {
-    lwm2mcore_Disconnect(Lwm2mInstanceRef);
+    avcClient_Disconnect();
 }
 
 //--------------------------------------------------------------------------------------------------
