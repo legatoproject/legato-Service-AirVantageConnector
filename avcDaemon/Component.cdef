@@ -67,6 +67,7 @@ sources:
     ../avcClient/os/legato/osUdp.c
     ../avcClient/os/legato/osSem.c
     ../avcClient/os/legato/osMutex.c
+    ../avcClient/os/legato/osConfig.c
 
     // LWM2MCore
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/dtlsConnection.c

@@ -2844,8 +2844,10 @@ le_avdata_RequestSessionObjRef_t le_avdata_RequestSession
     // Ask the avc server to pass the request to control app or to initiate a session.
     result = avcServer_RequestSession();
 
-    // If the fresh request fails, return NULL.
-    if (result != LE_OK)
+    // If the request fails, return NULL. Note that LE_BUSY means retry is in progress, and
+    // LE_DUPLICATE means session is already opened. Currently RequestSession doesn't return
+    // LE_FAULT, but that could change in the future so a check here is more prudent.
+    if ((result != LE_OK) && (result != LE_BUSY) && (result != LE_DUPLICATE))
     {
         return NULL;
     }
