@@ -2825,8 +2825,6 @@ le_avdata_RequestSessionObjRef_t le_avdata_RequestSession
     void
 )
 {
-    le_result_t result = LE_OK;
-
     // If this is a duplicate request send the existing reference.
     le_ref_IterRef_t iterRef = le_ref_GetIterator(AvSessionRequestRefMap);
 
@@ -2842,13 +2840,7 @@ le_avdata_RequestSessionObjRef_t le_avdata_RequestSession
     le_timer_Stop(SessionReleaseTimerRef);
 
     // Ask the avc server to pass the request to control app or to initiate a session.
-    result = avcServer_RequestSession();
-
-    // If the fresh request fails, return NULL.
-    if (result != LE_OK)
-    {
-        return NULL;
-    }
+    avcServer_RequestSession();
 
     // Need to return a unique reference that will be used by release. Use the client session ref
     // as the data, since we need to delete the ref when the client closes.
