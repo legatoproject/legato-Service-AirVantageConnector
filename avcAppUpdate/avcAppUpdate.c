@@ -370,7 +370,6 @@ static void DeletePackage
     DeleteFs(SW_UPDATE_STATE_PATH);
     DeleteFs(SW_UPDATE_INSTANCE_PATH);
     DeleteFs(SW_UPDATE_BYTES_DOWNLOADED_PATH);
-    DeleteFs(SW_UPDATE_PKGSIZE_PATH);
     DeleteFs(SW_UPDATE_INTERNAL_STATE_PATH);
     DeleteFs(SW_UPDATE_RESULT_PATH);
 }
@@ -1019,6 +1018,9 @@ static void UpdateProgressHandler
                           LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED);
             LE_INFO("Package delivered");
 
+            // Delete the SOTA resume info.
+            packageDownloader_DeleteResumeInfo();
+
             // Check and resume install if necessary.
             le_event_Report(InstallResumeEventId, NULL, 0);
             break;
@@ -1080,6 +1082,7 @@ static void UpdateProgressHandler
 
             CurrentObj9 = NULL;
             UpdateStarted = false;
+            le_update_End();
         break;
 
         default:
@@ -1218,31 +1221,6 @@ static le_result_t SetSwUpdateInternalState
     return LE_OK;
 }
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Set software update package size
- *
- * @return
- *  - LE_OK     The function succeeded
- *  - LE_FAULT  The function failed
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t SetSwUpdatePackageSize
-(
-    uint64_t pkgSize    ///< [IN] package size
-)
-{
-    le_result_t result;
-
-    result = WriteFs(SW_UPDATE_PKGSIZE_PATH, &pkgSize, sizeof(uint64_t));
-    if (LE_OK != result)
-    {
-        LE_ERROR("Failed to write %s: %s", SW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
-        return LE_FAULT;
-    }
-
-    return LE_OK;
-}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1407,50 +1385,6 @@ static le_result_t GetSwUpdateInternalState
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get software update packageSize
- *
- * @return
- *  - LE_OK             The function succeeded
- *  - LE_BAD_PARAMETER  Null pointer provided
- *  - LE_FAULT          The function failed
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t GetSwUpdatePackageSize
-(
-    uint64_t* pkgSizePtr    ///< [OUT] package size
-)
-{
-    size_t size;
-    uint64_t pkgSize;
-    le_result_t result;
-
-    if (!pkgSizePtr)
-    {
-        LE_ERROR("Invalid input parameter");
-        return LE_FAULT;
-    }
-
-    size = sizeof(uint64_t);
-    result = ReadFs(SW_UPDATE_PKGSIZE_PATH, &pkgSize, &size);
-    if (LE_OK != result)
-    {
-        if (LE_NOT_FOUND == result)
-        {
-            LE_ERROR("SW update package size not found");
-            *pkgSizePtr = 0;
-            return LE_OK;
-        }
-        LE_ERROR("Failed to read %s: %s", SW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
-        return result;
-    }
-
-    *pkgSizePtr = pkgSize;
-
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Get software update state
  *
  * @return
@@ -1568,12 +1502,16 @@ static void StopStoringPackage
         UpdateStoreFd = -1;
     }
 
-    if (result == LE_OK)
+    if (result == LE_TERMINATED)
     {
-        SetObj9State(CurrentObj9,
-                     LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED,
-                     LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED);
-        LE_INFO("Download successful");
+        LE_INFO("Download suspended");
+    }
+    else if (result == LE_OK)
+    {
+       SetObj9State(CurrentObj9,
+                    LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED,
+                    LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED);
+       LE_INFO("Download successful");
     }
     else
     {
@@ -1679,6 +1617,13 @@ static void StoreFdEventHandler
     short events            ///< [IN] FD events
 )
 {
+    if (true == packageDownloader_CheckDownloadToSuspend())
+    {
+        LE_WARN("Download suspended");
+        StopStoringPackage(LE_TERMINATED);
+        return;
+    }
+
     if (events & POLLIN)
     {
         CopyBytesToFd();
@@ -2001,6 +1946,7 @@ static void SotaResume
             case LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED:
                 // Download accepted by user and in progress. This case is handled
                 // by package downloader.
+                CurrentObj9 = instanceRef;
                 break;
 
             case LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED:
@@ -2019,12 +1965,12 @@ static void SotaResume
                 // If we got interrupted after receiving the install command from the server,
                 // we will restart the install process, else we will wait for the server to
                 // send O9F_INSTALL
+                CurrentObj9 = instanceRef;
+
                 if (internalState == INTERNAL_STATE_INSTALL_REQUESTED)
                 {
 
                     LE_INFO("Resuming unpack and install.");
-
-                    CurrentObj9 = instanceRef;
 
                     // Query control app for permission to install.
                     result = avcServer_QueryInstall(LaunchSwUpdate,
@@ -2558,6 +2504,21 @@ le_result_t avcApp_DeleteObj9Instance
         case LE_OK:
             if (0 == strcmp(appName, ""))
             {
+                // Found no appName, i.e. SOTA job aborted in the middle. Reset everything
+                // related to old SOTA job.
+                LE_DEBUG("Delete SOTA resources");
+
+                if (UpdateStarted)
+                {
+                    UpdateStarted = false;
+                    le_update_End();
+                }
+
+                // Delete everything relating to the aborted SOTA job
+                packageDownloader_SuspendDownload();
+                packageDownloader_DeleteResumeInfo();
+                DeletePackage();
+                avcServer_InitUserAgreement();
                 assetData_DeleteInstance(instanceRef);
                 CurrentObj9 = NULL;
             }
@@ -2610,6 +2571,7 @@ le_result_t avcApp_StoreSwPackage
 
     LE_DEBUG("contextPtr: %p", ctxPtr);
 
+    UpdateStarted = false;
     le_event_Report(DownloadEventId, ctxPtr, sizeof(lwm2mcore_PackageDownloader_t));
 
     return LE_OK;

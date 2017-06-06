@@ -594,6 +594,55 @@ static le_result_t AcceptInstallPackage
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Resend pending notification after session start
+ */
+//--------------------------------------------------------------------------------------------------
+static void ResendPendingNotification
+(
+    le_avc_Status_t updateStatus
+)
+{
+    le_avc_Status_t reportStatus = LE_AVC_NO_UPDATE;
+
+    // If the notification sent above is session started, the following block will send
+    // another notification reporting the pending states.
+    if ( updateStatus == LE_AVC_SESSION_STARTED )
+    {
+        // The currentState is really the previous state in case of session start, as we don't
+        // do a state change.
+        switch ( CurrentState )
+        {
+            CurrentTotalNumBytes = -1;
+            CurrentDownloadProgress = -1;
+
+            case AVC_INSTALL_PENDING:
+                reportStatus = LE_AVC_INSTALL_PENDING;
+                break;
+
+            case AVC_UNINSTALL_PENDING:
+                reportStatus = LE_AVC_UNINSTALL_PENDING;
+                break;
+
+            // Download pending is initiated by the package downloader
+            case AVC_DOWNLOAD_PENDING:
+            default:
+                break;
+        }
+
+        // Notify pending state to registered control app for user acceptance.
+        if ( reportStatus != LE_AVC_NO_UPDATE )
+        {
+            LE_DEBUG("Reporting status  %d,", reportStatus);
+            StatusHandlerRef(reportStatus,
+                             CurrentTotalNumBytes,
+                             CurrentDownloadProgress,
+                             StatusHandlerContextPtr);
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Handler to receive update status notifications from PA
  */
 //--------------------------------------------------------------------------------------------------
@@ -607,7 +656,6 @@ void avcServer_UpdateHandler
 )
 {
     LE_INFO("Update state: %s", AvcSessionStateToStr(updateStatus));
-    le_avc_Status_t reportStatus = LE_AVC_NO_UPDATE;
 
     // Keep track of the state of any pending downloads or installs.
     switch ( updateStatus )
@@ -715,6 +763,9 @@ void avcServer_UpdateHandler
                           totalNumBytes,
                           dloadProgress,
                           StatusHandlerContextPtr);
+
+        // Resend pending notification after session start
+        ResendPendingNotification(updateStatus);
     }
     else if ( IsControlAppInstalled )
     {
@@ -1487,17 +1538,15 @@ le_avc_StatusEventHandlerRef_t le_avc_AddStatusEventHandler
         if (LE_OK == packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
         {
             uint64_t packageSize = 0;
+
             // Get the package size
-            if (LWM2MCORE_FW_UPDATE_TYPE == updateType)
+            if ((LWM2MCORE_FW_UPDATE_TYPE == updateType)
+               || (LWM2MCORE_SW_UPDATE_TYPE == updateType))
             {
-                if (LE_OK != packageDownloader_GetFwUpdatePackageSize(&packageSize))
+                if (LE_OK != packageDownloader_GetUpdatePackageSize(&packageSize))
                 {
                     packageSize = 0;
                 }
-            }
-            else if (LWM2MCORE_SW_UPDATE_TYPE == updateType)
-            {
-                // TODO: SOTA use case
             }
             else
             {
