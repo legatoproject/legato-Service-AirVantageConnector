@@ -318,7 +318,13 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
     dataPtr->packageSize = (uint64_t)pkgInfoPtr->totalSize;
     if(LWM2MCORE_FW_UPDATE_TYPE == dataPtr->updateType)
     {
-        packageDownloader_SetFwUpdatePackageSize(dataPtr->packageSize);
+        LE_INFO("FW update type");
+        packageDownloader_SetUpdatePackageSize(dataPtr->packageSize);
+    }
+    else if (LWM2MCORE_SW_UPDATE_TYPE == dataPtr->updateType)
+    {
+        LE_INFO("SW update type");
+        packageDownloader_SetUpdatePackageSize(dataPtr->packageSize);
     }
     else
     {

@@ -224,6 +224,20 @@ bool packageDownloader_CheckDownloadToSuspend
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Delete package information necessary to resume a download (URI and package type)
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_DeleteResumeInfo
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Retrieve package information necessary to resume a download (URI and package type)
  *
  * @return
@@ -237,6 +251,34 @@ le_result_t packageDownloader_GetResumeInfo
     char* uriPtr,                       ///< [INOUT] package URI
     size_t* uriLenPtr,                  ///< [INOUT] package URI length
     lwm2mcore_UpdateType_t* typePtr     ///< [INOUT] Update type
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Save package size
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetUpdatePackageSize
+(
+    uint64_t size           ///< [IN] Package size
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get package size
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetUpdatePackageSize
+(
+    uint64_t* packageSizePtr        ///< [OUT] Package size
 );
 
 //--------------------------------------------------------------------------------------------------

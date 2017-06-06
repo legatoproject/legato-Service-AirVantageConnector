@@ -34,7 +34,7 @@
  * Static downloader thread reference.
  */
 //--------------------------------------------------------------------------------------------------
-static le_thread_Ref_t downloaderRef;
+static le_thread_Ref_t DownloaderRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -206,6 +206,27 @@ static void AbortDownload
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Suspend current download
+ */
+//--------------------------------------------------------------------------------------------------
+static void SuspendDownload
+(
+    void
+)
+{
+    if (DOWNLOAD_STATUS_IDLE != GetDownloadStatus())
+    {
+        // Wait till download thread exits
+        le_clk_Time_t timeout = {DOWNLOAD_ABORT_TIMEOUT, 0};
+        if (LE_OK != le_sem_WaitWithTimeOut(DownloadAbortSemaphore, timeout))
+        {
+            LE_ERROR("Error while suspending download");
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Write PEM key to default certificate file path
  */
 //--------------------------------------------------------------------------------------------------
@@ -295,7 +316,7 @@ static le_result_t SetResumeInfo
  *  - LE_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-static le_result_t DeleteResumeInfo
+le_result_t packageDownloader_DeleteResumeInfo
 (
     void
 )
@@ -315,10 +336,10 @@ static le_result_t DeleteResumeInfo
         return result;
     }
 
-    result = DeleteFs(FW_UPDATE_PKGSIZE_PATH);
+    result = DeleteFs(PACKAGE_SIZE_FILENAME);
     if (LE_OK != result)
     {
-        LE_ERROR("Failed to delete %s: %s", FW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
+        LE_ERROR("Failed to delete %s: %s", PACKAGE_SIZE_FILENAME, LE_RESULT_TXT(result));
         return result;
     }
 
@@ -654,24 +675,24 @@ le_result_t packageDownloader_SetFwUpdateInstallPending
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Save firmware package size
+ * Save package size
  *
  * @return
  *  - LE_OK     The function succeeded
  *  - LE_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_SetFwUpdatePackageSize
+le_result_t packageDownloader_SetUpdatePackageSize
 (
     uint64_t size           ///< [IN] Package size
 )
 {
     le_result_t result;
 
-    result = WriteFs(FW_UPDATE_PKGSIZE_PATH, (uint64_t*)&size, sizeof(uint64_t));
+    result = WriteFs(PACKAGE_SIZE_FILENAME, (uint64_t*)&size, sizeof(uint64_t));
     if (LE_OK != result)
     {
-        LE_ERROR("Failed to write %s: %s", FW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
+        LE_ERROR("Failed to write %s: %s", PACKAGE_SIZE_FILENAME, LE_RESULT_TXT(result));
         return LE_FAULT;
     }
 
@@ -680,14 +701,14 @@ le_result_t packageDownloader_SetFwUpdatePackageSize
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get firmware package size
+ * Get package size
  *
  * @return
  *  - LE_OK     The function succeeded
  *  - LE_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetFwUpdatePackageSize
+le_result_t packageDownloader_GetUpdatePackageSize
 (
     uint64_t* packageSizePtr        ///< [OUT] Package size
 )
@@ -702,10 +723,10 @@ le_result_t packageDownloader_GetFwUpdatePackageSize
         return LE_FAULT;
     }
 
-    result = ReadFs(FW_UPDATE_PKGSIZE_PATH, (uint64_t*)&packageSize, &size);
+    result = ReadFs(PACKAGE_SIZE_FILENAME, (uint64_t*)&packageSize, &size);
     if (LE_OK != result)
     {
-        LE_ERROR("Failed to read %s: %s", FW_UPDATE_PKGSIZE_PATH, LE_RESULT_TXT(result));
+        LE_ERROR("Failed to read %s: %s", PACKAGE_SIZE_FILENAME, LE_RESULT_TXT(result));
         return LE_FAULT;
     }
     *packageSizePtr = packageSize;
@@ -848,11 +869,15 @@ void* packageDownloader_DownloadPackage
             }
         }
 
-        le_sem_Post(DownloadAbortSemaphore);
+        if ((DOWNLOAD_STATUS_ABORT == GetDownloadStatus())
+           ||(DOWNLOAD_STATUS_SUSPEND == GetDownloadStatus()))
+        {
+            le_sem_Post(DownloadAbortSemaphore);
+        }
 
         // If package download is finished or aborted: delete stored URI and update type
         if ((DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus())
-         && (LE_OK != DeleteResumeInfo()))
+         && (LE_OK != packageDownloader_DeleteResumeInfo()))
         {
             ret = -1;
         }
@@ -870,6 +895,7 @@ void* packageDownloader_DownloadPackage
             SetDownloadStatus(DOWNLOAD_STATUS_IDLE);
         }
 
+        LE_DEBUG("Close download file descriptor");
         // Close the file descriptor if necessary
         if (-1 != dwlCtxPtr->downloadFd)
         {
@@ -1019,6 +1045,8 @@ le_result_t packageDownloader_StartDownload
 
     LE_DEBUG("downloading a `%s'", dwlType[type]);
 
+    avcServer_InitUserAgreement();
+
     // Store URI and update type to be able to resume the download if necessary
     if (LE_OK != SetResumeInfo(uriPtr, type))
     {
@@ -1080,8 +1108,8 @@ le_result_t packageDownloader_StartDownload
     dwlCtx.resume = resume;
     PkgDwl.ctxPtr = (void*)&dwlCtx;
 
-    downloaderRef = le_thread_Create("Downloader", (void*)dwlCtx.downloadPackage, (void*)&PkgDwl);
-    le_thread_Start(downloaderRef);
+    DownloaderRef = le_thread_Create("Downloader", (void*)dwlCtx.downloadPackage, (void*)&PkgDwl);
+    le_thread_Start(DownloaderRef);
 
     if (LWM2MCORE_SW_UPDATE_TYPE == type)
     {
@@ -1118,7 +1146,7 @@ le_result_t packageDownloader_AbortDownload
     AbortDownload();
 
     // Delete resume information if the files are still present
-    DeleteResumeInfo();
+    packageDownloader_DeleteResumeInfo();
 
     // Set update state and result to the default values
     LE_DEBUG("Download aborted");
@@ -1148,6 +1176,7 @@ le_result_t packageDownloader_AbortDownload
     return LE_OK;
 }
 
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Suspend a package download
@@ -1162,25 +1191,21 @@ le_result_t packageDownloader_SuspendDownload
     void
 )
 {
-    LE_DEBUG("GetDownloadStatus() %d", GetDownloadStatus());
+    LE_DEBUG("Download status = %d", GetDownloadStatus());
 
     if (DOWNLOAD_STATUS_ACTIVE == GetDownloadStatus())
     {
-        packageDownloader_DownloadCtx_t* dwlCtxPtr;
-        dwlCtxPtr = (packageDownloader_DownloadCtx_t*)PkgDwl.ctxPtr;
+        LE_INFO("Suspend download thread");
 
         // Suspend ongoing download
         SetDownloadStatus(DOWNLOAD_STATUS_SUSPEND);
 
-        // Stop the downloader thread
-        le_thread_Cancel(downloaderRef);
-        le_thread_Join(downloaderRef, NULL);
+        // end the state machine
+        lwm2mcore_PackageDownloaderSuspend();
 
-        // Close the store file descriptor if necessary to stop the Store thread
-        if ( (NULL != dwlCtxPtr) && (-1 != dwlCtxPtr->downloadFd) )
-        {
-            close(dwlCtxPtr->downloadFd);
-        }
+        // Wait till we get out of the thread
+        SuspendDownload();
     }
     return LE_OK;
 }
+

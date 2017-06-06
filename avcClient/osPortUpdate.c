@@ -1060,9 +1060,8 @@ lwm2mcore_Sid_t lwm2mcore_SuspendPackageDownload
     void
 )
 {
-    // Check if a download was started and suspend the download
-    if ((IsFotaDownloading() || IsSotaDownloading())
-     && (LE_OK == packageDownloader_SuspendDownload()))
+    // Suspend the download thread if there is any.
+    if (LE_OK == packageDownloader_SuspendDownload())
     {
         return LWM2MCORE_ERR_COMPLETED_OK;
     }
