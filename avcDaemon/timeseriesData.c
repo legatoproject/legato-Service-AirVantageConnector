@@ -44,14 +44,6 @@ static le_mem_PoolRef_t ResourceDataPoolRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
-* Timestamp key pool.  Initialized in timeSeries_Init().
-*/
-//--------------------------------------------------------------------------------------------------
-static le_mem_PoolRef_t TimestampKeyPoolRef = NULL;
-
-
-//--------------------------------------------------------------------------------------------------
-/**
 * Data value pool.  Initialized in timeSeries_Init().
 */
 //--------------------------------------------------------------------------------------------------
@@ -107,7 +99,7 @@ typedef enum
     DATA_TYPE_STRING,
     DATA_TYPE_FLOAT     ///< 64 bit floating point value
 }
-DataTypes_t;
+DataType_t;
 
 
 //--------------------------------------------------------------------------------------------------
@@ -142,7 +134,7 @@ RecordData_t;
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    uint64_t* timestamp;
+    uint64_t timestamp;                     ///< The timestamp
     le_dls_Link_t link;                     ///< For adding to the timestamp list
 }
 TimestampData_t;
@@ -156,8 +148,8 @@ TimestampData_t;
 typedef struct
 {
     char name[LE_AVDATA_PATH_NAME_BYTES];   ///< The name of the resource
-    DataTypes_t type;                       ///< The type of the resource
-    le_hashmap_Ref_t data;                  ///< Table of data accumulated over time
+    DataType_t type;                       ///< The type of the resource
+    le_dls_List_t dataList;                 ///< List of data accumulated over time
     double factor;                          ///< Factor of data
     int32_t lastIntValue;                   ///< Last recorded int value
     double lastFloatValue;                  ///< Last recorded float value
@@ -171,12 +163,17 @@ ResourceData_t;
  * Supported data types
  */
 //--------------------------------------------------------------------------------------------------
-typedef union
+typedef struct
 {
-    int intValue;
-    double floatValue;
-    bool boolValue;
-    char* strValuePtr;
+    uint64_t timestamp;
+    union
+    {
+        int intValue;
+        double floatValue;
+        bool boolValue;
+        char* strValuePtr;
+    };
+    le_dls_Link_t link;
 }
 Data_t;
 
@@ -236,7 +233,7 @@ static le_result_t GetTimestamp
             timestampPtr = CONTAINER_OF(linkPtr, TimestampData_t, link);
 
             // if resource already exists but we are trying to accumulate value of a different type
-            if (*(timestampPtr->timestamp) == timestamp)
+            if (timestampPtr->timestamp == timestamp)
             {
                 *timestampPtrPtr = timestampPtr;
                 return LE_OK;
@@ -252,13 +249,47 @@ static le_result_t GetTimestamp
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Get data with the corresponding timestamp
+ *
+ * @return:
+ *      - NULL if data does not exist with the corresponding timestamp
+ */
+//--------------------------------------------------------------------------------------------------
+static Data_t* GetTimestampData
+(
+    ResourceData_t* resourceDataPtr,
+    uint64_t timestamp
+)
+{
+    le_dls_Link_t* linkPtr = le_dls_Peek(&resourceDataPtr->dataList);
+    Data_t* dataPtr;
+
+    // Loop through all the data
+    while ( linkPtr != NULL )
+    {
+        dataPtr = CONTAINER_OF(linkPtr, Data_t, link);
+
+        if (dataPtr->timestamp == timestamp)
+        {
+            return dataPtr;
+        }
+
+        linkPtr = le_dls_PeekNext(&resourceDataPtr->dataList, linkPtr);
+    }
+
+    return NULL;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Get the number of resources collected with a specific timestamp
  */
 //--------------------------------------------------------------------------------------------------
 size_t GetResourceDataTimestampCount
 (
     timeSeries_RecordRef_t recRef,
-    uint64_t* timestampPtr
+    uint64_t timestamp
 )
 {
     int rdCount = 0;
@@ -269,7 +300,7 @@ size_t GetResourceDataTimestampCount
     while ( linkPtr != NULL )
     {
         resourceDataPtr = CONTAINER_OF(linkPtr, ResourceData_t, link);
-        if (le_hashmap_ContainsKey(resourceDataPtr->data, timestampPtr))
+        if (GetTimestampData(resourceDataPtr, timestamp) != NULL)
         {
             rdCount++;
         }
@@ -301,8 +332,7 @@ static void AddTimestamp
     if (result == LE_NOT_FOUND)
     {
         timestampPtr = le_mem_ForceAlloc(TimestampDataPoolRef);
-        timestampPtr->timestamp = le_mem_ForceAlloc(TimestampKeyPoolRef);
-        *timestampPtr->timestamp = timestamp;
+        timestampPtr->timestamp = timestamp;
         timestampPtr->link = LE_DLS_LINK_INIT;
 
         if (le_dls_IsEmpty(&recRef->timestampList))
@@ -326,7 +356,7 @@ static void AddTimestamp
                     nextTimestampPtr = CONTAINER_OF(nextLinkPtr, TimestampData_t, link);
 
                     // add value before next timestamp
-                    if (timestamp < *(nextTimestampPtr->timestamp))
+                    if (timestamp < nextTimestampPtr->timestamp)
                     {
                         le_dls_AddBefore(&recRef->timestampList, nextLinkPtr, &timestampPtr->link);
                         break;
@@ -363,7 +393,6 @@ static void ClearTimestamp
     while ( linkPtr != NULL )
     {
         timestampPtr = CONTAINER_OF(linkPtr, TimestampData_t, link);
-        le_mem_Release(timestampPtr->timestamp);
         le_mem_Release(timestampPtr);
         linkPtr = le_dls_Pop(&recRef->timestampList);
     }
@@ -375,37 +404,38 @@ static void ClearTimestamp
  * Clear all the resources of a record
  */
 //--------------------------------------------------------------------------------------------------
-static void ClearResource
+static void ClearResources
 (
     timeSeries_RecordRef_t recRef
 )
 {
-    le_dls_Link_t* linkPtr = le_dls_Pop(&recRef->resourceList);
+    le_dls_Link_t* resourcelinkPtr = le_dls_Pop(&recRef->resourceList);
     ResourceData_t* resourceDataPtr;
 
     // Go through each resource, delete the data and remove
-    while ( linkPtr != NULL )
+    while ( resourcelinkPtr != NULL )
     {
-        resourceDataPtr = CONTAINER_OF(linkPtr, ResourceData_t, link);
+        resourceDataPtr = CONTAINER_OF(resourcelinkPtr, ResourceData_t, link);
 
-        le_hashmap_It_Ref_t iter = le_hashmap_GetIterator(resourceDataPtr->data);
+        le_dls_Link_t* datalinkPtr = le_dls_Pop(&resourceDataPtr->dataList);
+        Data_t* dataPtr;
 
-        Data_t* nextVal;
-
-        while (LE_OK == le_hashmap_NextNode(iter))
+        // Loop through all the data
+        while ( datalinkPtr != NULL )
         {
-            nextVal = le_hashmap_GetValue(iter);
+            dataPtr = CONTAINER_OF(datalinkPtr, Data_t, link);
+
             if (resourceDataPtr->type == DATA_TYPE_STRING)
             {
-                le_mem_Release(nextVal->strValuePtr);
+                le_mem_Release(dataPtr->strValuePtr);
             }
 
-            le_mem_Release(nextVal);
+            le_mem_Release(dataPtr);
+            datalinkPtr = le_dls_Pop(&resourceDataPtr->dataList);
         }
 
-        le_hashmap_RemoveAll(resourceDataPtr->data);
         le_mem_Release(resourceDataPtr);
-        linkPtr = le_dls_Pop(&recRef->resourceList);
+        resourcelinkPtr = le_dls_Pop(&recRef->resourceList);
     }
 }
 
@@ -452,9 +482,8 @@ static void DeleteTimestamp
     {
         timestampPtr = CONTAINER_OF(linkPtr, TimestampData_t, link);
 
-        if (*(timestampPtr->timestamp) == timestamp)
+        if (timestampPtr->timestamp == timestamp)
         {
-            le_mem_Release(timestampPtr->timestamp);
             le_mem_Release(timestampPtr);
             le_dls_Remove(&recRef->timestampList, linkPtr);
             linkPtr = NULL;
@@ -477,7 +506,7 @@ static void DeleteResourceData
 (
     timeSeries_RecordRef_t recRef,
     const char* path,
-    uint64_t* timestamp
+    uint64_t timestamp
 )
 {
     le_dls_Link_t* linkPtr = le_dls_Peek(&recRef->resourceList);
@@ -490,23 +519,23 @@ static void DeleteResourceData
 
         if (0 == strcmp(path, resourceDataPtr->name))
         {
-            Data_t* valuePtr = (Data_t*)le_hashmap_Get(resourceDataPtr->data, timestamp);
+            Data_t* dataPtr = (Data_t*)GetTimestampData(resourceDataPtr, timestamp);
 
             // Delete this specific resource
-            if (valuePtr != NULL)
+            if (dataPtr != NULL)
             {
                 LE_DEBUG("Deleting this resource data");
                 // if string we need to deallocate memory for string as well
                 if (resourceDataPtr->type == DATA_TYPE_STRING)
                 {
-                    le_mem_Release(valuePtr->strValuePtr);
+                    le_mem_Release(dataPtr->strValuePtr);
                 }
 
-                le_mem_Release(valuePtr);
-                le_hashmap_Remove(resourceDataPtr->data, timestamp);
+                le_mem_Release(dataPtr);
+                le_dls_Remove(&resourceDataPtr->dataList, &dataPtr->link);
 
                 // Delete this resource if this is the only data entry
-                if (0 == le_hashmap_Size(resourceDataPtr->data))
+                if (0 == le_dls_NumLinks(&resourceDataPtr->dataList))
                 {
                     LE_DEBUG("Deleting the resource since no data");
                     le_mem_Release(resourceDataPtr);
@@ -537,19 +566,13 @@ static void DeleteData
     uint64_t timestamp
 )
 {
-    TimestampData_t* timestampPtr;
-    le_result_t result = GetTimestamp(recRef, timestamp, &timestampPtr);
+    DeleteResourceData(recRef, path, timestamp);
 
-    if (result == LE_OK)
+    // delete timestamp ref if there are no data associated with this timestamp
+    if (0 == GetResourceDataTimestampCount(recRef, timestamp))
     {
-        DeleteResourceData(recRef, path, timestampPtr->timestamp);
-
-        // delete timestamp ref if there are no data associated with this timestamp
-        if (0 == GetResourceDataTimestampCount(recRef, timestampPtr->timestamp))
-        {
-            LE_DEBUG("Deleting timestamp ref since no data exists for this timestamp.");
-            DeleteTimestamp(recRef, *(timestampPtr->timestamp));
-        }
+        LE_DEBUG("Deleting timestamp ref since no data exists for this timestamp.");
+        DeleteTimestamp(recRef, timestamp);
     }
 }
 
@@ -564,7 +587,7 @@ static void ResetRecord
     timeSeries_RecordRef_t recRef
 )
 {
-    ClearResource(recRef);
+    ClearResources(recRef);
     ClearTimestamp(recRef);
     recRef->timestampFactor = 1;
     recRef->isEncoded = false;
@@ -711,9 +734,9 @@ static le_result_t EncodeResourceDeltaValue
     CborError err;
 
     // get data with this timestamp from this resource
-    Data_t* valuePtr = (Data_t*)le_hashmap_Get(resourceDataPtr->data,
-                                               currentTimestampPtr->timestamp);
-    Data_t* prevValuePtr;
+    Data_t* dataPtr = (Data_t*)GetTimestampData(resourceDataPtr,
+                                                 currentTimestampPtr->timestamp);
+    Data_t* prevDataPtr;
 
     int intDelta;
     double floatDelta;
@@ -723,7 +746,7 @@ static le_result_t EncodeResourceDeltaValue
 
     if (prevTimestampPtr != NULL)
     {
-        prevValuePtr = (Data_t*)le_hashmap_Get(resourceDataPtr->data, prevTimestampPtr->timestamp);
+        prevDataPtr = (Data_t*)GetTimestampData(resourceDataPtr, prevTimestampPtr->timestamp);
     }
 
     // delta value is only applicable to int and floats
@@ -732,23 +755,23 @@ static le_result_t EncodeResourceDeltaValue
         case DATA_TYPE_INT:
             if (prevTimestampPtr == NULL)
             {
-                intDelta = valuePtr->intValue * resourceDataPtr->factor;
+                intDelta = dataPtr->intValue * resourceDataPtr->factor;
             }
             else
             {
-                if (!le_hashmap_ContainsKey(resourceDataPtr->data, prevTimestampPtr->timestamp))
+                if (GetTimestampData(resourceDataPtr, prevTimestampPtr->timestamp) == NULL)
                 {
                     prevIntValue = resourceDataPtr->lastIntValue;
                 }
                 else
                 {
-                    prevIntValue = prevValuePtr->intValue;
+                    prevIntValue = prevDataPtr->intValue;
                 }
 
-                intDelta = (valuePtr->intValue - prevIntValue) * resourceDataPtr->factor;
+                intDelta = (dataPtr->intValue - prevIntValue) * resourceDataPtr->factor;
             }
 
-            resourceDataPtr->lastIntValue = valuePtr->intValue;
+            resourceDataPtr->lastIntValue = dataPtr->intValue;
             err = cbor_encode_int(&recRef->sampleArray, intDelta);
             RETURN_IF_CBOR_ERROR(err);
             break;
@@ -756,36 +779,36 @@ static le_result_t EncodeResourceDeltaValue
         case DATA_TYPE_FLOAT:
             if (prevTimestampPtr == NULL)
             {
-                floatDelta = valuePtr->floatValue;
+                floatDelta = dataPtr->floatValue;
             }
             else
             {
-                if (!le_hashmap_ContainsKey(resourceDataPtr->data, prevTimestampPtr->timestamp))
+                if (GetTimestampData(resourceDataPtr, prevTimestampPtr->timestamp) == NULL)
                 {
                     prevFloatValue = resourceDataPtr->lastFloatValue;
                 }
                 else
                 {
-                    prevFloatValue = prevValuePtr->floatValue;
+                    prevFloatValue = prevDataPtr->floatValue;
                 }
 
-                floatDelta = (valuePtr->floatValue - prevFloatValue) * resourceDataPtr->factor;
+                floatDelta = (dataPtr->floatValue - prevFloatValue) * resourceDataPtr->factor;
             }
 
-            resourceDataPtr->lastFloatValue = valuePtr->floatValue;
+            resourceDataPtr->lastFloatValue = dataPtr->floatValue;
             err = cbor_encode_double(&recRef->sampleArray, floatDelta);
             RETURN_IF_CBOR_ERROR(err);
             break;
 
         case DATA_TYPE_BOOL:
-            err = cbor_encode_boolean(&recRef->sampleArray, valuePtr->boolValue);
+            err = cbor_encode_boolean(&recRef->sampleArray, dataPtr->boolValue);
             RETURN_IF_CBOR_ERROR(err);
             break;
 
         case DATA_TYPE_STRING:
             err = cbor_encode_text_string(&recRef->sampleArray,
-                                          valuePtr->strValuePtr,
-                                          strlen(valuePtr->strValuePtr));
+                                          dataPtr->strValuePtr,
+                                          strlen(dataPtr->strValuePtr));
             RETURN_IF_CBOR_ERROR(err);
             break;
 
@@ -829,11 +852,11 @@ static le_result_t EncodeResourceDataToCborArray
         if (prevTimestampPtr == NULL)
         {
             ResetResourceLastValue(recRef);
-            timestamp = *(timestampPtr->timestamp) * recRef->timestampFactor;
+            timestamp = timestampPtr->timestamp * recRef->timestampFactor;
         }
         else
         {
-            uint64_t deltaTimestamp = (*(timestampPtr->timestamp) - *(prevTimestampPtr->timestamp));
+            uint64_t deltaTimestamp = ((timestampPtr->timestamp) - (prevTimestampPtr->timestamp));
             timestamp = deltaTimestamp * recRef->timestampFactor;
         }
 
@@ -848,7 +871,7 @@ static le_result_t EncodeResourceDataToCborArray
         {
             resourceDataPtr = CONTAINER_OF(rdLinkPtr, ResourceData_t, link);
 
-            if (!le_hashmap_ContainsKey(resourceDataPtr->data, timestampPtr->timestamp))
+            if (GetTimestampData(resourceDataPtr, timestampPtr->timestamp) == NULL)
             {
                 result = EncodeResourceDefaultValue(recRef);
             }
@@ -1050,7 +1073,7 @@ static le_result_t GetResourceData
 (
     timeSeries_RecordRef_t recRef,
     const char* path,
-    DataTypes_t type,
+    DataType_t type,
     ResourceData_t** rdataPtrPtr
 )
 {
@@ -1099,7 +1122,7 @@ static le_result_t CreateResourceData
 (
     timeSeries_RecordRef_t recRef,
     const char* path,
-    DataTypes_t type
+    DataType_t type
 )
 {
     LE_DEBUG("Creating resource: %s of type %d", path, type);
@@ -1113,11 +1136,8 @@ static le_result_t CreateResourceData
     }
 
     resourceDataPtr->type = type;
+    resourceDataPtr->dataList = LE_DLS_LIST_INIT;
     resourceDataPtr->link = LE_DLS_LINK_INIT;
-    resourceDataPtr->data = le_hashmap_Create("Resource data table",
-                                              1024,
-                                              le_hashmap_HashUInt64,
-                                              le_hashmap_EqualsUInt64);
 
     if ((type == DATA_TYPE_STRING) || (type == DATA_TYPE_BOOL))
     {
@@ -1128,11 +1148,6 @@ static le_result_t CreateResourceData
         resourceDataPtr->factor = 1;
         resourceDataPtr->lastIntValue = 0;
         resourceDataPtr->lastFloatValue = 0;
-    }
-
-    if (resourceDataPtr->data == NULL)
-    {
-        return LE_FAULT;
     }
 
     le_dls_Queue(&recRef->resourceList, &resourceDataPtr->link);
@@ -1154,29 +1169,33 @@ static le_result_t AddIntResourceData
     uint64_t timestamp
 )
 {
-    TimestampData_t* timestampPtr;
     le_result_t result;
 
-    if (GetTimestamp(recRef, timestamp, &timestampPtr) != LE_OK)
+    Data_t* dataPtr = (Data_t*)GetTimestampData(rdataPtr, timestamp);
+
+    // if existing timestamp is used, update value
+    if (dataPtr != NULL)
     {
-        result = LE_FAULT;
+        dataPtr->intValue = value;
     }
     else
     {
-        Data_t* dataPtr = le_mem_ForceAlloc(DataValuePoolRef);
+        dataPtr = le_mem_ForceAlloc(DataValuePoolRef);
+        dataPtr->timestamp = timestamp;
         dataPtr->intValue = value;
-        le_hashmap_Put(rdataPtr->data, timestampPtr->timestamp, dataPtr);
+        dataPtr->link = LE_DLS_LINK_INIT;
+        le_dls_Queue(&rdataPtr->dataList, &dataPtr->link);
+    }
 
-        // new entry, we need re-encode
+    // new entry, we need re-encode
+    recRef->isEncoded = false;
+    result = Encode(recRef);
+
+    // if our buffer cannot fit this new added data, remove it
+    if (result == LE_NO_MEMORY)
+    {
+        DeleteData(recRef, rdataPtr->name, timestamp);
         recRef->isEncoded = false;
-        result = Encode(recRef);
-
-        // if our buffer cannot fit this new added data, remove it
-        if (result == LE_NO_MEMORY)
-        {
-            DeleteData(recRef, rdataPtr->name, timestamp);
-            recRef->isEncoded = false;
-        }
     }
 
     return result;
@@ -1196,29 +1215,33 @@ static le_result_t AddFloatResourceData
     uint64_t timestamp
 )
 {
-    TimestampData_t* timestampPtr;
     le_result_t result;
 
-    if (GetTimestamp(recRef, timestamp, &timestampPtr) != LE_OK)
+    Data_t* dataPtr = (Data_t*)GetTimestampData(rdataPtr, timestamp);
+
+    // if existing timestamp is used, update value
+    if (dataPtr != NULL)
     {
-        result = LE_FAULT;
+        dataPtr->floatValue = value;
     }
     else
     {
-        Data_t* dataPtr = le_mem_ForceAlloc(DataValuePoolRef);
+        dataPtr = le_mem_ForceAlloc(DataValuePoolRef);
+        dataPtr->timestamp = timestamp;
         dataPtr->floatValue = value;
-        le_hashmap_Put(rdataPtr->data, timestampPtr->timestamp, dataPtr);
+        dataPtr->link = LE_DLS_LINK_INIT;
+        le_dls_Queue(&rdataPtr->dataList, &dataPtr->link);
+    }
 
-        // new entry, we need re-encode
+    // new entry, we need re-encode
+    recRef->isEncoded = false;
+    result = Encode(recRef);
+
+    // if our buffer cannot fit this new added data, remove it
+    if (result == LE_NO_MEMORY)
+    {
+        DeleteData(recRef, rdataPtr->name, timestamp);
         recRef->isEncoded = false;
-        result = Encode(recRef);
-
-        // if our buffer cannot fit this new added data, remove it
-        if (result == LE_NO_MEMORY)
-        {
-            DeleteData(recRef, rdataPtr->name, timestamp);
-            recRef->isEncoded = false;
-        }
     }
 
     return result;
@@ -1238,29 +1261,33 @@ static le_result_t AddBoolResourceData
     uint64_t timestamp
 )
 {
-    TimestampData_t* timestampPtr;
     le_result_t result;
 
-    if (GetTimestamp(recRef, timestamp, &timestampPtr) != LE_OK)
+    Data_t* dataPtr = (Data_t*)GetTimestampData(rdataPtr, timestamp);
+
+    // if existing timestamp is used, update value
+    if (dataPtr != NULL)
     {
-        result = LE_FAULT;
+        dataPtr->boolValue = value;
     }
     else
     {
-        Data_t* dataPtr = le_mem_ForceAlloc(DataValuePoolRef);
+        dataPtr = le_mem_ForceAlloc(DataValuePoolRef);
+        dataPtr->timestamp = timestamp;
         dataPtr->boolValue = value;
-        le_hashmap_Put(rdataPtr->data, timestampPtr->timestamp, dataPtr);
+        dataPtr->link = LE_DLS_LINK_INIT;
+        le_dls_Queue(&rdataPtr->dataList, &dataPtr->link);
+    }
 
-        // new entry, we need re-encode
+    // new entry, we need re-encode
+    recRef->isEncoded = false;
+    result = Encode(recRef);
+
+    // if our buffer cannot fit this new added data, remove it
+    if (result == LE_NO_MEMORY)
+    {
+        DeleteData(recRef, rdataPtr->name, timestamp);
         recRef->isEncoded = false;
-        result = Encode(recRef);
-
-        // if our buffer cannot fit this new added data, remove it
-        if (result == LE_NO_MEMORY)
-        {
-            DeleteData(recRef, rdataPtr->name, timestamp);
-            recRef->isEncoded = false;
-        }
     }
 
     return result;
@@ -1280,31 +1307,35 @@ static le_result_t AddStringResourceData
     uint64_t timestamp
 )
 {
-    TimestampData_t* timestampPtr;
     le_result_t result;
 
-    if (GetTimestamp(recRef, timestamp, &timestampPtr) != LE_OK)
+    Data_t* dataPtr = (Data_t*)GetTimestampData(rdataPtr, timestamp);
+
+    // if existing timestamp is used, update value
+    if (dataPtr != NULL)
     {
-        result = LE_FAULT;
+        le_utf8_Copy(dataPtr->strValuePtr, value, LE_AVDATA_STRING_VALUE_BYTES, NULL);
     }
     else
     {
-        Data_t* dataPtr = le_mem_ForceAlloc(DataValuePoolRef);
+        dataPtr = le_mem_ForceAlloc(DataValuePoolRef);
+        dataPtr->timestamp = timestamp;
         dataPtr->strValuePtr = le_mem_ForceAlloc(StringValuePoolRef);
         // TODO: handle case when string value is too long
         le_utf8_Copy(dataPtr->strValuePtr, value, LE_AVDATA_STRING_VALUE_BYTES, NULL);
-        le_hashmap_Put(rdataPtr->data, timestampPtr->timestamp, dataPtr);
+        dataPtr->link = LE_DLS_LINK_INIT;
+        le_dls_Queue(&rdataPtr->dataList, &dataPtr->link);
+    }
 
-        // new entry, we need re-encode
+    // new entry, we need re-encode
+    recRef->isEncoded = false;
+    result = Encode(recRef);
+
+    // if our buffer cannot fit this new added data, remove it
+    if (result == LE_NO_MEMORY)
+    {
+        DeleteData(recRef, rdataPtr->name, timestamp);
         recRef->isEncoded = false;
-        result = Encode(recRef);
-
-        // if our buffer cannot fit this new added data, remove it
-        if (result == LE_NO_MEMORY)
-        {
-            DeleteData(recRef, rdataPtr->name, timestamp);
-            recRef->isEncoded = false;
-        }
     }
 
     return result;
@@ -1596,7 +1627,6 @@ le_result_t timeSeries_Init
     RecordDataPoolRef = le_mem_CreatePool("Record pool", sizeof(RecordData_t));
     TimestampDataPoolRef = le_mem_CreatePool("Timestamp pool", sizeof(TimestampData_t));
     ResourceDataPoolRef = le_mem_CreatePool("Resource pool", sizeof(ResourceData_t));
-    TimestampKeyPoolRef = le_mem_CreatePool("Timestamp key pool", sizeof(uint64_t));
     DataValuePoolRef = le_mem_CreatePool("Data value pool", sizeof(Data_t));
     StringValuePoolRef = le_mem_CreatePool("String pool", LE_AVDATA_STRING_VALUE_BYTES);
 
