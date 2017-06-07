@@ -885,8 +885,33 @@ void* packageDownloader_DownloadPackage
         // Wait for the end of the store thread used for FOTA
         if (LWM2MCORE_FW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
         {
-            le_thread_Join(dwlCtxPtr->storeRef, (void*)&ret);
-            LE_DEBUG("Store thread joined");
+            void* storeRet;
+            le_thread_Join(dwlCtxPtr->storeRef, &storeRet);
+            ret = storeRet;
+            LE_DEBUG("Store thread joined with ret=%d", ret);
+
+            // Check if store thread finished with an error
+            if (ret < 0)
+            {
+                // Send download failed event and set the error to "bad package",
+                // as it was rejected by the FW update process.
+                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_FAILED,
+                                        LE_AVC_FIRMWARE_UPDATE,
+                                        -1,
+                                        -1,
+                                        LE_AVC_ERR_BAD_PACKAGE);
+            }
+            else
+            {
+                // Send download complete event.
+                // Not setting the downloaded number of bytes and percentage allows using the last
+                // stored values.
+                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_COMPLETE,
+                                        LE_AVC_FIRMWARE_UPDATE,
+                                        -1,
+                                        -1,
+                                        LE_AVC_ERR_NONE);
+            }
         }
 
         if (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus())
@@ -997,14 +1022,13 @@ void* packageDownloader_StoreFwPackage
     if (-1 == ret)
     {
         close(fd);
-        return (void*)&ret;
+        return (void*)-1;
     }
 
     result = le_fwupdate_Download(fd);
     if (LE_OK != result)
     {
         LE_ERROR("Failed to update firmware: %s", LE_RESULT_TXT(result));
-        ret = -1;
 
         // No further action required if the download is aborted
         // by writing an empty update package URI
@@ -1018,10 +1042,13 @@ void* packageDownloader_StoreFwPackage
             packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
             packageDownloader_SetFwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_UNSUPPORTED_PKG_TYPE);
         }
+
+        close(fd);
+        return (void*)-1;
     }
 
     close(fd);
-    return (void*)&ret;
+    return (void*)0;
 }
 
 //--------------------------------------------------------------------------------------------------

@@ -696,8 +696,24 @@ void avcServer_UpdateHandler
         case LE_AVC_DOWNLOAD_COMPLETE:
             LE_DEBUG("Update type for DOWNLOAD is %d", updateType);
             DownloadAgreement = false;
-            CurrentTotalNumBytes = totalNumBytes;
-            CurrentDownloadProgress = dloadProgress;
+            if (totalNumBytes > 0)
+            {
+                CurrentTotalNumBytes = totalNumBytes;
+            }
+            else
+            {
+                // Use last stored value
+                totalNumBytes = CurrentTotalNumBytes;
+            }
+            if (dloadProgress > 0)
+            {
+                CurrentDownloadProgress = dloadProgress;
+            }
+            else
+            {
+                // Use last stored value
+                dloadProgress = CurrentDownloadProgress;
+            }
             CurrentUpdateType = updateType;
 
             if (LE_AVC_APPLICATION_UPDATE == updateType)

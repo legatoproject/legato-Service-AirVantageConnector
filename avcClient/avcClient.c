@@ -217,9 +217,11 @@ static int PackageEventHandler
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FINISHED:
             if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
+                // The download thread finished the file download without any error, but the FOTA
+                // update package still might be rejected by the store thread, e.g. if the received
+                // file is incomplete or contains any error.
+                // The download complete event is therefore not sent now and will be sent only when
+                // the store thread also exits without error.
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
