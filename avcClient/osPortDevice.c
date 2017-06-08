@@ -80,10 +80,24 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Define for PRI tag in FW version string
+ * Define for Customer PRI tag in FW version string (per AirVantage bundle packages specification)
  */
 //--------------------------------------------------------------------------------------------------
-#define PRI_TAG ",PRI="
+#define CUPRI_TAG ",CUPRI="
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Define for Carrier PRI tag in FW version string
+ */
+//--------------------------------------------------------------------------------------------------
+#define CAPRI_TAG ",CAPRI="
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Define for MCU tag in FW version string
+ */
+//--------------------------------------------------------------------------------------------------
+#define MCU_TAG ",MCU="
 
 //--------------------------------------------------------------------------------------------------
  /**
@@ -450,13 +464,13 @@ static size_t GetLegatoVersion
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Attempt to read the PRI version string from the file system.
+ * Attempt to read the Customer PRI version string from the file system.
  *
  * @return
  *      - written buffer length
  */
 //--------------------------------------------------------------------------------------------------
-static size_t GetPriVersion
+static size_t GetCupriVersion
 (
     char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
     size_t len                      ///< [IN] Buffer length
@@ -488,6 +502,94 @@ static size_t GetPriVersion
             returnedLen = strlen(versionBufferPtr);
         }
         LE_INFO("PriVersion %s, len %d", versionBufferPtr, returnedLen);
+    }
+    return returnedLen;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Attempt to read the Carrier PRI version string from the file system.
+ *
+ * @return
+ *      - written buffer length
+ */
+//--------------------------------------------------------------------------------------------------
+static size_t GetCapriVersion
+(
+    char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
+    size_t len                      ///< [IN] Buffer length
+)
+{
+    size_t returnedLen = 0;
+    if (NULL != versionBufferPtr)
+    {
+        char priName[LE_INFO_MAX_CAPRI_NAME_BYTES];
+        char priRev[LE_INFO_MAX_CAPRI_REV_BYTES];
+
+        if (LE_OK == le_info_GetCarrierPri(priName, LE_INFO_MAX_CAPRI_NAME_BYTES,
+                                           priRev, LE_INFO_MAX_CAPRI_REV_BYTES))
+        {
+            if (strlen(priName) && strlen(priRev))
+            {
+                snprintf(versionBufferPtr, len, "%s-%s", priName, priRev);
+                returnedLen = strlen(versionBufferPtr);
+            }
+            else
+            {
+                snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+                returnedLen = strlen(versionBufferPtr);
+            }
+        }
+        else
+        {
+            snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = strlen(versionBufferPtr);
+        }
+        LE_INFO("Carrier PRI Version %s, len %d", versionBufferPtr, returnedLen);
+    }
+    return returnedLen;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve MCU version
+ *
+ * @return
+ *      - written buffer length
+ */
+//--------------------------------------------------------------------------------------------------
+static size_t GetMcuVersion
+(
+    char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
+    size_t len                      ///< [IN] Buffer length
+)
+{
+    size_t returnedLen = 0;
+
+    if (NULL != versionBufferPtr)
+    {
+        char mcuVersion[LE_ULPM_MAX_VERS_LEN+1];
+
+        if (LE_OK == le_ulpm_GetFirmwareVersion(mcuVersion, sizeof(mcuVersion)))
+        {
+            if (strlen(mcuVersion))
+            {
+                snprintf(versionBufferPtr, len, "%s", mcuVersion);
+                returnedLen = strlen(versionBufferPtr);
+            }
+            else
+            {
+                snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+                returnedLen = strlen(versionBufferPtr);
+            }
+        }
+        else
+        {
+            LE_ERROR("Failed to retrieve MCU version");
+            snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = strlen(versionBufferPtr);
+        }
+        LE_INFO("MCU version %s, len %d", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
@@ -718,7 +820,9 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
       { ROOT_FS_TAG,    GetRfsVersion    },
       { USER_FS_TAG,    GetUfsVersion    },
       { LEGATO_TAG,     GetLegatoVersion },
-      { PRI_TAG,        GetPriVersion    }
+      { CUPRI_TAG,      GetCupriVersion  },
+      { CAPRI_TAG,      GetCapriVersion  },
+      { MCU_TAG,        GetMcuVersion    }
     };
 
     if ((!bufferPtr) || (!lenPtr))

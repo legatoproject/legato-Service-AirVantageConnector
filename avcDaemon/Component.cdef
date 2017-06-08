@@ -16,6 +16,7 @@ requires:
         le_appCtrl.api
         le_cfg.api
         le_data.api
+        le_ulpm.api
         modemServices/le_info.api
         modemServices/le_ips.api
         modemServices/le_mdc.api
