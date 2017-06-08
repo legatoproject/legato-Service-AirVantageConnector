@@ -445,6 +445,12 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
         curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_RANGE, buf);
     }
 
+    if (dwlCtxPtr->semRef)
+    {
+        // Indicate to store thread that the download really starts
+        le_sem_Post(dwlCtxPtr->semRef);
+    }
+
     rc = curl_easy_perform(pkgPtr->curlPtr);
 
     if (true == packageDownloader_CurrentDownloadToAbort())
@@ -519,6 +525,13 @@ lwm2mcore_DwlResult_t pkgDwlCb_EndDownload
 
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)ctxPtr;
     pkgPtr = (Package_t*)dwlCtxPtr->ctxPtr;
+
+    if (dwlCtxPtr->semRef)
+    {
+        // Post the semaphore synchronizing download and store threads: if the download was aborted
+        // before it really started, it should not block the store thread.
+        le_sem_Post(dwlCtxPtr->semRef);
+    }
 
     curl_easy_cleanup(pkgPtr->curlPtr);
 

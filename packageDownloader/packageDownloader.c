@@ -890,6 +890,9 @@ void* packageDownloader_DownloadPackage
             ret = storeRet;
             LE_DEBUG("Store thread joined with ret=%d", ret);
 
+            // Delete the semaphore used to synchronize threads
+            le_sem_Delete(dwlCtxPtr->semRef);
+
             // Check if store thread finished with an error
             if (ret < 0)
             {
@@ -1025,6 +1028,11 @@ void* packageDownloader_StoreFwPackage
         return (void*)-1;
     }
 
+    // Wait for the download beginning before launching the update process:
+    // the timeout associated to the FW update should be launched only when the download is really
+    // started and not before the user agreed to the download.
+    le_sem_Wait(dwlCtxPtr->semRef);
+
     result = le_fwupdate_Download(fd);
     if (LE_OK != result)
     {
@@ -1116,6 +1124,8 @@ le_result_t packageDownloader_StartDownload
                 LE_DEBUG("updateOffset: %llu", PkgDwl.data.updateOffset);
             }
             dwlCtx.storePackage = (void*)packageDownloader_StoreFwPackage;
+            // Create semaphore to synchronize threads
+            dwlCtx.semRef = le_sem_Create("DownloadSemaphore", 0);
             break;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
@@ -1126,6 +1136,7 @@ le_result_t packageDownloader_StartDownload
                 LE_DEBUG("updateOffset: %llu", PkgDwl.data.updateOffset);
             }
             dwlCtx.storePackage = NULL;
+            dwlCtx.semRef = NULL;
             break;
 
         default:

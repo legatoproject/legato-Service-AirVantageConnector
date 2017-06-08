@@ -30,6 +30,7 @@ typedef struct
     void (*downloadPackage)(void *ctxPtr);  ///< Download package callback
     void (*storePackage)(void *ctxPtr);     ///< Store package callback
     bool             resume;                ///< Indicates if it is a download resume
+    le_sem_Ref_t     semRef;                ///< Semaphore synchronizing download and store for FOTA
 }
 packageDownloader_DownloadCtx_t;
 
