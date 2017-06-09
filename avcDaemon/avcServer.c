@@ -254,7 +254,6 @@ static uint32_t BlockRefCount=0;
 //--------------------------------------------------------------------------------------------------
 static avcServer_InstallHandlerFunc_t QueryInstallHandlerRef = NULL;
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Handler registered from avcServer_QueryDownload() to receive notification when app download is
@@ -263,7 +262,6 @@ static avcServer_InstallHandlerFunc_t QueryInstallHandlerRef = NULL;
 //--------------------------------------------------------------------------------------------------
 static avcServer_DownloadHandlerFunc_t QueryDownloadHandlerRef = NULL;
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Handler registered from avcServer_QueryUninstall() to receive notification when app uninstall is
@@ -271,6 +269,14 @@ static avcServer_DownloadHandlerFunc_t QueryDownloadHandlerRef = NULL;
  */
 //--------------------------------------------------------------------------------------------------
 static avcServer_UninstallHandlerFunc_t QueryUninstallHandlerRef = NULL;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Handler registered from avcServer_QueryReboot() to receive notification when device reboot is
+ * allowed. Only one registered handler is allowed, and will be set to NULL after being called.
+ */
+//--------------------------------------------------------------------------------------------------
+static avcServer_RebootHandlerFunc_t QueryRebootHandlerRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -292,6 +298,13 @@ static le_timer_Ref_t DownloadDeferTimer;
  */
 //--------------------------------------------------------------------------------------------------
 static le_timer_Ref_t UninstallDeferTimer;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Timer used for deferring device reboot.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t RebootDeferTimer;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -354,6 +367,7 @@ static char* AvcSessionStateToStr
         case LE_AVC_UNINSTALL_FAILED:       result = "Uninstall failed";        break;
         case LE_AVC_SESSION_STARTED:        result = "Session started";         break;
         case LE_AVC_SESSION_STOPPED:        result = "Session stopped";         break;
+        case LE_AVC_REBOOT_PENDING:         result = "Reboot pending";          break;
         default:                            result = "Unknown";                 break;
 
     }
@@ -485,6 +499,22 @@ static void StopUninstallDeferTimer
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Stop the reboot defer timer if it is running.
+ */
+//--------------------------------------------------------------------------------------------------
+static void StopRebootDeferTimer
+(
+    void
+)
+{
+    // Stop the defer timer, if user accepts reboot before the defer timer expires.
+    LE_DEBUG("Stop reboot defer timer.");
+    le_timer_Stop(RebootDeferTimer);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Accept the currently pending download.
  *
  * @return
@@ -544,7 +574,6 @@ static le_result_t AcceptDownloadPackage
 }
 
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Accept the currently pending package install
@@ -591,6 +620,7 @@ static le_result_t AcceptInstallPackage
     }
     return LE_OK;
 }
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1050,7 +1080,6 @@ static le_result_t QueryDownload
 }
 
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Query if it's okay to proceed with an application uninstall
@@ -1112,6 +1141,52 @@ static le_result_t QueryUninstall
             le_timer_SetInterval(UninstallDeferTimer, interval);
             le_timer_Start(UninstallDeferTimer);
         }
+    }
+
+    return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Query if it's okay to proceed with a device reboot
+ *
+ * @return
+ *      - LE_OK if reboot can proceed right away
+ *      - LE_BUSY if reboot is deferred
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t QueryReboot
+(
+    void
+)
+{
+    le_result_t result = LE_BUSY;
+
+    if (NULL != StatusHandlerRef)
+    {
+        // Notify registered control app.
+        LE_DEBUG("Reporting status LE_AVC_REBOOT_PENDING");
+        StatusHandlerRef(LE_AVC_REBOOT_PENDING, -1, -1, StatusHandlerContextPtr);
+    }
+    else if (IsControlAppInstalled)
+    {
+        // There is a control app installed, but the handler is not yet registered.
+        // Defer the decision to allow the control app time to register.
+        LE_INFO("Automatically deferring reboot, while waiting for control app to register");
+
+        // Try the reboot later
+        le_clk_Time_t interval = {.sec = BLOCKED_DEFER_TIME*60};
+
+        le_timer_SetInterval(RebootDeferTimer, interval);
+        le_timer_Start(RebootDeferTimer);
+    }
+    else
+    {
+        // There is no control app; automatically accept any pending reboot
+        LE_INFO("Automatically accepting reboot");
+        StopRebootDeferTimer();
+        result = LE_OK;
     }
 
     return result;
@@ -1190,6 +1265,31 @@ void UninstallTimerExpiryHandler
         else
         {
             LE_ERROR("Uninstall handler not valid");
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Called when the reboot defer timer expires.
+ */
+//--------------------------------------------------------------------------------------------------
+static void RebootTimerExpiryHandler
+(
+    le_timer_Ref_t timerRef    ///< Timer that expired
+)
+{
+    if (LE_OK == QueryReboot())
+    {
+        // Notify the registered handler to proceed with the reboot; only called once.
+        if (NULL != QueryRebootHandlerRef)
+        {
+            QueryRebootHandlerRef();
+            QueryRebootHandlerRef = NULL;
+        }
+        else
+        {
+            LE_ERROR("Reboot handler not valid");
         }
     }
 }
@@ -1308,6 +1408,47 @@ le_result_t avcServer_QueryDownload
     if (LE_BUSY != result)
     {
         QueryDownloadHandlerRef = NULL;
+    }
+
+    return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Query the AVC Server if it's okay to proceed with a device reboot
+ *
+ * If a reboot can't proceed right away, then the handlerRef function will be called when it is
+ * okay to proceed with a reboot. Note that handlerRef will be called at most once.
+ *
+ * @return
+ *      - LE_OK if reboot can proceed right away (handlerRef will not be called)
+ *      - LE_BUSY if handlerRef will be called later to notify when reboot can proceed
+ *      - LE_FAULT on error
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcServer_QueryReboot
+(
+    avcServer_RebootHandlerFunc_t handlerFunc   ///< [IN] Reboot handler function.
+)
+{
+    le_result_t result;
+
+    if (NULL != QueryRebootHandlerRef)
+    {
+        LE_ERROR("Duplicate reboot attempt");
+        return LE_FAULT;
+    }
+
+    // Update reboot handler
+    QueryRebootHandlerRef = handlerFunc;
+
+    result = QueryReboot();
+
+    // Reset the handler as reboot can proceed now.
+    if (LE_BUSY != result)
+    {
+        QueryRebootHandlerRef = NULL;
     }
 
     return result;
@@ -2111,6 +2252,76 @@ le_result_t le_avc_DeferUninstall
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Accept the currently pending reboot
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avc_AcceptReboot
+(
+    void
+)
+{
+    if (!IsValidControlAppClient())
+    {
+        return LE_FAULT;
+    }
+
+    StopRebootDeferTimer();
+
+    LE_DEBUG("Accept a device reboot");
+
+    // Notify the registered handler to proceed with the reboot; only called once.
+    if (QueryRebootHandlerRef !=  NULL)
+    {
+        QueryRebootHandlerRef();
+        QueryRebootHandlerRef = NULL;
+    }
+    else
+    {
+        LE_ERROR("Reboot handler not valid.");
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Defer the currently pending reboot
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avc_DeferReboot
+(
+    uint32_t deferMinutes   ///< [IN] Minutes to defer the reboot
+)
+{
+    if (!IsValidControlAppClient())
+    {
+        return LE_FAULT;
+    }
+
+    LE_DEBUG("Deferring reboot for %d minute.", deferMinutes);
+
+    // Try the reboot later
+    le_clk_Time_t interval = {.sec = (deferMinutes*60)};
+
+    le_timer_SetInterval(RebootDeferTimer, interval);
+    le_timer_Start(RebootDeferTimer);
+
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Get the error code of the current update.
  */
 //--------------------------------------------------------------------------------------------------
@@ -2738,6 +2949,9 @@ COMPONENT_INIT
 
     DownloadDeferTimer = le_timer_Create("download defer timer");
     le_timer_SetHandler(DownloadDeferTimer, DownloadTimerExpiryHandler);
+
+    RebootDeferTimer = le_timer_Create("reboot defer timer");
+    le_timer_SetHandler(RebootDeferTimer, RebootTimerExpiryHandler);
 
     // Initialize the sub-components
     if (LE_OK != packageDownloader_Init())

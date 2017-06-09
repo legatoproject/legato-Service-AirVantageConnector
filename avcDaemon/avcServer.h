@@ -42,7 +42,6 @@ typedef void (*avcServer_UninstallHandlerFunc_t)
     uint16_t instanceId             ///< [IN] Instance id.
 );
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Prototype for handler used with avcServer_QueryDownload() to return download response.
@@ -53,6 +52,15 @@ typedef void (*avcServer_DownloadHandlerFunc_t)
     void
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Prototype for handler used with avcServer_QueryReboot() to return reboot response.
+ */
+//--------------------------------------------------------------------------------------------------
+typedef void (*avcServer_RebootHandlerFunc_t)
+(
+    void
+);
 
 
 //--------------------------------------------------------------------------------------------------
@@ -251,6 +259,24 @@ LE_SHARED le_result_t avcServer_RequestSession
 LE_SHARED le_result_t avcServer_ReleaseSession
 (
     void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Query the AVC Server if it's okay to proceed with a device reboot
+ *
+ * If a reboot can't proceed right away, then the handlerRef function will be called when it is
+ * okay to proceed with a reboot. Note that handlerRef will be called at most once.
+ *
+ * @return
+ *      - LE_OK if reboot can proceed right away (handlerRef will not be called)
+ *      - LE_BUSY if handlerRef will be called later to notify when reboot can proceed
+ *      - LE_FAULT on error
+ */
+//--------------------------------------------------------------------------------------------------
+LE_SHARED le_result_t avcServer_QueryReboot
+(
+    avcServer_RebootHandlerFunc_t handlerFunc   ///< [IN] Reboot handler function.
 );
 
 #endif // LEGATO_AVC_SERVER_INCLUDE_GUARD

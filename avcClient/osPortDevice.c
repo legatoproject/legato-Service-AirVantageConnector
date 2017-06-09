@@ -8,6 +8,7 @@
  */
 
 #include <lwm2mcore/device.h>
+#include <sys/reboot.h>
 #include "legato.h"
 #include "interfaces.h"
 #include "assetData.h"
@@ -128,6 +129,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Timer used to launch the device reboot after the acknowledgment is sent to the server
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t LaunchRebootTimer;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Function pointer to get a component version
  *
  * @return
@@ -159,7 +167,7 @@ typedef struct
  *      - written buffer length
  */
 //--------------------------------------------------------------------------------------------------
-size_t GetModemVersion
+static size_t GetModemVersion
 (
     char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
     size_t len                      ///< [IN] Buffer length
@@ -202,7 +210,7 @@ size_t GetModemVersion
  *      - written buffer length
  */
 //--------------------------------------------------------------------------------------------------
-size_t GetLkVersion
+static size_t GetLkVersion
 (
     char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
     size_t len                      ///< [IN] Buffer length
@@ -265,7 +273,7 @@ size_t GetLkVersion
  *      - written buffer length
  */
 //--------------------------------------------------------------------------------------------------
-size_t GetOsVersion
+static size_t GetOsVersion
 (
     char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
     size_t len                      ///< [IN] Buffer length
@@ -299,7 +307,7 @@ size_t GetOsVersion
  *      - written buffer length
  */
 //--------------------------------------------------------------------------------------------------
-size_t GetRfsVersion
+static size_t GetRfsVersion
 (
     char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
     size_t len                      ///< [IN] Buffer length
@@ -350,7 +358,7 @@ size_t GetRfsVersion
  *      - written buffer length
  */
 //--------------------------------------------------------------------------------------------------
-size_t GetUfsVersion
+static size_t GetUfsVersion
 (
     char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
     size_t len                      ///< [IN] Buffer length
@@ -401,7 +409,7 @@ size_t GetUfsVersion
  *      - written buffer length
  */
 //--------------------------------------------------------------------------------------------------
-size_t GetLegatoVersion
+static size_t GetLegatoVersion
 (
     char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
     size_t len                      ///< [IN] Buffer length
@@ -448,7 +456,7 @@ size_t GetLegatoVersion
  *      - written buffer length
  */
 //--------------------------------------------------------------------------------------------------
-size_t GetPriVersion
+static size_t GetPriVersion
 (
     char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
     size_t len                      ///< [IN] Buffer length
@@ -486,8 +494,44 @@ size_t GetPriVersion
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Launch device reboot.
+ */
+//--------------------------------------------------------------------------------------------------
+static void LaunchReboot
+(
+    void
+)
+{
+    // Sync file systems before rebooting
+    sync();
+    // Reboot the system
+    reboot(RB_AUTOBOOT);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Called when the reboot timer expires.
+ */
+//--------------------------------------------------------------------------------------------------
+static void LaunchRebootTimerExpiryHandler
+(
+    le_timer_Ref_t timerRef    ///< Timer that expired
+)
+{
+    // Timer used to delay reboot after command acknowledgment is not necessary anymore
+    le_timer_Delete(timerRef);
+
+    // Check if reboot can be launched now
+    if (LE_OK == avcServer_QueryReboot(LaunchReboot))
+    {
+        LaunchReboot();
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Retrieve the device manufacturer
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -539,7 +583,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceManufacturer
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the device model number
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -591,7 +635,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceModelNumber
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the device serial number
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -643,7 +687,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceSerialNumber
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the device firmware version
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -720,7 +764,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the battery level (percentage)
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -771,7 +815,7 @@ lwm2mcore_Sid_t lwm2mcore_GetBatteryLevel
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the device time (UNIX time in seconds)
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -810,7 +854,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceCurrentTime
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the module identity (IMEI)
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -876,7 +920,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceImei
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the SIM card identifier (ICCID)
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -946,7 +990,7 @@ lwm2mcore_Sid_t lwm2mcore_GetIccid
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the subscription identity (MEID/ESN/IMSI)
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -1094,7 +1138,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSubscriptionIdentity
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the phone number (MSISDN)
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -1164,7 +1208,7 @@ lwm2mcore_Sid_t lwm2mcore_GetMsisdn
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the device temperature (in °C)
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -1211,7 +1255,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceTemperature
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the number of unexpected resets
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -1239,7 +1283,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceUnexpectedResets
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the total number of resets
- * This API treatment needs to have a procedural treatment
+ * This API needs to have a procedural treatment
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -1262,4 +1306,40 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceTotalResets
     }
 
     return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Request to reboot the device
+ * This API needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_RebootDevice
+(
+    void
+)
+{
+    le_clk_Time_t interval = {.sec = 2};
+
+    LaunchRebootTimer = le_timer_Create("launch reboot timer");
+
+    // Acknowledge the reboot command and launch the actual reboot later
+    if (   (LE_OK != le_timer_SetHandler(LaunchRebootTimer, LaunchRebootTimerExpiryHandler))
+        || (LE_OK != le_timer_SetInterval(LaunchRebootTimer, interval))
+        || (LE_OK != le_timer_Start(LaunchRebootTimer))
+       )
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
