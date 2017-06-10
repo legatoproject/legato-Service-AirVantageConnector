@@ -451,6 +451,9 @@ le_result_t packageDownloader_Init
     // Create a semaphore to coordinate download abort
     DownloadAbortSemaphore = le_sem_Create("DownloadAbortSem", 0);
 
+    // Initialize package downloader
+    lwm2mcore_PackageDownloaderGlobalInit();
+
     return LE_OK;
 }
 
