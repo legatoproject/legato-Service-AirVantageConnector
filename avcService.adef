@@ -6,15 +6,15 @@ sandboxed: false
 
 executables:
 {
-    avcDaemon = ( avcDaemon )
+    avcDaemon = (avcDaemon)
 }
 
 bundles:
 {
     file:
     {
-        [x] avcStart.sh /bin/
-        [r] assets.cfg  /cfg/
+        [rx] avcLoadConfig  /bin/
+        [r] assets.cfg      /cfg/
     }
 }
 
@@ -22,7 +22,8 @@ processes:
 {
     run:
     {
-        (avcStart.sh)
+        (avcLoadConfig)
+        (avcDaemon)
     }
 
     faultAction: restart

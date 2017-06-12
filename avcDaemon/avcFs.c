@@ -142,3 +142,39 @@ le_result_t DeleteFs
 
     return result;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Verify if a file exists using Legato le_fs API
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Incorrect parameter provided
+ *  - LE_OVERFLOW       The file path is too long
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t ExistsFs
+(
+    const char* pathPtr ///< File path
+)
+{
+    le_fs_FileRef_t fileRef;
+    le_result_t result;
+
+    result = le_fs_Open(pathPtr, LE_FS_RDONLY, &fileRef);
+    if (LE_OK != result)
+    {
+        LE_ERROR("failed to open %s: %s", pathPtr, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    result = le_fs_Close(fileRef);
+    if (LE_OK != result)
+    {
+        LE_ERROR("failed to close %s: %s", pathPtr, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    return LE_OK;
+}

@@ -67,4 +67,20 @@ le_result_t DeleteFs
     const char* pathPtr    ///< File path
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Verify if a file exists using Legato le_fs API
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Incorrect parameter provided
+ *  - LE_OVERFLOW       The file path is too long
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t ExistsFs
+(
+    const char* pathPtr ///< File path
+);
+
 #endif /* _AVCFS_H */

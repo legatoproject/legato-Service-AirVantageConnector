@@ -58,6 +58,7 @@ sources:
     ../avcClient/osPortUpdate.c
     ../avcClient/osPortParamStorage.c
     ../avcAppUpdate/avcAppUpdate.c
+    ../packageDownloader/sslUtilities.c
     ../packageDownloader/packageDownloaderCallbacks.c
     ../packageDownloader/packageDownloader.c
 

@@ -18,16 +18,25 @@
 #include <openssl/evp.h>
 #include <openssl/x509.h>
 #include <lwm2mcore/security.h>
-#include "legato.h"
-#include "interfaces.h"
-
+#include <legato.h>
+#include <interfaces.h>
+#include <avcFsConfig.h>
+#include <avcFs.h>
+#include <sslUtilities.h>
 
 //--------------------------------------------------------------------------------------------------
 /**
  * Prefix to retrieve files from secStoreGlobal service.
  */
 //--------------------------------------------------------------------------------------------------
-#define SECURE_STORAGE_PREFIX "/avms"
+#define SECURE_STORAGE_PREFIX   "/avms"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Object 10243, certificate max size
+ */
+//--------------------------------------------------------------------------------------------------
+#define LWM2M_CERT_MAX_SIZE     4000
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -624,88 +633,64 @@ lwm2mcore_Sid_t lwm2mcore_CancelSha1
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Convert a DER key to PEM key
+ * Update SSL Certificate
+ *
+ * @note To delete the saved certificate, set the length to 0
  *
  * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the conversion succeeds
- *      - LWM2MCORE_ERR_GENERAL_ERROR if the conversion fails
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the update succeeds
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the size of the certificate is > 4000 bytes
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the update fails
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_ConvertDERToPEM
+lwm2mcore_Sid_t lwm2mcore_UpdateSslCertificate
 (
-    unsigned char *derKeyPtr,   ///< [IN]       DER key
-    int derKeyLen,              ///< [IN]       DER key length
-    unsigned char *pemKeyPtr,   ///< [OUT]      PEM key
-    int *pemKeyLenPtr           ///< [IN/OUT]   PEM key length
+    unsigned char*  certPtr,    ///< [IN] Certificate
+    int             len         ///< [IN] Certificate len
 )
 {
-    X509 *certPtr;
-    BIO *memPtr;
-    int count;
+    char cert[MAX_CERT_LEN] = {0};
+    le_result_t result;
 
-    if ( (!derKeyPtr) || (!pemKeyPtr) || (!pemKeyLenPtr) )
-    {
-        LE_ERROR("invalid input arguments: derKeyPtr (%p), pemKeyPtr(%p), "
-            "pemKeyLenPtr(%p)", derKeyPtr, pemKeyPtr);
-        return LWM2MCORE_ERR_INVALID_ARG;
-    }
-
-    if (!derKeyLen)
-    {
-        LE_ERROR("derKeyLen cannot be 0");
-        return LWM2MCORE_ERR_INVALID_ARG;
-    }
-
-    certPtr = d2i_X509(NULL, &derKeyPtr, derKeyLen);
     if (!certPtr)
     {
-        LE_ERROR("unable to parse certificate");
-        PrintOpenSSLErrors();
+        LE_ERROR("NULL certificate");
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    if (LWM2M_CERT_MAX_SIZE < len)
+    {
+        LE_ERROR("Size %d is > than %d authorized", len, LWM2M_CERT_MAX_SIZE);
+        return LWM2MCORE_ERR_INCORRECT_RANGE;
+    }
+
+    if (!len)
+    {
+        result = DeleteFs(SSLCERT_PATH);
+        if (LE_OK != result)
+        {
+            LE_ERROR("Failed to delete certificate file");
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+        }
+        return LWM2MCORE_ERR_COMPLETED_OK;
+    }
+
+    memcpy(cert, certPtr, len);
+
+    len = ssl_LayOutPEM(cert, len);
+    if (-1 == len)
+    {
+        LE_ERROR("ssl_LayOutPEM failed");
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    memPtr = BIO_new(BIO_s_mem());
-    if (!memPtr)
+    result = WriteFs(SSLCERT_PATH, cert, len);
+    if (LE_OK != result)
     {
-        LE_ERROR("failed to set BIO type");
-        PrintOpenSSLErrors();
-        goto x509_err;
+        LE_ERROR("Failed to update certificate file");
+        return LWM2MCORE_ERR_GENERAL_ERROR;
     }
-
-    if (!PEM_write_bio_X509(memPtr, certPtr))
-    {
-        LE_ERROR("failed to write certificate");
-        PrintOpenSSLErrors();
-        goto bio_err;
-    }
-
-    if (memPtr->num_write > *pemKeyLenPtr)
-    {
-        LE_ERROR("not enough space to hold the key");
-        goto bio_err;
-    }
-
-    memset(pemKeyPtr, 0, memPtr->num_write + 1);
-
-    *pemKeyLenPtr = BIO_read(memPtr, pemKeyPtr, memPtr->num_write);
-    if (*pemKeyLenPtr < memPtr->num_write)
-    {
-        LE_ERROR("failed to read certificate: count (%d)", *pemKeyLenPtr);
-        PrintOpenSSLErrors();
-        goto pem_err;
-    }
-
-    BIO_free(memPtr);
-    X509_free(certPtr);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
-
-pem_err:
-    memset(pemKeyPtr, 0, memPtr->num_write + 1);
-bio_err:
-    BIO_free(memPtr);
-x509_err:
-    X509_free(certPtr);
-    return LWM2MCORE_ERR_GENERAL_ERROR;
 }

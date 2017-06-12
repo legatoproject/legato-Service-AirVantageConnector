@@ -12,12 +12,12 @@
 #include <lwm2mcorePackageDownloader.h>
 #include <lwm2mcore/update.h>
 #include <lwm2mcore/security.h>
-#include <defaultDerKey.h>
 #include "packageDownloaderCallbacks.h"
 #include "packageDownloader.h"
 #include "avcAppUpdate.h"
 #include "avcFs.h"
 #include "avcFsConfig.h"
+#include "sslUtilities.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -229,49 +229,6 @@ static void SuspendDownload
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Write PEM key to default certificate file path
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t WritePEMCertificate
-(
-    const char*     certPtr,
-    unsigned char*  pemKeyPtr,
-    int             pemKeyLen
-)
-{
-    int fd;
-    ssize_t count;
-    mode_t mode = 0;
-
-    mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    fd = open(certPtr, O_WRONLY | O_CREAT | O_TRUNC, mode);
-    if (!fd)
-    {
-        LE_ERROR("failed to open %s: %m", certPtr);
-        return LE_FAULT;
-    }
-
-    count = write(fd, pemKeyPtr, pemKeyLen);
-    if (count == -1)
-    {
-        LE_ERROR("failed to write PEM cert: %m");
-        close(fd);
-        return LE_FAULT;
-    }
-    if (count < pemKeyLen)
-    {
-        LE_ERROR("failed to write PEM cert: wrote %zd", count);
-        close(fd);
-        return LE_FAULT;
-    }
-
-    close(fd);
-
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Store package information necessary to resume a download if necessary (URI and package type)
  *
  * @return
@@ -402,14 +359,9 @@ le_result_t packageDownloader_Init
     void
 )
 {
-    unsigned char pemKeyPtr[MAX_CERT_LEN] = "\0";
-    struct stat st;
-    uint8_t derKey[MAX_CERT_LEN] = "\0";
-    size_t derKeyLen = MAX_CERT_LEN;
-    int pemKeyLen = MAX_CERT_LEN;
-    le_result_t result;
+    struct stat sb;
 
-    if (-1 == stat(PKGDWL_TMP_PATH, &st))
+    if (-1 == stat(PKGDWL_TMP_PATH, &sb))
     {
         if (-1 == mkdir(PKGDWL_TMP_PATH, S_IRWXU))
         {
@@ -424,28 +376,7 @@ le_result_t packageDownloader_Init
         return LE_FAULT;
     }
 
-    result = ReadFs(DERCERT_PATH, derKey, &derKeyLen);
-    if (LE_OK != result)
-    {
-        LE_ERROR("using default DER key");
-        if (MAX_CERT_LEN < DEFAULT_DER_KEY_LEN)
-        {
-            LE_ERROR("Not enough space to hold the default key");
-            return LE_FAULT;
-        }
-        memcpy(derKey, DefaultDerKey, DEFAULT_DER_KEY_LEN);
-        derKeyLen = DEFAULT_DER_KEY_LEN;
-    }
-
-    result = lwm2mcore_ConvertDERToPEM((unsigned char *)derKey, derKeyLen,
-                                       pemKeyPtr, &pemKeyLen);
-    if (LE_OK != result)
-    {
-        return LE_FAULT;
-    }
-
-    result = WritePEMCertificate(PEMCERT_PATH, pemKeyPtr, pemKeyLen);
-    if (LE_OK != result)
+    if (LE_OK != ssl_CheckCertificate())
     {
         return LE_FAULT;
     }
