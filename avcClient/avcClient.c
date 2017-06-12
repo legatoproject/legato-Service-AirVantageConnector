@@ -131,12 +131,21 @@ static void BearerEventCb
     {
         if (NULL != Lwm2mInstanceRef)
         {
-            /* The data connection is closed */
-            lwm2mcore_Free(Lwm2mInstanceRef);
-            Lwm2mInstanceRef = NULL;
+            // If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is
+            // active
+            if (true == lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
+            {
+                avcClient_Disconnect();
+            }
+            else
+            {
+                /* The data connection is closed */
+                lwm2mcore_Free(Lwm2mInstanceRef);
+                Lwm2mInstanceRef = NULL;
 
-            /* Remove the data handler */
-            le_data_RemoveConnectionStateHandler(DataHandler);
+                /* Remove the data handler */
+                le_data_RemoveConnectionStateHandler(DataHandler);
+            }
         }
     }
 }
