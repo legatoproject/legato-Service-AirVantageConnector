@@ -1,0 +1,21 @@
+sandboxed: false
+
+executables:
+{
+    suspendResume = ( suspendResumeComponent )
+}
+
+processes:
+{
+    run:
+    {
+        (suspendResume)
+    }
+
+    faultAction: restart
+}
+
+bindings:
+{
+    suspendResume.suspendResumeComponent.le_avc -> suspendResume.le_avc
+}

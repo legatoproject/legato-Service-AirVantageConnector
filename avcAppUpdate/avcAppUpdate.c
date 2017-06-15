@@ -721,6 +721,25 @@ static void PopulateAppInfoObjects
 
 //--------------------------------------------------------------------------------------------------
 /**
+ *  Mark object 9 instance as installed
+ */
+//--------------------------------------------------------------------------------------------------
+static void MarkInstallComplete
+(
+    assetData_InstanceDataRef_t instanceRef         ///< instance reference
+)
+{
+    // Sync file systems before marking install complete
+    sync();
+
+    // Mark the application as installed.
+    SetObj9State(instanceRef,
+                 LWM2MCORE_SW_UPDATE_STATE_INSTALLED,
+                 LWM2MCORE_SW_UPDATE_RESULT_INSTALLED);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  *  Notification handler that's called when an application is installed.
  */
 //--------------------------------------------------------------------------------------------------
@@ -766,18 +785,26 @@ static void AppInstallHandler
         {
             LE_ASSERT("Valid Object9 instance expected for AVMS install.");
         }
+
+        // Sync file system and mark object 9 status as install completed
+        MarkInstallComplete(instanceRef);
+
+        // Notify control app
+        avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE,
+                                LE_AVC_APPLICATION_UPDATE,
+                                -1,
+                                100,
+                                LE_AVC_ERR_NONE);
     }
     else
     {
         // Otherwise, create one for this application that was installed outside of LWM2M.
         LE_INFO("Local install, create new object9 instance.");
         instanceRef = GetObject9InstanceForApp(appNamePtr, true);
-    }
 
-    // Mark the application as being installed.
-    SetObj9State(instanceRef,
-                 LWM2MCORE_SW_UPDATE_STATE_INSTALLED,
-                 LWM2MCORE_SW_UPDATE_RESULT_INSTALLED);
+        // Sync file system and mark object 9 status as install completed
+        MarkInstallComplete(instanceRef);
+    }
 
     // Update the application's version string.
     appCfg_Iter_t appIterRef = appCfg_FindApp(appNamePtr);
@@ -844,6 +871,7 @@ static void AppUninstallHandler
         LE_DEBUG("LWM2M Uninstall of instanceRef: %p.", CurrentObj9);
 
         assetData_DeleteInstance(CurrentObj9);
+
         // State already set to initial in PrepareUninstall
         CurrentObj9 = NULL;
 
@@ -853,6 +881,13 @@ static void AppUninstallHandler
             LE_DEBUG("Deleting '%s' instance from cfgTree: %s", appNamePtr, CFG_OBJECT_INFO_PATH);
             SetObject9InstanceForApp(appNamePtr, NULL);
         }
+
+        // sync file system
+        sync();
+
+        LE_DEBUG("Uninstall of application completed.");
+        avcServer_UpdateHandler(LE_AVC_UNINSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
+                                -1, -1, LE_AVC_ERR_NONE);
     }
     else
     {
@@ -942,17 +977,13 @@ static le_result_t StartUninstall
 {
     LE_DEBUG("Application '%s' uninstall requested", appNamePtr);
 
-    avcServer_UpdateHandler(LE_AVC_UNINSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
-                            -1, -1, LE_AVC_ERR_NONE);
-
     le_result_t result = le_appRemove_Remove(appNamePtr);
 
     if (result == LE_OK)
     {
-        LE_DEBUG("Uninstall of application completed.");
-        avcServer_UpdateHandler(LE_AVC_UNINSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
+        LE_DEBUG("Uninstall in progress");
+        avcServer_UpdateHandler(LE_AVC_UNINSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
                                 -1, -1, LE_AVC_ERR_NONE);
-
     }
     else
     {
@@ -1036,12 +1067,6 @@ static void UpdateProgressHandler
             break;
 
         case LE_UPDATE_STATE_SUCCESS:
-            avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE,
-                                    LE_AVC_APPLICATION_UPDATE,
-                                    -1,
-                                    percentDone,
-                                    LE_AVC_ERR_NONE);
-
             LE_INFO("Install completed.");
             le_update_End();
             break;
@@ -1166,7 +1191,7 @@ static le_result_t GetSwUpdateBytesDownloaded
 {
     size_t size;
     le_result_t result;
-    size_t bytesDownloaded;
+    size_t bytesDownloaded = 0;
 
     if (!bytesDownloadedPtr)
     {
@@ -1180,9 +1205,8 @@ static le_result_t GetSwUpdateBytesDownloaded
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_ERROR("SW update instance id not found");
-            *bytesDownloadedPtr = -1;
-            return LE_OK;
+            LE_ERROR("SW update bytes downloaded not found");
+            return LE_FAULT;
         }
         LE_ERROR("Failed to read %s: %s", SW_UPDATE_BYTES_DOWNLOADED_PATH, LE_RESULT_TXT(result));
         return result;
@@ -2454,12 +2478,18 @@ le_result_t avcApp_CreateObj9Instance
 
     LE_DEBUG("Initialize sw update workspace.");
 
+    // Delete update package file
     DeletePackage();
+
+    // This is a new download - set number of bytes downloaded to 0
+    TotalCount = 0;
+    SetSwUpdateBytesDownloaded();
 
     SetSwUpdateInstanceId(instanceId);
     SetSwUpdateInternalState(INTERNAL_STATE_DOWNLOAD_REQUESTED);
     SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
     SetSwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL);
+
     return result;
 }
 
@@ -2640,8 +2670,10 @@ le_result_t avcApp_GetResumePosition
     if (LE_OK == GetSwUpdateInstanceId(&instanceId))
     {
         LE_DEBUG("Restoring application update process.");
-        if (assetData_GetInstanceRefById(LWM2M_NAME, LWM2M_OBJ9,
-                                         instanceId, &CurrentObj9) == LE_NOT_FOUND)
+
+        result = assetData_GetInstanceRefById(LWM2M_NAME, LWM2M_OBJ9, instanceId, &CurrentObj9);
+
+        if (LE_NOT_FOUND == result)
         {
             LE_DEBUG("Create a new object 9 instance.");
             LE_ASSERT(assetData_CreateInstanceById(LWM2M_NAME,
@@ -2650,11 +2682,16 @@ le_result_t avcApp_GetResumePosition
             // Notify lwm2mcore that a new instance is created.
             NotifyObj9List();
         }
-        else
+        else if (LE_FAULT == result)
         {
-            LE_DEBUG("Instance ID invalid.");
+            LE_DEBUG("Instance ID invalid = %d", instanceId);
             return LE_FAULT;
         }
+    }
+    else
+    {
+        LE_ERROR("Instance id not available in SW update workspace");
+        return LE_FAULT;
     }
 
     return LE_OK;
