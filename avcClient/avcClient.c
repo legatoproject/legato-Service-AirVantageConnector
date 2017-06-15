@@ -54,24 +54,6 @@ static le_event_Id_t BsFailureEventId;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Denoting a session is established to the DM serevr.
- */
-//--------------------------------------------------------------------------------------------------
-static bool SessionStarted = false;
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Retry timers related data. RetryTimersIndex is index to the array of RetryTimers.
- * RetryTimersIndex of -1 means the timers are to be retrieved. A timer of value 0 means it's
- * disabled. The timers values are in minutes.
- */
-//--------------------------------------------------------------------------------------------------
-static le_timer_Ref_t RetryTimerRef = NULL;
-static int RetryTimersIndex = -1;
-static uint16_t RetryTimers[LE_AVC_NUM_RETRY_TIMERS] = {0};
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Convert an OMA FUMO (Firmware Update Management Object) error to an AVC error code
  */
 //--------------------------------------------------------------------------------------------------
@@ -383,9 +365,6 @@ static int EventHandler
             LE_DEBUG("Session finished");
             avcServer_UpdateHandler(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
                                     -1, -1, LE_AVC_ERR_NONE);
-
-            SessionStarted = false;
-
             break;
 
         case LWM2MCORE_EVENT_LWM2M_SESSION_TYPE_START:
@@ -398,8 +377,6 @@ static int EventHandler
                 LE_DEBUG("Connected to DM");
                 avcServer_UpdateHandler(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
                                         -1, -1, LE_AVC_ERR_NONE);
-
-                SessionStarted = true;
             }
             break;
 
@@ -427,79 +404,11 @@ static int EventHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Reset the retry timers by resetting the retrieved reset timer config, and stopping the current
- * retry timer.
- */
-//--------------------------------------------------------------------------------------------------
-static void ResetRetryTimers
-(
-    void
-)
-{
-    RetryTimersIndex = -1;
-    memset(RetryTimers, 0, sizeof(RetryTimers));
-    le_timer_Stop(RetryTimerRef);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Start the bearer
- */
-//--------------------------------------------------------------------------------------------------
-static void StartBearer
-(
-    void
-)
-{
-    // Attempt to connect
-    Lwm2mInstanceRef = lwm2mcore_Init(EventHandler);
-
-    /* Initialize the bearer */
-    /* Open a data connection */
-    le_data_ConnectService();
-
-    DataHandler = le_data_AddConnectionStateHandler(ConnectionStateHandler, NULL);
-
-    /* Request data connection */
-    DataRef = le_data_Request();
-    LE_ASSERT(NULL != DataRef);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Stop the bearer - undo what StartBearer does
- */
-//--------------------------------------------------------------------------------------------------
-static void StopBearer
-(
-    void
-)
-{
-    /* stop the bearer */
-    /* Check that a data connection was opened */
-    if (NULL != DataRef)
-    {
-        /* Close the data connection */
-        le_data_Release(DataRef);
-    }
-    /* The data connection is closed */
-    lwm2mcore_Free(Lwm2mInstanceRef);
-    Lwm2mInstanceRef = NULL;
-
-    /* Remove the data handler */
-    le_data_RemoveConnectionStateHandler(DataHandler);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Connect to the server. Connection is retried according to the configured retry timers, if session
- * isn't started. If this function is called while one of the retry timers is running, retry isn't
- * performed and LE_BUSY is returned.
+ * Connect to the server
  *
  * @return
- *      - LE_OK if connection request has been sent.
- *      - LE_DUPLICATE if already connected.
- *      - LE_BUSY if currently retrying.
+ *      - LE_OK in case of success
+ *      - LE_FAULT in case of failure
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcClient_Connect
@@ -507,88 +416,26 @@ le_result_t avcClient_Connect
     void
 )
 {
-    if (SessionStarted)
+    le_result_t result = LE_FAULT;
+
+    if (NULL == Lwm2mInstanceRef)
     {
-        // No need to start a retry timer. Perform reset/cleanup.
-        ResetRetryTimers();
+        Lwm2mInstanceRef = lwm2mcore_Init(EventHandler);
 
-        return LE_DUPLICATE;
+        /* Initialize the bearer */
+        /* Open a data connection */
+        le_data_ConnectService();
+
+        DataHandler = le_data_AddConnectionStateHandler(ConnectionStateHandler, NULL);
+
+        /* Request data connection */
+        DataRef = le_data_Request();
+        if (NULL != DataRef)
+        {
+            result = LE_OK;
+        }
     }
-    else
-    {
-        // Retry is in progress.
-        if (le_timer_IsRunning(RetryTimerRef))
-        {
-            return LE_BUSY;
-        }
-
-        // If Lwm2mInstanceRef exists, then that means the current call is a "retry", which is
-        // performed by stopping the previous data connection first.
-        if (NULL != Lwm2mInstanceRef)
-        {
-            StopBearer();
-        }
-
-        StartBearer();
-
-        // attempt to start a retry timer.
-
-        // if index is -1, then get the retry timers config. The implication is that while a retry
-        // timer is running, changes to retry timers aren't applied. They are applied when retry
-        // timers are being reset.
-        if (-1 == RetryTimersIndex)
-        {
-            size_t numTimers = 0;
-
-            if (LE_OK != le_avc_GetRetryTimers(RetryTimers, &numTimers))
-            {
-                LE_WARN("Failed to retrieve retry timers config. Failed session start is not \
-                         retried.");
-
-                return LE_OK;
-            }
-
-            LE_ASSERT(LE_AVC_NUM_RETRY_TIMERS == numTimers);
-
-            RetryTimersIndex = 0;
-        }
-        else
-        {
-            RetryTimersIndex++;
-        }
-
-        // Get the next valid retry timer
-
-        // see which timer we are at by looking at RetryTimersIndex
-        // if the timer is 0, get the next one. (0 means disabled / not used)
-        // if we run out of timers, do nothing.  Perform reset/cleanup
-        while(RetryTimersIndex < LE_AVC_NUM_RETRY_TIMERS)
-        {
-            if (0 == RetryTimers[RetryTimersIndex])
-            {
-                RetryTimersIndex++;
-                break;
-            }
-        }
-
-        // This is the case when we've run out of timers. Reset/cleanup, and don't start the next
-        // retry timer (since there aren't any left).
-        if ((RetryTimersIndex >= LE_AVC_NUM_RETRY_TIMERS) || (RetryTimersIndex < 0))
-        {
-            ResetRetryTimers();
-        }
-        // Start the next retry timer.
-        else
-        {
-            le_clk_Time_t interval = {RetryTimers[RetryTimersIndex] * 60, 0};
-
-            LE_ASSERT(LE_OK == le_timer_SetInterval(RetryTimerRef, interval));
-            LE_ASSERT(LE_OK == le_timer_SetHandler(RetryTimerRef, avcClient_Connect));
-            LE_ASSERT(LE_OK == le_timer_Start(RetryTimerRef));
-        }
-
-        return LE_OK;
-    }
+    return result;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -607,20 +454,31 @@ le_result_t avcClient_Disconnect
 {
     LE_DEBUG("Disconnect");
 
-    le_result_t result = LE_OK;
-
-    /* If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active.
-       In that case, attempt to disconnect. */
+    /* If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active */
     if (true == lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
     {
-        result = (true == lwm2mcore_Disconnect(Lwm2mInstanceRef)) ? LE_OK : LE_FAULT;
+        if (true == lwm2mcore_Disconnect(Lwm2mInstanceRef))
+        {
+            /* stop the bearer */
+            /* Check that a data connection was opened */
+            if (NULL != DataRef)
+            {
+                /* Close the data connection */
+                le_data_Release(DataRef);
+            }
+            /* The data connection is closed */
+            lwm2mcore_Free(Lwm2mInstanceRef);
+            Lwm2mInstanceRef = NULL;
+
+            /* Remove the data handler */
+            le_data_RemoveConnectionStateHandler(DataHandler);
+
+            return LE_OK;
+        }
+        return LE_FAULT;
     }
 
-    StopBearer();
-
-    ResetRetryTimers();
-
-    return result;
+    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -771,5 +629,4 @@ void avcClient_Init
 {
     BsFailureEventId = le_event_CreateId("BsFailure", 0);
     le_event_AddHandler("BsFailureHandler", BsFailureEventId, BsFailureHandler);
-    RetryTimerRef = le_timer_Create("AvcRetryTimer");
 }

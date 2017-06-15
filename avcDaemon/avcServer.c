@@ -60,12 +60,14 @@
 //--------------------------------------------------------------------------------------------------
 #define BLOCKED_DEFER_TIME 3
 
+
 //--------------------------------------------------------------------------------------------------
 /**
  *  Max number of bytes of a retry timer name.
  */
 //--------------------------------------------------------------------------------------------------
-#define RETRY_TIMER_NAME_BYTES 10
+#define TIMER_NAME_BYTES 10
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -357,27 +359,6 @@ static char* AvcSessionStateToStr
     }
     return result;
 }
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Default values for the Polling Timer. Unit is minute. 0 means disabled.
- */
-//--------------------------------------------------------------------------------------------------
-static uint32_t PollingTimer = 0;
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Default values for the Retry Timers. Unit is minute. 0 means disabled.
- */
-//--------------------------------------------------------------------------------------------------
-static uint16_t RetryTimers[LE_AVC_NUM_RETRY_TIMERS] = {15, 60, 240, 480, 1440, 2880, 0, 0};
-
-// -------------------------------------------------------------------------------------------------
-/**
- *  Polling Timer reference. Time interval to automatically start an AVC session.
- */
-// ------------------------------------------------------------------------------------------------
-static le_timer_Ref_t PollingTimerRef = NULL;
 
 
 //--------------------------------------------------------------------------------------------------
@@ -1443,9 +1424,9 @@ void avcServer_ReportInstallProgress
  * Request the avcServer to open a AV session.
  *
  * @return
- *      - LE_OK if connection request has been sent.
- *      - LE_DUPLICATE if already connected.
- *      - LE_BUSY if currently retrying.
+ *      - LE_OK if able to initiate a session open
+ *      - LE_FAULT on error
+ *      - LE_BUSY if session is owned by control app
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcServer_RequestSession
@@ -1463,12 +1444,13 @@ le_result_t avcServer_RequestSession
     }
     else if (!IsControlAppSession)
     {
-        LE_DEBUG("Unconditionally accepting request to open session.");
+        LE_DEBUG("Automatically accepting request to open session.");
         result = avcClient_Connect();
     }
     else
     {
-        LE_DEBUG("Session already opened by control app.");
+        LE_DEBUG("Session owned by control app.");
+        result = LE_BUSY;
     }
 
     return result;
@@ -1743,10 +1725,8 @@ void le_avc_RemoveSessionRequestEventHandler
  * This will also cause a query to be sent to the server, for pending updates.
  *
  * @return
- *      - LE_OK if connection request has been sent.
+ *      - LE_OK on success
  *      - LE_FAULT on failure
- *      - LE_DUPLICATE if already connected.
- *      - LE_BUSY if currently retrying.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_StartSession
@@ -2414,7 +2394,8 @@ le_result_t le_avc_SetApnConfig
  * @return
  *      - LE_OK on success.
  *      - LE_FAULT if not able to read the timers.
- *      - LE_OUT_OF_RANGE if one of the retry timers is out of range (0 to 20160).
+ *
+ * @deprecated This API should not be used for new applications and will be removed in the future
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_GetRetryTimers
@@ -2440,32 +2421,15 @@ le_result_t le_avc_GetRetryTimers
 
     le_cfg_GoToNode(iterRef, "retryTimers");
 
-    uint16_t retryTimersCfg[LE_AVC_NUM_RETRY_TIMERS] = {0};
-    char timerName[RETRY_TIMER_NAME_BYTES] = {0};
+    char timerName[TIMER_NAME_BYTES] = {0};
     int i;
     for (i = 0; i < LE_AVC_NUM_RETRY_TIMERS; i++)
     {
-        snprintf(timerName, RETRY_TIMER_NAME_BYTES, "%d", i);
-        retryTimersCfg[i] = le_cfg_GetInt(iterRef, timerName, 0);
-
-        if ((retryTimersCfg[i] < LE_AVC_RETRY_TIMER_MIN_VAL) ||
-            (retryTimersCfg[i] > LE_AVC_RETRY_TIMER_MAX_VAL))
-        {
-            LE_ERROR("The stored Retry Timer value %d is out of range. Min %d, Max %d.",
-                     retryTimersCfg[i], LE_AVC_RETRY_TIMER_MIN_VAL, LE_AVC_RETRY_TIMER_MAX_VAL);
-
-            le_cfg_CancelTxn(iterRef);
-            return LE_OUT_OF_RANGE;
-        }
+        snprintf(timerName, TIMER_NAME_BYTES, "%d", i);
+        timerValuePtr[i] = le_cfg_GetInt(iterRef, timerName, 0);
     }
 
     le_cfg_CancelTxn(iterRef);
-
-
-    for (i = 0; i < LE_AVC_NUM_RETRY_TIMERS; i++)
-    {
-        timerValuePtr[i] = retryTimersCfg[i];
-    }
 
     *numTimers = LE_AVC_NUM_RETRY_TIMERS;
 
@@ -2479,8 +2443,9 @@ le_result_t le_avc_GetRetryTimers
  *
  * @return
  *      - LE_OK on success.
- *      - LE_FAULT if not able to set the timers.
- *      - LE_OUT_OF_RANGE if one of the retry timers is out of range (0 to 20160).
+ *      - LE_FAULT if not able to read the timers.
+ *
+ * @deprecated This API should not be used for new applications and will be removed in the future
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_SetRetryTimers
@@ -2496,27 +2461,15 @@ le_result_t le_avc_SetRetryTimers
         return LE_FAULT;
     }
 
-    int i;
-    for (i = 0; i < LE_AVC_NUM_RETRY_TIMERS; i++)
-    {
-        if ((timerValuePtr[i] < LE_AVC_RETRY_TIMER_MIN_VAL) ||
-            (timerValuePtr[i] > LE_AVC_RETRY_TIMER_MAX_VAL))
-        {
-            LE_ERROR("Attemping to set an out-of-range Retry Timer value of %d. Min %d, Max %d.",
-                     timerValuePtr[i], LE_AVC_RETRY_TIMER_MIN_VAL, LE_AVC_RETRY_TIMER_MAX_VAL);
-            return LE_OUT_OF_RANGE;
-        }
-    }
-
     le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
 
     le_cfg_GoToNode(iterRef, "retryTimers");
 
-    char timerName[RETRY_TIMER_NAME_BYTES] = {0};
-
+    char timerName[TIMER_NAME_BYTES] = {0};
+    int i;
     for (i = 0; i < LE_AVC_NUM_RETRY_TIMERS; i++)
     {
-        snprintf(timerName, RETRY_TIMER_NAME_BYTES, "%d", i);
+        snprintf(timerName, TIMER_NAME_BYTES, "%d", i);
         le_cfg_SetInt(iterRef, timerName, timerValuePtr[i]);
     }
 
@@ -2533,7 +2486,6 @@ le_result_t le_avc_SetRetryTimers
  * @return
  *      - LE_OK on success
  *      - LE_FAULT if not available
- *      - LE_OUT_OF_RANGE if the polling timer value is out of range (0 to 525600).
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_GetPollingTimer
@@ -2549,22 +2501,11 @@ le_result_t le_avc_GetPollingTimer
         return LE_FAULT;
     }
 
-    uint32_t pollingTimerCfg = le_cfg_GetInt(iterRef, "pollingTimer", 0);
+    *pollingTimerPtr = le_cfg_GetInt(iterRef, "pollingTimer", 0);
 
     le_cfg_CancelTxn(iterRef);
 
-    if ((pollingTimerCfg < LE_AVC_POLLING_TIMER_MIN_VAL) ||
-        (pollingTimerCfg > LE_AVC_POLLING_TIMER_MAX_VAL))
-    {
-        LE_ERROR("The stored Polling Timer value %d is out of range. Min %d, Max %d.",
-                 pollingTimerCfg, LE_AVC_POLLING_TIMER_MIN_VAL, LE_AVC_POLLING_TIMER_MAX_VAL);
-        return LE_OUT_OF_RANGE;
-    }
-    else
-    {
-        *pollingTimerPtr = pollingTimerCfg;
-        return LE_OK;
-    }
+    return LE_OK;
 }
 
 
@@ -2574,7 +2515,6 @@ le_result_t le_avc_GetPollingTimer
  *
  * @return
  *      - LE_OK on success.
- *      - LE_OUT_OF_RANGE if the polling timer value is out of range (0 to 525600).
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_SetPollingTimer
@@ -2582,14 +2522,6 @@ le_result_t le_avc_SetPollingTimer
     uint32_t pollingTimer ///< [IN] Polling timer
 )
 {
-    if ((pollingTimer < LE_AVC_POLLING_TIMER_MIN_VAL) ||
-        (pollingTimer > LE_AVC_POLLING_TIMER_MAX_VAL))
-    {
-        LE_ERROR("Attemping to set an out-of-range Polling Timer value of %d. Min %d, Max %d.",
-                 pollingTimer, LE_AVC_POLLING_TIMER_MIN_VAL, LE_AVC_POLLING_TIMER_MAX_VAL);
-        return LE_OUT_OF_RANGE;
-    }
-
     le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
 
     le_cfg_SetInt(iterRef, "pollingTimer", pollingTimer);
@@ -2652,19 +2584,24 @@ static void SetDefaultAVMSConfig
     void
 )
 {
+    /* Default values */
+    uint32_t pollingTimer = 0;
+    uint16_t timerValue[LE_AVC_NUM_RETRY_TIMERS] = {0};
+    size_t numTimers = LE_AVC_NUM_RETRY_TIMERS;
+
     // dummy variables used to see if there are any current configs present
     uint32_t pollingTimerCurr = 0;
-    uint16_t retryTimersCurr[LE_AVC_NUM_RETRY_TIMERS] = {0};
+    uint16_t timerValueCurr[LE_AVC_NUM_RETRY_TIMERS] = {0};
     size_t numTimersCurr = 0;
 
     if (LE_FAULT == le_avc_GetPollingTimer(&pollingTimerCurr))
     {
-        le_avc_SetPollingTimer(PollingTimer);
+        le_avc_SetPollingTimer(pollingTimer);
     }
 
-    if (LE_FAULT == le_avc_GetRetryTimers(retryTimersCurr, &numTimersCurr))
+    if (LE_FAULT == le_avc_GetRetryTimers(timerValueCurr, &numTimersCurr))
     {
-        le_avc_SetRetryTimers(RetryTimers, LE_AVC_NUM_RETRY_TIMERS);
+        le_avc_SetRetryTimers(timerValue, numTimers);
     }
 }
 
@@ -2778,83 +2715,6 @@ bool IsDownloadAccepted
     return DownloadAgreement;
 }
 
-//-------------------------------------------------------------------------------------------------
-/**
- * Start an AVC session periodically according the polling timer config.
- */
-//-------------------------------------------------------------------------------------------------
-static void StartPollingTimer
-(
-    void
-)
-{
-    // Polling timer, in minutes.
-    uint32_t pollingTimer = 0;
-
-    // Since SetDefaultAVMSConfig() has already been called prior to StartPollingTimer(),
-    // GetPollingTimer must return LE_OK.
-    LE_ASSERT(LE_OK == le_avc_GetPollingTimer(&pollingTimer));
-
-    if (0 == pollingTimer)
-    {
-        LE_INFO("Polling Timer disabled. AVC session will not be started periodically.");
-    }
-    else
-    {
-        // Remaining polling timer, in seconds.
-        uint32_t remainingPollingTimer = 0;
-        // Current time, in seconds since Epoch.
-        time_t currentTime = time(NULL);
-        // Time elapsed since last poll
-        time_t timeElapsed = 0;
-
-        le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
-
-        // This is the first time ever, since no saved time can be found.
-        if (le_cfg_IsEmpty(iterRef, "pollingTimerSavedTimeSinceEpoch"))
-        {
-            // Save the current time.
-            le_cfg_SetInt(iterRef, "pollingTimerSavedTimeSinceEpoch", currentTime);
-            // Start a session.
-            avcClient_Connect();
-        }
-        else
-        {
-            timeElapsed = currentTime - le_cfg_GetInt(iterRef,
-                                                      "pollingTimerSavedTimeSinceEpoch", 0);
-
-            // If time difference is negative, maybe the system time was altered.
-            // If the time difference exceeds the polling timer, then that means the current polling
-            // timer runs to the end.
-            // In both cases set timeElapsed to 0 which effectively start the polling timer fresh.
-            #define SECONDS_IN_A_MIN 60
-            if ((timeElapsed < 0) || (timeElapsed > (pollingTimer * SECONDS_IN_A_MIN)))
-            {
-                timeElapsed = 0;
-
-                // Save the current time.
-                le_cfg_SetInt(iterRef, "pollingTimerSavedTimeSinceEpoch", currentTime);
-                // Start a session.
-                avcClient_Connect();
-            }
-        }
-
-        remainingPollingTimer = (pollingTimer * 60) - timeElapsed;
-
-        LE_INFO("Polling Timer is set to start AVC session every %d minutes.", pollingTimer);
-        LE_INFO("The current Polling Timer will start a session in %d minutes.",
-                remainingPollingTimer/60);
-
-        // Set a timer to start the next session.
-        le_clk_Time_t interval = {remainingPollingTimer, 0};
-        PollingTimerRef = le_timer_Create("PollingTimer");
-
-        LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
-        LE_ASSERT(LE_OK == le_timer_SetHandler(PollingTimerRef, StartPollingTimer));
-        LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
-    }
-}
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Initialization function for AVC Daemon
@@ -2902,9 +2762,6 @@ COMPONENT_INIT
 
     // Set default AVMS config values
     SetDefaultAVMSConfig();
-
-    // Start an AVC session periodically accoridng to the Polling Timer config.
-    StartPollingTimer();
 
     // Initialize user agreement.
     avcServer_InitUserAgreement();
