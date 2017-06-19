@@ -236,14 +236,6 @@ static le_ref_MapRef_t AvSessionRequestRefMap;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * This timer is used to delay releasing the session.
- */
-//--------------------------------------------------------------------------------------------------
-static le_timer_Ref_t SessionReleaseTimerRef;
-
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Event for sending session state to registered applications.
  */
 //--------------------------------------------------------------------------------------------------
@@ -251,24 +243,8 @@ static le_event_Id_t SessionStateEvent;
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-/* Helper funcitons                                                                               */
+/* Helper functions                                                                               */
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Session release timer expired
- */
-//--------------------------------------------------------------------------------------------------
-static void SessionReleaseTimerHandler
-(
-    le_timer_Ref_t timerRef    ///< This timer has expired
-)
-{
-    LE_INFO("SessionRelease timer expired; close session");
-
-    avcServer_ReleaseSession();
-}
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2825,22 +2801,10 @@ le_avdata_RequestSessionObjRef_t le_avdata_RequestSession
     void
 )
 {
-    le_result_t result = LE_OK;
+    le_result_t result;
 
-    // If this is a duplicate request send the existing reference.
-    le_ref_IterRef_t iterRef = le_ref_GetIterator(AvSessionRequestRefMap);
-
-    while (le_ref_NextNode(iterRef) == LE_OK)
-    {
-        if (le_ref_GetValue(iterRef) == le_avdata_GetClientSessionRef())
-        {
-            LE_DEBUG("Duplicate session request from client.");
-            return (le_avdata_RequestSessionObjRef_t) le_ref_GetSafeRef(iterRef);
-        }
-    }
-
-    le_timer_Stop(SessionReleaseTimerRef);
-
+    // Pass the request to an app registered for sessionRequest handler or open a session
+    // if no one is registered for handling user requests.
     // Ask the avc server to pass the request to control app or to initiate a session.
     result = avcServer_RequestSession();
 
@@ -2887,14 +2851,9 @@ void le_avdata_ReleaseSession
         le_ref_DeleteRef(AvSessionRequestRefMap, sessionRequestRef);
     }
 
-    // Stop the session when all clients release their session reference.
-    iterRef = le_ref_GetIterator(AvSessionRequestRefMap);
-
-    if (le_ref_NextNode(iterRef) == LE_NOT_FOUND)
-    {
-        // Close the session if there is no new open request for 2 seconds.
-        le_timer_Restart(SessionReleaseTimerRef);
-    }
+    // Pass the close command to an app registered for sessionRequest handler or close the session
+    // if no one is registered for handling user requests.
+    avcServer_ReleaseSession();
 }
 
 
@@ -2941,11 +2900,4 @@ void avData_Init
     // Create safe reference map for session request references. The size of the map should be based
     // on the expected number of simultaneous requests for session. 5 of them seems reasonable.
     AvSessionRequestRefMap = le_ref_CreateMap("AVSessionRequestRef", 5);
-
-    // Use a timer to delay releasing the session for 2 seconds.
-    le_clk_Time_t timerInterval = { .sec=2, .usec=0 };
-
-    SessionReleaseTimerRef = le_timer_Create("Session Release timer");
-    le_timer_SetInterval(SessionReleaseTimerRef, timerInterval);
-    le_timer_SetHandler(SessionReleaseTimerRef, SessionReleaseTimerHandler);
 }

@@ -35,14 +35,6 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * This ref is returned when a status handler is added/registered.  It is used when the handler is
- * removed.  Only one ref is needed, because only one handler can be registered at a time.
- */
-//--------------------------------------------------------------------------------------------------
-#define REGISTERED_HANDLER_REF ((le_avc_StatusEventHandlerRef_t)0x1234)
-
-//--------------------------------------------------------------------------------------------------
-/**
  * This ref is returned when a session request handler is added/registered.  It is used when the
  * handler is removed.  Only one ref is needed, because only one handler can be registered at a
  * time.
@@ -123,6 +115,21 @@ typedef struct
 }
 SwUninstallContext_t;
 
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Data associated with the UpdateStatusEvent
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    le_avc_Status_t updateStatus;   ///< Update status
+    int32_t totalNumBytes;          ///< Total number of bytes to download
+    int32_t downloadProgress;       ///< Download Progress in %
+    void* contextPtr;               ///< Context
+}
+UpdateStatusData_t;
+
 //--------------------------------------------------------------------------------------------------
 // Data structures
 //--------------------------------------------------------------------------------------------------
@@ -139,6 +146,12 @@ SwUninstallContext_t;
 //--------------------------------------------------------------------------------------------------
 static AvcState_t CurrentState = AVC_IDLE;
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Event for sending update status notification to applications
+ */
+//--------------------------------------------------------------------------------------------------
+static le_event_Id_t UpdateStatusEvent;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -172,13 +185,6 @@ static le_avc_UpdateType_t CurrentUpdateType = LE_AVC_UNKNOWN_UPDATE;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Handler registered by control app to receive status updates.  Only one is allowed.
- */
-//--------------------------------------------------------------------------------------------------
-static le_avc_StatusHandlerFunc_t StatusHandlerRef = NULL;
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Handler registered by control app to receive session open or close requests.
  */
 //--------------------------------------------------------------------------------------------------
@@ -207,10 +213,10 @@ static bool IsControlAppInstalled = false;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Is the current session owned by the control app?
+ * Number of registered status handlers
  */
 //--------------------------------------------------------------------------------------------------
-static bool IsControlAppSession = false;
+static uint32_t NumStatusHandlers = 0;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -218,13 +224,6 @@ static bool IsControlAppSession = false;
  */
 //--------------------------------------------------------------------------------------------------
 static void* StatusHandlerContextPtr = NULL;
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Reference for the registered control app.  Only one is allowed
- */
-//--------------------------------------------------------------------------------------------------
-static le_msg_SessionRef_t RegisteredControlAppRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -422,39 +421,48 @@ static bool IsAvcBound
     // Loop through all installed applications.
     do
     {
+        char appName[LE_CFG_NAME_LEN_BYTES] = "";
+        le_cfg_GetNodeName(iterRef, ".", appName, sizeof(appName));
+
         // Check out all of the bindings for this application.
         le_cfg_GoToNode(iterRef, "./bindings");
 
         if (le_cfg_GoToFirstChild(iterRef) == LE_OK)
         {
-            do
+            // Skip avcCompat which is not a control app but has bindings to 'le_avc'
+            if (0 != strcmp(appName, "avcCompat"))
             {
-                // Check to see if this binding is for the <root>.le_avc service.
-                char strBuffer[LE_CFG_STR_LEN_BYTES] = "";
-
-                le_cfg_GetString(iterRef, "./interface", strBuffer, sizeof(strBuffer), "");
-                if (0 == strcmp(strBuffer, "le_avc"))
+                do
                 {
-                    // The app can be bound to the AVC app directly, or through the root user.
-                    // so check for both.
-                    le_cfg_GetString(iterRef, "./app", strBuffer, sizeof(strBuffer), "");
-                    if (0 == strcmp(strBuffer, "avcService"))
-                    {
-                        // Success.
-                        le_cfg_CancelTxn(iterRef);
-                        return true;
-                    }
+                    // Check to see if this binding is for the <root>.le_avc service.
+                    char strBuffer[LE_CFG_STR_LEN_BYTES] = "";
 
-                    le_cfg_GetString(iterRef, "./user", strBuffer, sizeof(strBuffer), "");
-                    if (0 == strcmp(strBuffer, "root"))
+                    le_cfg_GetString(iterRef, "./interface", strBuffer, sizeof(strBuffer), "");
+                    if (0 == strcmp(strBuffer, "le_avc"))
                     {
-                        // Success.
-                        le_cfg_CancelTxn(iterRef);
-                        return true;
+                        // The app can be bound to the AVC app directly, or through the root user.
+                        // so check for both.
+                        le_cfg_GetString(iterRef, "./app", strBuffer, sizeof(strBuffer), "");
+                        if (0 == strcmp(strBuffer, "avcService"))
+                        {
+                            // Success.
+                            le_cfg_CancelTxn(iterRef);
+                            LE_WARN("Control app is %s", appName);
+                            return true;
+                        }
+
+                        le_cfg_GetString(iterRef, "./user", strBuffer, sizeof(strBuffer), "");
+                        if (0 == strcmp(strBuffer, "root"))
+                        {
+                            // Success.
+                            le_cfg_CancelTxn(iterRef);
+                            LE_WARN("Control app is %s", appName);
+                            return true;
+                        }
                     }
                 }
+                while (le_cfg_GoToNextSibling(iterRef) == LE_OK);
             }
-            while (le_cfg_GoToNextSibling(iterRef) == LE_OK);
 
             le_cfg_GoToParent(iterRef);
         }
@@ -641,6 +649,35 @@ static le_result_t AcceptInstallPackage
     return LE_OK;
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Send update status event to registered applications
+ */
+//--------------------------------------------------------------------------------------------------
+static void SendUpdateStatusEvent
+(
+    le_avc_Status_t updateStatus,   ///< [IN] Update status
+    int32_t totalNumBytes,          ///< [IN] Total number of bytes to download
+    int32_t downloadProgress,       ///< [IN] Download Progress in %
+    void* contextPtr                ///< [IN] Context
+)
+{
+    UpdateStatusData_t eventData;
+
+    // Initialize the event data
+    eventData.updateStatus = updateStatus;
+    eventData.totalNumBytes = totalNumBytes;
+    eventData.downloadProgress = downloadProgress;
+    eventData.contextPtr = contextPtr;
+
+    LE_DEBUG("Reporting %s", AvcSessionStateToStr(updateStatus));
+    LE_DEBUG("Number of bytes to download %d", eventData.totalNumBytes);
+    LE_DEBUG("Download progress %d", eventData.downloadProgress);
+    LE_DEBUG("ContextPtr %p", eventData.contextPtr);
+
+    // Send the event to interested applications
+    le_event_Report(UpdateStatusEvent, &eventData, sizeof(eventData));
+}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -682,11 +719,10 @@ static void ResendPendingNotification
         // Notify pending state to registered control app for user acceptance.
         if ( reportStatus != LE_AVC_NO_UPDATE )
         {
-            LE_DEBUG("Reporting status  %d,", reportStatus);
-            StatusHandlerRef(reportStatus,
-                             CurrentTotalNumBytes,
-                             CurrentDownloadProgress,
-                             StatusHandlerContextPtr);
+            SendUpdateStatusEvent(reportStatus,
+                                  CurrentTotalNumBytes,
+                                  CurrentDownloadProgress,
+                                  StatusHandlerContextPtr);
         }
     }
 }
@@ -818,17 +854,13 @@ void avcServer_UpdateHandler
             break;
     }
 
-    if ( StatusHandlerRef != NULL )
+    if (NumStatusHandlers > 0)
     {
-        LE_DEBUG("Reporting status %d", updateStatus);
-        LE_DEBUG("Total number of Bytes to download = %d", totalNumBytes);
-        LE_DEBUG("Download progress = %d%%", dloadProgress);
-
         // Notify registered control app
-        StatusHandlerRef( updateStatus,
-                          totalNumBytes,
-                          dloadProgress,
-                          StatusHandlerContextPtr);
+        SendUpdateStatusEvent(updateStatus,
+                              totalNumBytes,
+                              dloadProgress,
+                              StatusHandlerContextPtr);
 
         // Resend pending notification after session start
         ResendPendingNotification(updateStatus);
@@ -910,14 +942,6 @@ static void ClientCloseSessionHandler
         return;
     }
 
-    // Release session owned by control app (only when control app closes).
-    if (RegisteredControlAppRef == sessionRef)
-    {
-        LE_DEBUG("Close session owned by control app.");
-        RegisteredControlAppRef = NULL;
-        avcClient_Disconnect();
-    }
-
     LE_INFO("Client %p closed, remove allocated resources", sessionRef);
 
     // Search for the block reference(s) used by the closed client, and clean up any data.
@@ -931,40 +955,7 @@ static void ClientCloseSessionHandler
             BlockRefCount--;
         }
     }
-
-    // Release session owned by control app.
-    if (IsControlAppSession)
-    {
-        avcClient_Disconnect();
-        IsControlAppSession = false;
-    }
 }
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Determine whether the current client is the registered control app client.
- *
- * As a side-effect, will kill the client if it is not the registered control app client.
- */
-//--------------------------------------------------------------------------------------------------
-static bool IsValidControlAppClient
-(
-    void
-)
-{
-    if ( (RegisteredControlAppRef == NULL) ||
-         (RegisteredControlAppRef != le_avc_GetClientSessionRef()) )
-    {
-        LE_KILL_CLIENT("Client is not registered as control app");
-        return false;
-    }
-    else
-    {
-        return true;
-    }
-}
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -982,18 +973,13 @@ static le_result_t QueryInstall
 {
     le_result_t result = LE_BUSY;
 
-    if ( StatusHandlerRef != NULL )
+    if (NumStatusHandlers > 0)
     {
         // Notify registered control app.
-        LE_DEBUG("Reporting status LE_AVC_INSTALL_PENDING");
         CurrentState = AVC_INSTALL_PENDING;
-        StatusHandlerRef(LE_AVC_INSTALL_PENDING,
-                         -1,
-                         -1,
-                         StatusHandlerContextPtr);
+        SendUpdateStatusEvent(LE_AVC_INSTALL_PENDING, -1, -1, StatusHandlerContextPtr);
     }
-
-    else if ( IsControlAppInstalled )
+    else if (IsControlAppInstalled)
     {
         // There is a control app installed, but the handler is not yet registered.  Defer
         // the decision to allow the control app time to register.
@@ -1005,7 +991,6 @@ static le_result_t QueryInstall
         le_timer_SetInterval(InstallDeferTimer, interval);
         le_timer_Start(InstallDeferTimer);
     }
-
     else
     {
         // There is no control app; automatically accept any pending installs,
@@ -1049,12 +1034,11 @@ static le_result_t QueryDownload
 {
     le_result_t result = LE_BUSY;
 
-    if (StatusHandlerRef != NULL)
+    if (NumStatusHandlers > 0)
     {
         // Notify registered control app.
-        LE_DEBUG("Report status LE_AVC_DOWNLOAD_PENDING");
         CurrentState = AVC_DOWNLOAD_PENDING;
-        StatusHandlerRef(LE_AVC_DOWNLOAD_PENDING, totalNumBytes, 0, StatusHandlerContextPtr);
+        SendUpdateStatusEvent(LE_AVC_DOWNLOAD_PENDING, totalNumBytes, 0, StatusHandlerContextPtr);
     }
     else if (IsControlAppInstalled)
     {
@@ -1116,18 +1100,13 @@ static le_result_t QueryUninstall
 {
     le_result_t result = LE_BUSY;
 
-    if ( StatusHandlerRef != NULL )
+    if (NumStatusHandlers > 0)
     {
         // Notify registered control app.
-        LE_DEBUG("Reporting status LE_AVC_UNINSTALL_PENDING");
         CurrentState = AVC_UNINSTALL_PENDING;
-        StatusHandlerRef( LE_AVC_UNINSTALL_PENDING,
-                          -1,
-                          -1,
-                          StatusHandlerContextPtr);
+        SendUpdateStatusEvent(LE_AVC_UNINSTALL_PENDING, -1, -1, StatusHandlerContextPtr);
     }
-
-    else if ( IsControlAppInstalled )
+    else if (IsControlAppInstalled)
     {
         // There is a control app installed, but the handler is not yet registered.  Defer
         // the decision to allow the control app time to register.
@@ -1139,7 +1118,6 @@ static le_result_t QueryUninstall
         le_timer_SetInterval(UninstallDeferTimer, interval);
         le_timer_Start(UninstallDeferTimer);
     }
-
     else
     {
         // There is no control app; automatically accept any pending uninstalls,
@@ -1183,11 +1161,10 @@ static le_result_t QueryReboot
 {
     le_result_t result = LE_BUSY;
 
-    if (NULL != StatusHandlerRef)
+    if (NumStatusHandlers > 0)
     {
         // Notify registered control app.
-        LE_DEBUG("Reporting status LE_AVC_REBOOT_PENDING");
-        StatusHandlerRef(LE_AVC_REBOOT_PENDING, -1, -1, StatusHandlerContextPtr);
+        SendUpdateStatusEvent(LE_AVC_REBOOT_PENDING, -1, -1, StatusHandlerContextPtr);
     }
     else if (IsControlAppInstalled)
     {
@@ -1333,12 +1310,11 @@ static void CheckConnectionRequest
     // as a status handler was added before calling this function.
     if (   (LE_AVC_SESSION_INVALID == le_avc_GetSessionType())
         && (LE_OK == packageDownloader_GetFwUpdateNotification(&isNotificationRequest))
-        && (true == isNotificationRequest)
-        && (NULL != StatusHandlerRef))
+        && (true == isNotificationRequest))
     {
         // Notify registered control app.
         LE_DEBUG("Reporting status LE_AVC_CONNECTION_REQUIRED");
-        StatusHandlerRef(LE_AVC_CONNECTION_REQUIRED, -1, -1, StatusHandlerContextPtr);
+        SendUpdateStatusEvent(LE_AVC_CONNECTION_REQUIRED, -1, -1, StatusHandlerContextPtr);
     }
 }
 
@@ -1585,20 +1561,10 @@ void avcServer_ReportInstallProgress
     le_avc_ErrorCode_t errorCode
 )
 {
-    if (StatusHandlerRef != NULL)
-    {
-        LE_DEBUG("Report install progress to registered handler.");
+    LE_DEBUG("Report install progress to registered handler.");
 
-        // Notify registered control app
-        StatusHandlerRef(updateStatus,
-                         -1,
-                         installProgress,
-                         StatusHandlerContextPtr);
-    }
-    else
-    {
-        LE_DEBUG("No handler registered to receive install progress.");
-    }
+    // Notify registered control app
+    SendUpdateStatusEvent(updateStatus, -1, installProgress, StatusHandlerContextPtr);
 
     if (updateStatus == LE_AVC_INSTALL_FAILED)
     {
@@ -1629,14 +1595,10 @@ le_result_t avcServer_RequestSession
         LE_DEBUG("Forwarding session open request to control app.");
         SessionRequestHandlerRef(LE_AVC_SESSION_ACQUIRE, SessionRequestHandlerContextPtr);
     }
-    else if (!IsControlAppSession)
+    else
     {
         LE_DEBUG("Unconditionally accepting request to open session.");
         result = avcClient_Connect();
-    }
-    else
-    {
-        LE_DEBUG("Session already opened by control app.");
     }
 
     return result;
@@ -1666,20 +1628,34 @@ le_result_t avcServer_ReleaseSession
         LE_DEBUG("Forwarding session release request to control app.");
         SessionRequestHandlerRef(LE_AVC_SESSION_RELEASE, SessionRequestHandlerContextPtr);
     }
-    else if (!IsControlAppSession)
+    else
     {
         LE_DEBUG("Releasing session opened by user app.");
         result = avcClient_Disconnect();
-    }
-    else
-    {
-        LE_DEBUG("Session owned by control app.");
-        result = LE_BUSY;
     }
 
     return result;
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * The first-layer Update Status Handler
+ */
+//--------------------------------------------------------------------------------------------------
+static void FirstLayerUpdateStatusHandler
+(
+    void* reportPtr,
+    void* secondLayerHandlerFunc
+)
+{
+    UpdateStatusData_t* eventDataPtr = reportPtr;
+    le_avc_StatusHandlerFunc_t clientHandlerFunc = secondLayerHandlerFunc;
+
+    clientHandlerFunc(eventDataPtr->updateStatus,
+                      eventDataPtr->totalNumBytes,
+                      eventDataPtr->downloadProgress,
+                      le_event_GetContextPtr());
+}
 
 //--------------------------------------------------------------------------------------------------
 // API functions
@@ -1707,20 +1683,20 @@ le_avc_StatusEventHandlerRef_t le_avc_AddStatusEventHandler
         LE_KILL_CLIENT("Null handlerPtr");
     }
 
-    // Only allow the handler to be registered, if nothing is currently registered. In this way,
-    // only one user app is allowed to register at a time.
-    if ( StatusHandlerRef != NULL )
-    {
-        LE_KILL_CLIENT("Handler already registered");
-        return NULL;
-    }
+    LE_PRINT_VALUE("%p", handlerPtr);
+    LE_PRINT_VALUE("%p", contextPtr);
 
-    StatusHandlerRef = handlerPtr;
-    StatusHandlerContextPtr = contextPtr;
+    // Register the user app handler
+    le_event_HandlerRef_t handlerRef = le_event_AddLayeredHandler(
+                                                    "AvcUpdateStaus",
+                                                    UpdateStatusEvent,
+                                                    FirstLayerUpdateStatusHandler,
+                                                    (le_event_HandlerFunc_t)handlerPtr);
 
-    // Store the client session ref, to ensure only the registered client can call the other
-    // control related API functions.
-    RegisteredControlAppRef = le_avc_GetClientSessionRef();
+    le_event_SetContextPtr(handlerRef, contextPtr);
+
+    // Number of user apps registered
+    NumStatusHandlers++;
 
     // We only check at startup if the control app is installed, so this flag could be false
     // if the control app is installed later.  Obviously control app is installed now, so set
@@ -1787,7 +1763,7 @@ le_avc_StatusEventHandlerRef_t le_avc_AddStatusEventHandler
     // Check if a connection request is required
     CheckConnectionRequest();
 
-    return REGISTERED_HANDLER_REF;
+    return (le_avc_StatusEventHandlerRef_t)handlerRef;
 }
 
 
@@ -1802,36 +1778,18 @@ void le_avc_RemoveStatusEventHandler
         ///< [IN]
 )
 {
-    if ( addHandlerRef != REGISTERED_HANDLER_REF )
+    LE_PRINT_VALUE("%p", addHandlerRef);
+
+    le_event_RemoveHandler((le_event_HandlerRef_t)addHandlerRef);
+
+    // Decrement number of registered handlers
+    NumStatusHandlers--;
+
+    // After all status handlers are removed automatic (default) actions will be enabled.
+    if (0 > NumStatusHandlers)
     {
-        if ( addHandlerRef == NULL )
-        {
-            // If le_avc_AddStatusEventHandler() returns NULL, the value is still stored by the
-            // generated code and cleaned up when the client dies, thus this check is necessary.
-            // TODO: Fix the generated code.
-            LE_ERROR("NULL ref ignored");
-            return;
-        }
-        else
-        {
-            LE_KILL_CLIENT("Invalid ref = %p", addHandlerRef);
-        }
+        IsControlAppInstalled = false;
     }
-
-    if ( StatusHandlerRef == NULL )
-    {
-        LE_KILL_CLIENT("Handler not registered");
-    }
-
-    // Clear all info related to the registered handler.  Note that our local 'UpdateHandler'
-    // must stay registered with the PA to ensure that automatic actions are performed, and
-    // the state is properly tracked.
-    StatusHandlerRef = NULL;
-    StatusHandlerContextPtr = NULL;
-    RegisteredControlAppRef = NULL;
-
-    // After the status handler is removed automatic (default) actions will be enabled.
-    IsControlAppInstalled = false;
 }
 
 
@@ -1925,12 +1883,6 @@ le_result_t le_avc_StartSession
     void
 )
 {
-    if ( ! IsValidControlAppClient() )
-    {
-        return LE_FAULT;
-    }
-
-    IsControlAppSession = true;
     return avcClient_Connect();
 }
 
@@ -1949,12 +1901,6 @@ le_result_t le_avc_StopSession
     void
 )
 {
-    if ( ! IsValidControlAppClient() )
-    {
-        return LE_FAULT;
-    }
-
-    IsControlAppSession = false;
     return avcClient_Disconnect();
 }
 
@@ -1976,16 +1922,7 @@ le_result_t le_avc_CheckRoute
     void
 )
 {
-    if ( ! IsValidControlAppClient() )
-    {
-        return LE_FAULT;
-    }
-
-#ifdef LEGATO_LWM2M_CLIENT
     return avcClient_Update();
-#else
-    return LE_UNSUPPORTED;
-#endif
 }
 
 
@@ -2003,11 +1940,6 @@ le_result_t le_avc_AcceptDownload
     void
 )
 {
-    if ( ! IsValidControlAppClient() )
-    {
-        return LE_FAULT;
-    }
-
     if ( CurrentState != AVC_DOWNLOAD_PENDING )
     {
         LE_ERROR("Expected AVC_DOWNLOAD_PENDING state; current state is %i", CurrentState);
@@ -2067,11 +1999,6 @@ le_result_t le_avc_DeferDownload
         ///< [IN]
 )
 {
-    if ( ! IsValidControlAppClient() )
-    {
-        return LE_FAULT;
-    }
-
     // Defer the download.
     return DeferDownload(deferMinutes);
 }
@@ -2141,11 +2068,6 @@ le_result_t le_avc_AcceptInstall
     void
 )
 {
-    if ( ! IsValidControlAppClient() )
-    {
-        return LE_FAULT;
-    }
-
     if ( CurrentState != AVC_INSTALL_PENDING )
     {
         LE_ERROR("Expected AVC_INSTALL_PENDING state; current state is %i", CurrentState);
@@ -2225,11 +2147,6 @@ le_result_t le_avc_DeferInstall
         ///< [IN]
 )
 {
-    if ( ! IsValidControlAppClient() )
-    {
-        return LE_FAULT;
-    }
-
     return DeferInstall(deferMinutes);
 }
 
@@ -2247,11 +2164,6 @@ le_result_t le_avc_AcceptUninstall
     void
 )
 {
-    if ( ! IsValidControlAppClient() )
-    {
-        return LE_FAULT;
-    }
-
     if ( CurrentState != AVC_UNINSTALL_PENDING )
     {
         LE_ERROR("Expected AVC_UNINSTALL_PENDING state; current state is %i", CurrentState);
@@ -2277,11 +2189,6 @@ le_result_t le_avc_DeferUninstall
         ///< [IN]
 )
 {
-    if ( ! IsValidControlAppClient() )
-    {
-        return LE_FAULT;
-    }
-
     if ( CurrentState != AVC_UNINSTALL_PENDING )
     {
         LE_ERROR("Expected AVC_UNINSTALL_PENDING state; current state is %i", CurrentState);
@@ -2314,11 +2221,6 @@ le_result_t le_avc_AcceptReboot
     void
 )
 {
-    if (!IsValidControlAppClient())
-    {
-        return LE_FAULT;
-    }
-
     StopRebootDeferTimer();
 
     LE_DEBUG("Accept a device reboot");
@@ -2353,11 +2255,6 @@ le_result_t le_avc_DeferReboot
     uint32_t deferMinutes   ///< [IN] Minutes to defer the reboot
 )
 {
-    if (!IsValidControlAppClient())
-    {
-        return LE_FAULT;
-    }
-
     LE_DEBUG("Deferring reboot for %d minute.", deferMinutes);
 
     // Try the reboot later
@@ -2380,11 +2277,6 @@ le_avc_ErrorCode_t le_avc_GetErrorCode
     void
 )
 {
-    if ( ! IsValidControlAppClient() )
-    {
-        return LE_FAULT;
-    }
-
     return AvcErrorCode;
 }
 
@@ -2404,11 +2296,6 @@ le_result_t le_avc_GetUpdateType
         ///< [OUT]
 )
 {
-    if ( ! IsValidControlAppClient() )
-    {
-        return LE_FAULT;
-    }
-
     if ( CurrentState == AVC_IDLE )
     {
         LE_ERROR("In AVC_IDLE state; no update pending or in progress");
@@ -2453,11 +2340,6 @@ le_result_t le_avc_GetAppUpdateName
         ///< [IN]
 )
 {
-    if ( ! IsValidControlAppClient() )
-    {
-        return LE_FAULT;
-    }
-
     return LE_FAULT;
 }
 
@@ -2860,20 +2742,10 @@ void avcServer_NotifyUserApp
 {
     CurrentState = updateStatus;
 
-    if (StatusHandlerRef != NULL)
-    {
-        LE_DEBUG("Report progress to registered handler.");
+    LE_DEBUG("Report progress to registered handler.");
 
-        // Notify registered control app
-        StatusHandlerRef(updateStatus,
-                         numBytes,
-                         progress,
-                         StatusHandlerContextPtr);
-    }
-    else
-    {
-        LE_DEBUG("No handler registered to receive progress.");
-    }
+    // Notify registered control app
+    SendUpdateStatusEvent(updateStatus, numBytes, progress, StatusHandlerContextPtr);
 
     if (updateStatus == LE_AVC_INSTALL_FAILED)
     {
@@ -3103,6 +2975,9 @@ static void StartPollingTimer
 //--------------------------------------------------------------------------------------------------
 COMPONENT_INIT
 {
+    // Initialize update status event
+    UpdateStatusEvent = le_event_CreateId("Update Status", sizeof(UpdateStatusData_t));
+
     // Create safe reference map for block references. The size of the map should be based on
     // the expected number of simultaneous block requests, so take a reasonable guess.
     BlockRefMap = le_ref_CreateMap("BlockRef", 5);
