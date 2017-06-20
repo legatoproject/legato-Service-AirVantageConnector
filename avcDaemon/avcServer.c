@@ -24,6 +24,7 @@
 #include "packageDownloader.h"
 #include "packageDownloaderCallbacks.h"
 #include "avcFsConfig.h"
+#include "watchdogChain.h"
 
 //--------------------------------------------------------------------------------------------------
 // Definitions
@@ -3675,4 +3676,10 @@ COMPONENT_INIT
     // Check if any notification needs to be sent to the application concerning
     // firmware update and application update
     CheckNotificationToSend();
+
+    // Start watchdog on the main AVC event loop.
+    // Try to kick a couple of times before each timeout.
+    le_clk_Time_t watchdogInterval = { .sec = 8 };
+    le_wdogChain_Init(1);
+    le_wdogChain_MonitorEventLoop(0, watchdogInterval);
 }

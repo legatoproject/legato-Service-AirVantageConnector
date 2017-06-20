@@ -27,6 +27,7 @@ processes:
     }
 
     faultAction: restart
+    watchdogTimeout: 30000
 
     // Maximum size of the download file (50 MBytes)
     // ToDo: Change this to "unlimited" when mktools support it
@@ -68,4 +69,5 @@ bindings:
     avcDaemon.avcDaemon.le_pos -> positioningService.le_pos
     avcDaemon.avcDaemon.le_gnss -> positioningService.le_gnss
     avcDaemon.avcDaemon.secStoreGlobal -> secStore.secStoreGlobal
+    avcDaemon.watchdogChain.le_wdog -> <root>.le_wdog
 }
