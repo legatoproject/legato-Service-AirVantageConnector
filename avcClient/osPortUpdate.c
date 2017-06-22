@@ -466,6 +466,7 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdateResult
                                                     (lwm2mcore_FwUpdateResult_t*)updateResultPtr))
             {
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
+                packageDownloader_SetFwUpdateNotification(false);
                 LE_DEBUG("updateResult : %d", *updateResultPtr);
             }
             else
@@ -921,6 +922,7 @@ lwm2mcore_Sid_t lwm2mcore_GetFirmwareUpdateInstallResult
             avcServer_UpdateHandler(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
                                     -1, -1, errorCode);
         }
+        packageDownloader_SetFwUpdateNotification(true);
         LE_DEBUG("Set FW update result to %d", newFwUpdateResult);
         if (LE_OK != packageDownloader_SetFwUpdateResult(newFwUpdateResult))
         {

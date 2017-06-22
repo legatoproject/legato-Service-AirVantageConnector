@@ -366,6 +366,7 @@ static char* AvcSessionStateToStr
         case LE_AVC_SESSION_STARTED:        result = "Session started";         break;
         case LE_AVC_SESSION_STOPPED:        result = "Session stopped";         break;
         case LE_AVC_REBOOT_PENDING:         result = "Reboot pending";          break;
+        case LE_AVC_CONNECTION_REQUIRED:    result = "Connection required";     break;
         default:                            result = "Unknown";                 break;
 
     }
@@ -1217,7 +1218,7 @@ static le_result_t QueryReboot
  * Called when the download defer timer expires.
  */
 //--------------------------------------------------------------------------------------------------
-void DownloadTimerExpiryHandler
+static void DownloadTimerExpiryHandler
 (
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
@@ -1243,7 +1244,7 @@ void DownloadTimerExpiryHandler
  * Called when the install defer timer expires.
  */
 //--------------------------------------------------------------------------------------------------
-void InstallTimerExpiryHandler
+static void InstallTimerExpiryHandler
 (
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
@@ -1268,7 +1269,7 @@ void InstallTimerExpiryHandler
  * Called when the uninstall defer timer expires.
  */
 //--------------------------------------------------------------------------------------------------
-void UninstallTimerExpiryHandler
+static void UninstallTimerExpiryHandler
 (
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
@@ -1315,6 +1316,34 @@ static void RebootTimerExpiryHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Function to check if the agent needs to connect to the server
+ */
+//--------------------------------------------------------------------------------------------------
+static void CheckConnectionRequest
+(
+    void
+)
+{
+    bool isNotificationRequest = false;
+
+    // Use case to be checked:
+    // 1) Check that a connection is not on-going
+    // 2) connection after a device reboot due to a FOTA install
+    // Note that a control app should always be registered at this point
+    // as a status handler was added before calling this function.
+    if (   (LE_AVC_SESSION_INVALID == le_avc_GetSessionType())
+        && (LE_OK == packageDownloader_GetFwUpdateNotification(&isNotificationRequest))
+        && (true == isNotificationRequest)
+        && (NULL != StatusHandlerRef))
+    {
+        // Notify registered control app.
+        LE_DEBUG("Reporting status LE_AVC_CONNECTION_REQUIRED");
+        StatusHandlerRef(LE_AVC_CONNECTION_REQUIRED, -1, -1, StatusHandlerContextPtr);
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Convert lwm2m core update type to avc update type
  */
 //--------------------------------------------------------------------------------------------------
@@ -1336,8 +1365,6 @@ static le_avc_UpdateType_t ConvertToAvcType
         return LE_AVC_UNKNOWN_UPDATE;
     }
 }
-
-
 
 //--------------------------------------------------------------------------------------------------
 // Internal interface functions
@@ -1756,6 +1783,9 @@ le_avc_StatusEventHandlerRef_t le_avc_AddStatusEventHandler
             ResumeFwInstall();
         }
     }
+
+    // Check if a connection request is required
+    CheckConnectionRequest();
 
     return REGISTERED_HANDLER_REF;
 }

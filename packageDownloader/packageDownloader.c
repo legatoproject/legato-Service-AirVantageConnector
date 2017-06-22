@@ -739,6 +739,69 @@ le_result_t packageDownloader_GetUpdatePackageSize
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Set firmware update notification
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetFwUpdateNotification
+(
+    bool notificationRequest                    ///< [IN] Notification requested
+)
+{
+    le_result_t result = WriteFs(FW_UPDATE_NOTIFICATION_PATH,
+                                 (bool*)&notificationRequest,
+                                 sizeof(bool));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", FW_UPDATE_NOTIFICATION_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get firmware update notification
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetFwUpdateNotification
+(
+    bool* isNotificationRequestPtr              ///< [IN] is a FOTA result needed to be sent to the
+                                                ///< server ?
+)
+{
+    le_result_t result;
+    bool isNotificationRequest;
+    size_t size = sizeof(bool);
+
+    if (!isNotificationRequestPtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_FAULT;
+    }
+
+    result = ReadFs(FW_UPDATE_NOTIFICATION_PATH, (bool*)&isNotificationRequest, &size);
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to read %s: %s", FW_UPDATE_NOTIFICATION_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+    *isNotificationRequestPtr = isNotificationRequest;
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Get software update state
  *
  * @return

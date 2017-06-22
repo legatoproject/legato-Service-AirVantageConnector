@@ -131,6 +131,37 @@ le_result_t packageDownloader_SetFwUpdateInstallPending
     bool isFwInstallPending                     ///< [IN] Is FW install pending?
 );
 
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set firmware update notification
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetFwUpdateNotification
+(
+    bool notificationRequest                    ///< [IN] Notification requested
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get firmware update notification
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetFwUpdateNotification
+(
+    bool* isNotificationRequestPtr              ///< [IN] is a FOTA result needed to be sent to the
+                                                ///< server ?
+);
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Get software update state
