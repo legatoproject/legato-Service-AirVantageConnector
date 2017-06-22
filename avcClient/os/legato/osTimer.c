@@ -37,13 +37,14 @@ bool lwm2mcore_TimerSet
     bool result = false;
     le_clk_Time_t timerInterval;
 
-    LE_DEBUG ("lwm2mcore_TimerSet %d time %d sec", timer, time);
+    LE_INFO ("lwm2mcore_TimerSet %d time %d sec", timer, time);
     if (timer < LWM2MCORE_TIMER_MAX)
     {
         switch (timer)
         {
             case LWM2MCORE_TIMER_STEP:
             {
+                LE_INFO ("LWM2MCORE_TIMER_STEP");
                 if (Lwm2mStepTimerRef == NULL)
                 {
                     timerInterval.sec = time;
@@ -164,7 +165,7 @@ bool lwm2mcore_TimerIsRunning
             break;
         }
     }
-    LE_DEBUG ("LWM2MCORE_TIMER_STEP timer is running %d", isRunning);
+    LE_INFO ("LWM2MCORE_TIMER_STEP timer is running %d", isRunning);
     return isRunning;
 }
 
