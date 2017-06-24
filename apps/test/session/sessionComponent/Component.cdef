@@ -1,0 +1,12 @@
+requires:
+{
+    api:
+    {
+        le_avdata.api
+    }
+}
+
+sources:
+{
+    sessionApp.c
+}

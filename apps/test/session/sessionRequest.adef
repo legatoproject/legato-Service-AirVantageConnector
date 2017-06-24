@@ -1,0 +1,10 @@
+
+executables:
+{
+    sessionRequestApp = ( sessionComponent )
+}
+
+bindings:
+{
+    sessionRequestApp.sessionComponent.le_avdata -> avcService.le_avdata
+}

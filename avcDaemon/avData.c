@@ -242,6 +242,21 @@ static le_ref_MapRef_t AvSessionRequestRefMap;
 static le_event_Id_t SessionStateEvent;
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Flag to check if session was opened from avc
+ */
+//--------------------------------------------------------------------------------------------------
+static bool IsSessionStarted = false;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Count the number of requests
+ */
+//--------------------------------------------------------------------------------------------------
+static uint32_t RequestCount = 0;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /* Helper functions                                                                               */
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2803,17 +2818,25 @@ le_avdata_RequestSessionObjRef_t le_avdata_RequestSession
 {
     le_result_t result;
 
+    RequestCount++;
+
     // Pass the request to an app registered for sessionRequest handler or open a session
     // if no one is registered for handling user requests.
     // Ask the avc server to pass the request to control app or to initiate a session.
     result = avcServer_RequestSession();
 
-    // If the request fails, return NULL. Note that LE_BUSY means retry is in progress, and
-    // LE_DUPLICATE means session is already opened. Currently RequestSession doesn't return
-    // LE_FAULT, but that could change in the future so a check here is more prudent.
-    if ((result != LE_OK) && (result != LE_BUSY) && (result != LE_DUPLICATE))
+    // If the session is already opened, send notification
+    if (result == LE_DUPLICATE)
     {
-        return NULL;
+        le_avdata_SessionState_t sessionState = LE_AVDATA_SESSION_STARTED;
+        le_event_Report(SessionStateEvent, &sessionState, sizeof(sessionState));
+
+        // If this is the first request and session is already opened, then session was opened
+        // by AVC.
+        if (RequestCount == 1)
+        {
+            IsSessionStarted = true;
+        }
     }
 
     // Need to return a unique reference that will be used by release. Use the client session ref
@@ -2847,13 +2870,22 @@ void le_avdata_ReleaseSession
     }
     else
     {
+        if (RequestCount > 0)
+        {
+            RequestCount--;
+        }
+
+        // Disconnect session when all request have been released and session not opened by AVC
+        if ((0 == RequestCount) &&
+            !IsSessionStarted)
+        {
+            IsSessionStarted = false;
+            avcServer_ReleaseSession();
+        }
+
         LE_PRINT_VALUE("%p", sessionPtr);
         le_ref_DeleteRef(AvSessionRequestRefMap, sessionRequestRef);
     }
-
-    // Pass the close command to an app registered for sessionRequest handler or close the session
-    // if no one is registered for handling user requests.
-    avcServer_ReleaseSession();
 }
 
 
