@@ -562,7 +562,7 @@ le_result_t avcClient_Connect
         // see which timer we are at by looking at RetryTimersIndex
         // if the timer is 0, get the next one. (0 means disabled / not used)
         // if we run out of timers, do nothing.  Perform reset/cleanup
-        while((RetryTimersIndex < LE_AVC_NUM_RETRY_TIMERS) ||
+        while((RetryTimersIndex < LE_AVC_NUM_RETRY_TIMERS) &&
               (0 == RetryTimers[RetryTimersIndex]))
         {
                 RetryTimersIndex++;
