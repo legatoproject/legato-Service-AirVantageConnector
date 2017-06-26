@@ -155,15 +155,6 @@ static void BearerEventCb
             {
                 avcClient_Disconnect();
             }
-            else
-            {
-                /* The data connection is closed */
-                lwm2mcore_Free(Lwm2mInstanceRef);
-                Lwm2mInstanceRef = NULL;
-
-                /* Remove the data handler */
-                le_data_RemoveConnectionStateHandler(DataHandler);
-            }
         }
     }
 }
@@ -475,19 +466,18 @@ static void StopBearer
     void
 )
 {
-    /* stop the bearer */
-    /* Check that a data connection was opened */
-    if (NULL != DataRef)
+    if (NULL != Lwm2mInstanceRef)
     {
         /* Close the data connection */
         le_data_Release(DataRef);
-    }
-    /* The data connection is closed */
-    lwm2mcore_Free(Lwm2mInstanceRef);
-    Lwm2mInstanceRef = NULL;
 
-    /* Remove the data handler */
-    le_data_RemoveConnectionStateHandler(DataHandler);
+        /* Remove the data handler */
+        le_data_RemoveConnectionStateHandler(DataHandler);
+
+        /* The data connection is closed */
+        lwm2mcore_Free(Lwm2mInstanceRef);
+        Lwm2mInstanceRef = NULL;
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
