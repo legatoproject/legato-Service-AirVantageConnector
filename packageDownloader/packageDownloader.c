@@ -216,6 +216,8 @@ static void SuspendDownload
 {
     if (DOWNLOAD_STATUS_IDLE != GetDownloadStatus())
     {
+        LE_DEBUG("Wait till download thread exits");
+
         // Wait till download thread exits
         le_clk_Time_t timeout = {DOWNLOAD_ABORT_TIMEOUT, 0};
         if (LE_OK != le_sem_WaitWithTimeOut(DownloadAbortSemaphore, timeout))
@@ -932,6 +934,7 @@ void* packageDownloader_DownloadPackage
                 ret = -1;
                 // An error occurred, close the file descriptor in order to stop the Store thread
                 close(dwlCtxPtr->downloadFd);
+                dwlCtxPtr->downloadFd = -1;
             }
         }
 
@@ -939,6 +942,17 @@ void* packageDownloader_DownloadPackage
            ||(DOWNLOAD_STATUS_SUSPEND == GetDownloadStatus()))
         {
             le_sem_Post(DownloadAbortSemaphore);
+
+            LE_DEBUG("Close download file descriptor");
+
+            // Signal fwupdate download interruption by closing the file descriptor.
+            // This operation will stop the Store thread. Once the Store thread ends we will
+            // join the store thread with the main thread.
+            if (-1 != dwlCtxPtr->downloadFd)
+            {
+                close(dwlCtxPtr->downloadFd);
+                dwlCtxPtr->downloadFd = -1;
+            }
         }
 
         // If package download is finished or aborted: delete stored URI and update type
@@ -959,27 +973,31 @@ void* packageDownloader_DownloadPackage
             // Delete the semaphore used to synchronize threads
             le_sem_Delete(dwlCtxPtr->semRef);
 
-            // Check if store thread finished with an error
-            if (ret < 0)
+            // Status notification is not relevant for suspend.
+            if (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus())
             {
-                // Send download failed event and set the error to "bad package",
-                // as it was rejected by the FW update process.
-                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_FAILED,
-                                        LE_AVC_FIRMWARE_UPDATE,
-                                        -1,
-                                        -1,
-                                        LE_AVC_ERR_BAD_PACKAGE);
-            }
-            else
-            {
-                // Send download complete event.
-                // Not setting the downloaded number of bytes and percentage allows using the last
-                // stored values.
-                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_COMPLETE,
-                                        LE_AVC_FIRMWARE_UPDATE,
-                                        -1,
-                                        -1,
-                                        LE_AVC_ERR_NONE);
+                // Check if store thread finished with an error
+                if (ret < 0)
+                {
+                    // Send download failed event and set the error to "bad package",
+                    // as it was rejected by the FW update process.
+                    avcServer_UpdateHandler(LE_AVC_DOWNLOAD_FAILED,
+                                            LE_AVC_FIRMWARE_UPDATE,
+                                            -1,
+                                            -1,
+                                            LE_AVC_ERR_BAD_PACKAGE);
+                }
+                else
+                {
+                    // Send download complete event.
+                    // Not setting the downloaded number of bytes and percentage allows using the last
+                    // stored values.
+                    avcServer_UpdateHandler(LE_AVC_DOWNLOAD_COMPLETE,
+                                            LE_AVC_FIRMWARE_UPDATE,
+                                            -1,
+                                            -1,
+                                            LE_AVC_ERR_NONE);
+                }
             }
         }
 
@@ -990,10 +1008,12 @@ void* packageDownloader_DownloadPackage
         }
 
         LE_DEBUG("Close download file descriptor");
-        // Close the file descriptor if necessary
+
+        // Close the file descriptor if necessary.
         if (-1 != dwlCtxPtr->downloadFd)
         {
             close(dwlCtxPtr->downloadFd);
+            dwlCtxPtr->downloadFd = -1;
         }
     }
     else
