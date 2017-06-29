@@ -441,14 +441,21 @@ static size_t GetLegatoVersion
             return returnedLen;
         }
 
-        if (fgets(versionBufferPtr, MAX_VERSION_STR_BYTES, versionFilePtr) != NULL)
+        char tmpLegatoVersionBuffer[MAX_VERSION_STR_BYTES];
+        if (fgets(tmpLegatoVersionBuffer, MAX_VERSION_STR_BYTES, versionFilePtr) != NULL)
         {
-            char* newLinePtr = strchr(versionBufferPtr, '\n');
-            if (NULL != newLinePtr)
+            char* savePtr;
+            char* tmpBufferPtr = strtok_r(tmpLegatoVersionBuffer, "-_", &savePtr);
+            if (NULL != tmpBufferPtr)
             {
-                *newLinePtr = '\0';
+                snprintf(versionBufferPtr, len, "%s", tmpBufferPtr);
+                returnedLen = strlen(versionBufferPtr);
             }
-            returnedLen = strlen(versionBufferPtr);
+            else
+            {
+                snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+                returnedLen = strlen(versionBufferPtr);
+            }
         }
         else
         {
