@@ -60,7 +60,7 @@ static void Lwm2mClientReceive
     uint8_t buffer[LWM2MCORE_UDP_MAX_PACKET_SIZE];
     int numBytes;
 
-    LE_INFO("Lwm2mClientReceive events %d", events);
+    LE_DEBUG("Lwm2mClientReceive events %d", events);
 
     // If an event happens on the socket
     if (events == POLLIN)
@@ -83,7 +83,7 @@ static void Lwm2mClientReceive
             char s[INET6_ADDRSTRLEN];
             in_port_t port;
 
-            LE_INFO("Lwm2mClientReceive numBytes %d", numBytes);
+            LE_DEBUG("Lwm2mClientReceive numBytes %d", numBytes);
 
             if (AF_INET == addr.ss_family)
             {
@@ -98,7 +98,7 @@ static void Lwm2mClientReceive
                 port = saddr->sin6_port;
             }
 
-            LE_WARN("%d bytes received from [%s]:%hu.", numBytes, s, ntohs(port));
+            LE_DEBUG("%d bytes received from [%s]:%hu.", numBytes, s, ntohs(port));
             //lwm2mcore_DataDump ("received bytes", buffer, numBytes);
 
             if (udpCb != NULL)
@@ -186,7 +186,7 @@ bool lwm2mcore_UdpOpen
     SocketConfig.type = LWM2MCORE_SOCK_UDP;
     SocketConfig.proto = OS_SOCK_PROTO;
     SocketConfig.sock = createSocket (localPortPtr, SocketConfig);
-    LE_INFO ("sock %d", SocketConfig.sock);
+    LE_DEBUG ("sock %d", SocketConfig.sock);
     memcpy (configPtr, &SocketConfig, sizeof (lwm2mcore_SocketConfig_t));
 
     if (SocketConfig.sock < 0)
@@ -207,7 +207,7 @@ bool lwm2mcore_UdpOpen
         }
     }
 
-    LE_INFO ("lwm2mcore_UdpOpen %d", result);
+    LE_DEBUG ("lwm2mcore_UdpOpen %d", result);
     return result;
 }
 
@@ -232,13 +232,13 @@ bool lwm2mcore_UdpClose
     int rc = 0;
 
     rc = close (config.sock);
-    LE_INFO ("close sock %d -> %d", config.sock, rc);
+    LE_DEBUG ("close sock %d -> %d", config.sock, rc);
     if (rc == 0)
 {
         result = true;
     }
 
-    LE_INFO ("lwm2mcore_UdpClose %d", result);
+    LE_DEBUG ("lwm2mcore_UdpClose %d", result);
     return result;
 }
 

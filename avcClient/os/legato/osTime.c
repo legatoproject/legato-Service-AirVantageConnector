@@ -16,7 +16,7 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Function to retreive the device time
+ * Function to retrieve the device time
  *
  * @return
  *      - device time (UNIX time: seconds since January 01, 1970)
@@ -32,14 +32,14 @@ time_t lwm2m_gettime
     struct timeval tv;
 
     res = le_rtc_GetUserTime (&millisecondsPastGpsEpoch);
-    LE_INFO ("lwm2m_gettime le_rtc_GetUserTime res %d, millisecondsPastGpsEpoch %d",
+    LE_DEBUG ("lwm2m_gettime le_rtc_GetUserTime res %d, millisecondsPastGpsEpoch %d",
             res, millisecondsPastGpsEpoch);
 
     if (0 != gettimeofday(&tv, NULL))
     {
         return -1;
     }
-    LE_INFO ("tv.tv_sec %d", tv.tv_sec);
+    LE_DEBUG ("tv.tv_sec %d", tv.tv_sec);
 
     return tv.tv_sec;
 }

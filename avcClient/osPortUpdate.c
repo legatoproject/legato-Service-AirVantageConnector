@@ -221,7 +221,7 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
         || (LWM2MCORE_PACKAGE_URI_MAX_LEN < len)
         || (LWM2MCORE_MAX_UPDATE_TYPE <= type))
     {
-        LE_INFO("lwm2mcore_UpdateSetPackageUri: bad parameter");
+        LE_ERROR("lwm2mcore_UpdateSetPackageUri: bad parameter");
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
@@ -616,7 +616,7 @@ lwm2mcore_Sid_t lwm2mcore_SetSwUpdateSupportedObjects
     bool value                      ///< [IN] Update supported objects field value
 )
 {
-    LE_INFO("lwm2mcore_UpdateSetSwSupportedObjects oiid %d, value %d", instanceId, value);
+    LE_DEBUG("lwm2mcore_UpdateSetSwSupportedObjects oiid %d, value %d", instanceId, value);
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
@@ -647,7 +647,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSwUpdateSupportedObjects
     else
     {
         *valuePtr = true;
-        LE_INFO("lwm2mcore_UpdateGetSwSupportedObjects, oiid %d, value %d", instanceId, *valuePtr);
+        LE_DEBUG("lwm2mcore_UpdateGetSwSupportedObjects, oiid %d, value %d", instanceId, *valuePtr);
         return LWM2MCORE_ERR_COMPLETED_OK;
     }
 }
@@ -959,8 +959,6 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     bool downloadResume = false;
     memset(downloadUri, 0, uriLen);
 
-    LE_INFO("lwm2mcore_ResumePackageDownload");
-
     // Check if an update package URI is stored
     if (LE_OK != packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
     {
@@ -983,9 +981,8 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     {
         downloadResume = true;
     }
+
     LE_INFO("downloadResume %d", downloadResume);
-
-
 
     // Call API to launch the package download
     if (LE_OK != packageDownloader_StartDownload(downloadUri, updateType, downloadResume))
