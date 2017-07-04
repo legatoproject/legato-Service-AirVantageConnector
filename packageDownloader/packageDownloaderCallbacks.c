@@ -70,6 +70,13 @@ Package_t;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * HTTP response code
+ */
+//--------------------------------------------------------------------------------------------------
+static long HttpRespCode = LE_AVC_HTTP_STATUS_INVALID;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Dummy write callback
  */
 //--------------------------------------------------------------------------------------------------
@@ -96,10 +103,15 @@ static size_t Write
     void*   contentsPtr,
     size_t  size,
     size_t  nmemb,
-    void*   streamPtr
+    void*   contextPtr
 )
 {
     size_t count = size * nmemb;
+    lwm2mcore_DwlResult_t *result;
+
+
+    result = (lwm2mcore_DwlResult_t *)contextPtr;
+    *result = DWL_FAULT;
 
     // Check if the download should be aborted
     if (true == packageDownloader_CurrentDownloadToAbort())
@@ -112,6 +124,7 @@ static size_t Write
     if (true == packageDownloader_CheckDownloadToSuspend())
     {
         LE_ERROR("Download suspended");
+        *result = DWL_OK;
         return 0;
     }
 
@@ -120,6 +133,11 @@ static size_t Write
     {
         LE_ERROR("Data processing stopped by DWL parser");
         return 0;
+    }
+
+    if (count)
+    {
+        *result = DWL_OK;
     }
 
     return count;
@@ -207,6 +225,23 @@ static int GetDownloadInfo
     memcpy(pkgInfoPtr->curlVersion, curl_version(), BUF_SIZE);
 
     return 0;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get package download HTTP response code
+ *
+ * @return
+ *      - HTTP response code            The function succeded
+ *      - LE_AVC_HTTP_STATUS_INVALID    The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+uint16_t pkgDwlCb_GetHttpStatus
+(
+    void
+)
+{
+    return (uint16_t)HttpRespCode;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -430,12 +465,14 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
     Package_t* pkgPtr;
     CURLcode rc;
+    static lwm2mcore_DwlResult_t result;
 
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)ctxPtr;
     pkgPtr = (Package_t*)dwlCtxPtr->ctxPtr;
 
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOBODY, 0L);
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, Write);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEDATA, (void *)&result);
 
     // Start download at offset given by startOffset
     if (startOffset)
@@ -452,28 +489,18 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
     }
 
     rc = curl_easy_perform(pkgPtr->curlPtr);
-
-    if (true == packageDownloader_CurrentDownloadToAbort())
-    {
-        // Download is aborted: stop the parser by returning a download error
-        return DWL_FAULT;
-    }
-
-    if (true == packageDownloader_CheckDownloadToSuspend())
-    {
-        // Download is suspended
-        return DWL_OK;
-    }
-
-    if (   (CURLE_OK != rc)
-        && (CURLE_WRITE_ERROR != rc)    // Expected when parsing aborted the download
-       )
+    if (CURLE_OK != rc)
     {
         LE_ERROR("curl_easy_perform failed: %s", curl_easy_strerror(rc));
-        return DWL_FAULT;
     }
 
-    return DWL_OK;
+    rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_RESPONSE_CODE, &HttpRespCode);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("failed to get response code: %s", curl_easy_strerror(rc));
+    }
+
+    return result;
 }
 
 //--------------------------------------------------------------------------------------------------

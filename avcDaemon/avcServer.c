@@ -19,6 +19,7 @@
 #include "le_print.h"
 #include "avcAppUpdate.h"
 #include "packageDownloader.h"
+#include "packageDownloaderCallbacks.h"
 
 //--------------------------------------------------------------------------------------------------
 // Definitions
@@ -2410,7 +2411,7 @@ uint16_t le_avc_GetHttpStatus
     void
 )
 {
-    return LE_AVC_HTTP_STATUS_INVALID;
+    return pkgDwlCb_GetHttpStatus();
 }
 
 
