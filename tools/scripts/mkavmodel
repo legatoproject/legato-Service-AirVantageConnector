@@ -1,0 +1,101 @@
+#!/bin/bash
+copyright="
+Copyright (C) Sierra Wireless Inc.
+"
+
+. "$(dirname "${BASH_SOURCE[0]}")/shlib"
+
+help_short_desc="Create Legato application model"
+
+help_long_description=(
+"Generate legato application model used for AirVantage."
+""
+"Options:"
+" - -t [TARGET]: target the image should be generated for (ar7, ...)"
+" - -o [OUTPUT_DIR]: output directory where the model will be stored"
+" - -v [VERSION]: legato version"
+)
+
+CheckForHelp $@
+
+while getopts "t:o:v:" arg
+do
+    case $arg in
+    t)
+        TARGET=$OPTARG
+        ;;
+    o)
+        OUTPUT_DIR=$(readlink -f $OPTARG)
+        ;;
+    v)
+        VERSION=$OPTARG
+        ;;
+    ?)
+        echo "$0: invalid option -$OPTARG"
+        usage_and_exit 1
+        ;;
+    esac
+done
+
+if [ -z "$TARGET" ]; then
+    echo "Target (-t) not set"
+    exit 1
+fi
+
+if [ -z "$VERSION" ]; then
+    echo "Version (-v) not set"
+    exit 1
+fi
+
+# Function used to override the value of a field in a manifest
+SetManifestField()
+{
+    sed -i "0,/$2=\"/{s/$2=\"/$2=\"$3/}" "$1"
+}
+
+VerifyTarget()
+{
+    case $TARGET in
+        ar7 | ar86)
+            TARGETS=(AR7550 AR7552 AR7554 AR7558 AR8652)
+            ;;
+        ar758x)
+            TARGETS=(AR7584)
+            ;;
+        ar759x)
+            TARGETS=(AR7592 AR7594 AR7596 AR7598)
+            ;;
+        wp85 | wp750x)
+            TARGETS=(WP8548 WP7502 WP7504)
+            ;;
+        wp76xx)
+            TARGETS=(WP7601 WP7603)
+            ;;
+        em75xx)
+            TARGETS=()
+            ;;
+        ?)
+            echo "$0: invalid target $TARGET"
+            exit 0
+            ;;
+    esac
+}
+
+GenerateModel()
+{
+    VerifyTarget
+
+    for target in ${TARGETS[@]}; do
+        local dir="${OUTPUT_DIR}/bundles/${target}/legato"
+        mkdir -p "$dir"
+
+        cp -R apps/platformServices/airVantageConnector/models/* "$dir"
+
+        local legatoVersion=$(echo $VERSION | awk -F  '[-_]' '{print $1}')
+        SetManifestField "$dir/model.app" "type" "${target}_LE"
+        SetManifestField "$dir/model.app" "name" "${target}"
+        SetManifestField "$dir/model.app" "revision" "${legatoVersion}"
+    done
+}
+
+GenerateModel
