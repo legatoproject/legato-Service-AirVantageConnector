@@ -1777,12 +1777,21 @@ lwm2mcore_Sid_t lwm2mcore_GetSmsTxCount
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )
 {
+    uint32_t smsTxCount;
+
     if (!valuePtr)
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+    if (LE_OK == le_sms_GetCount(LE_SMS_TYPE_TX, &smsTxCount))
+    {
+        *valuePtr = smsTxCount;
+        return LWM2MCORE_ERR_COMPLETED_OK;
+    }
+
+    *valuePtr = 0;
+    return LWM2MCORE_ERR_GENERAL_ERROR;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1806,12 +1815,21 @@ lwm2mcore_Sid_t lwm2mcore_GetSmsRxCount
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )
 {
+    uint32_t smsRxCount;
+
     if (!valuePtr)
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+    if (LE_OK == le_sms_GetCount(LE_SMS_TYPE_RX, &smsRxCount))
+    {
+        *valuePtr = smsRxCount;
+        return LWM2MCORE_ERR_COMPLETED_OK;
+    }
+
+    *valuePtr = 0;
+    return LWM2MCORE_ERR_GENERAL_ERROR;
 }
 
 //--------------------------------------------------------------------------------------------------
