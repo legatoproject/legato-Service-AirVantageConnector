@@ -2942,7 +2942,7 @@ static void StartPollingTimer
             // timer runs to the end.
             // In both cases set timeElapsed to 0 which effectively start the polling timer fresh.
             #define SECONDS_IN_A_MIN 60
-            if ((timeElapsed < 0) || (timeElapsed > (pollingTimer * SECONDS_IN_A_MIN)))
+            if ((timeElapsed < 0) || (timeElapsed >= (pollingTimer * SECONDS_IN_A_MIN)))
             {
                 timeElapsed = 0;
 
@@ -2966,6 +2966,8 @@ static void StartPollingTimer
         LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
         LE_ASSERT(LE_OK == le_timer_SetHandler(PollingTimerRef, StartPollingTimer));
         LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
+
+        le_cfg_CommitTxn(iterRef);
     }
 }
 
