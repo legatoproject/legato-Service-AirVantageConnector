@@ -16,6 +16,7 @@
 
 #include "legato.h"
 #include "interfaces.h"
+#include "avcClient.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -111,7 +112,7 @@ static void BearerEventCb
     void* contextPtr    ///< [IN] User data
 )
 {
-    LE_INFO( "connected %d", connected);
+    LE_INFO("connected %d", connected);
     if (connected)
     {
         char endpointPtr[LWM2MCORE_ENDPOINT_LEN];
@@ -153,7 +154,7 @@ static void BearerEventCb
             // active
             if (true == lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
             {
-                avcClient_Disconnect();
+                avcClient_Disconnect(false);
             }
         }
     }
@@ -499,6 +500,8 @@ le_result_t avcClient_Connect
 {
     if (SessionStarted)
     {
+        LE_INFO("Session already started.");
+
         // No need to start a retry timer. Perform reset/cleanup.
         ResetRetryTimers();
 
@@ -567,6 +570,9 @@ le_result_t avcClient_Connect
         // Start the next retry timer.
         else
         {
+            LE_INFO("Starting retry timer of %d min at index %d",
+                    RetryTimers[RetryTimersIndex], RetryTimersIndex);
+
             le_clk_Time_t interval = {RetryTimers[RetryTimersIndex] * 60, 0};
 
             LE_ASSERT(LE_OK == le_timer_SetInterval(RetryTimerRef, interval));
@@ -589,7 +595,7 @@ le_result_t avcClient_Connect
 //--------------------------------------------------------------------------------------------------
 le_result_t avcClient_Disconnect
 (
-    void
+    bool resetRetry  ///< [IN] if true, reset the retry timers
 )
 {
     LE_DEBUG("Disconnect");
@@ -605,7 +611,10 @@ le_result_t avcClient_Disconnect
 
     StopBearer();
 
-    ResetRetryTimers();
+    if (true == resetRetry)
+    {
+        ResetRetryTimers();
+    }
 
     return result;
 }
@@ -743,7 +752,7 @@ void BsFailureHandler
     void* reportPtr
 )
 {
-    avcClient_Disconnect();
+    avcClient_Disconnect(true);
 }
 
 //--------------------------------------------------------------------------------------------------

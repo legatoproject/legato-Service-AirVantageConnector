@@ -10,6 +10,7 @@
  */
 
 #include <lwm2mcore/lwm2mcore.h>
+#include <avcClient.h>
 #include "legato.h"
 #include "interfaces.h"
 #include "pa_avc.h"
@@ -1632,7 +1633,7 @@ le_result_t avcServer_ReleaseSession
     else
     {
         LE_DEBUG("Releasing session opened by user app.");
-        result = avcClient_Disconnect();
+        result = avcClient_Disconnect(true);
     }
 
     return result;
@@ -1902,7 +1903,7 @@ le_result_t le_avc_StopSession
     void
 )
 {
-    return avcClient_Disconnect();
+    return avcClient_Disconnect(true);
 }
 
 //--------------------------------------------------------------------------------------------------
