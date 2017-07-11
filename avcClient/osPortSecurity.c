@@ -154,7 +154,6 @@ lwm2mcore_Sid_t lwm2mcore_SetCredential
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Function to check if one credential is present in platform storage.

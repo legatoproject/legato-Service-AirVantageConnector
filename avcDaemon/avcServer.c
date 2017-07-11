@@ -11,6 +11,7 @@
 
 #include <lwm2mcore/lwm2mcore.h>
 #include <avcClient.h>
+#include <lwm2mcore/security.h>
 #include "legato.h"
 #include "interfaces.h"
 #include "pa_avc.h"
@@ -2434,6 +2435,44 @@ le_avc_SessionType_t le_avc_GetSessionType
     return avcClient_GetSessionType();
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to retrieve status of the credentials provisioned on the device.
+ *
+ * @return
+ *     LE_AVC_NO_CREDENTIAL_PROVISIONED
+ *          - If neither Bootstrap nor Device Management credential is provisioned.
+ *     LE_AVC_BS_CREDENTIAL_PROVISIONED
+ *          - If Bootstrap credential is provisioned but Device Management credential is
+              not provisioned.
+ *     LE_AVC_DM_CREDENTIAL_PROVISIONED
+ *          - If Device Management credential is provisioned.
+ */
+//--------------------------------------------------------------------------------------------------
+le_avc_CredentialStatus_t le_avc_GetCredentialStatus
+(
+    void
+)
+{
+    le_avc_CredentialStatus_t credStatus;
+    lwm2mcore_CredentialStatus_t lwm2mcoreStatus = lwm2mcore_GetCredentialStatus();
+
+    // Convert lwm2mcore credential status to avc credential status
+    switch (lwm2mcoreStatus)
+    {
+        case LWM2MCORE_DM_CREDENTIAL_PROVISIONED:
+            credStatus = LE_AVC_DM_CREDENTIAL_PROVISIONED;
+            break;
+        case LWM2MCORE_BS_CREDENTIAL_PROVISIONED:
+            credStatus = LE_AVC_BS_CREDENTIAL_PROVISIONED;
+            break;
+        default:
+            credStatus = LE_AVC_NO_CREDENTIAL_PROVISIONED;
+            break;
+    }
+
+    return credStatus;
+}
 
 //--------------------------------------------------------------------------------------------------
 /**
