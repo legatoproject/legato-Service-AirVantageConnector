@@ -1101,13 +1101,17 @@ static void UpdateProgressHandler
                                     percentDone,
                                     avcErrorCode);
 
+            // Now end the update and set the UpdateStarted flag false before calling SetObj9State()
+            // function (otherwise, SetObj9State() may call le_update_End() again if it notices
+            // installation failure).
+            UpdateStarted = false;
+            le_update_End();
+
             SetObj9State(CurrentObj9,
                          LWM2MCORE_SW_UPDATE_STATE_INITIAL,
                          LWM2MCORE_SW_UPDATE_RESULT_INSTALL_FAILURE);
 
             CurrentObj9 = NULL;
-            UpdateStarted = false;
-            le_update_End();
         break;
 
         default:
