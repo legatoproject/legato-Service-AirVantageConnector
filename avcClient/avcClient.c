@@ -60,6 +60,7 @@ static le_event_Id_t BsFailureEventId;
 //--------------------------------------------------------------------------------------------------
 static bool SessionStarted = false;
 
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Retry timers related data. RetryTimersIndex is index to the array of RetryTimers.
@@ -70,6 +71,7 @@ static bool SessionStarted = false;
 static le_timer_Ref_t RetryTimerRef = NULL;
 static int RetryTimersIndex = -1;
 static uint16_t RetryTimers[LE_AVC_NUM_RETRY_TIMERS] = {0};
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -128,30 +130,27 @@ static void BearerEventCb
         if (LE_OK != le_info_GetImei((char*)endpointPtr, (uint32_t) LWM2MCORE_ENDPOINT_LEN))
         {
             LE_ERROR("Error to retrieve the device IMEI");
+            return;
         }
-        else
+
+        // Register to the LWM2M agent
+        if (!lwm2mcore_ObjectRegister(Lwm2mInstanceRef, endpointPtr, NULL, NULL))
         {
-            /* Register to the LWM2M agent */
-            if (!lwm2mcore_ObjectRegister(Lwm2mInstanceRef, endpointPtr, NULL, NULL))
-            {
-                LE_ERROR("ERROR in LWM2M obj reg");
-            }
-            else
-            {
-                result = lwm2mcore_Connect(Lwm2mInstanceRef);
-                if (result != true)
-                {
-                    LE_ERROR("connect error");
-                }
-            }
+            LE_ERROR("ERROR in LWM2M obj reg");
+            return;
+        }
+
+        result = lwm2mcore_Connect(Lwm2mInstanceRef);
+        if (result != true)
+        {
+            LE_ERROR("connect error");
         }
     }
     else
     {
         if (NULL != Lwm2mInstanceRef)
         {
-            // If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is
-            // active
+            // If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active
             if (true == lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
             {
                 avcClient_Disconnect(false);
@@ -457,6 +456,7 @@ static void StartBearer
     LE_ASSERT(NULL != DataRef);
 }
 
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Stop the bearer - undo what StartBearer does
@@ -469,12 +469,14 @@ static void StopBearer
 {
     if (NULL != Lwm2mInstanceRef)
     {
-        /* Close the data connection */
-        le_data_Release(DataRef);
-
-        /* Remove the data handler */
-        le_data_RemoveConnectionStateHandler(DataHandler);
-
+        if (DataRef)
+        {
+            /* Close the data connection */
+            le_data_Release(DataRef);
+            /* Remove the data handler */
+            le_data_RemoveConnectionStateHandler(DataHandler);
+            DataRef = NULL;
+        }
         /* The data connection is closed */
         lwm2mcore_Free(Lwm2mInstanceRef);
         Lwm2mInstanceRef = NULL;

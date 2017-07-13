@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <netdb.h>
+#include <resolv.h>
 #include <lwm2mcore/lwm2mcore.h>
 #include <lwm2mcore/udp.h>
 #include "legato.h"
@@ -161,6 +162,116 @@ static int createSocket
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Resolve the server address name
+ *
+ * @return
+ *      - LE_OK     on success
+ *      - LE_FAULT  on failure
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t ResolveIpAddress
+(
+    char* urlStrPtr,    ///< [IN] Server name to resolve
+    char* ipStrPtr      ///< [IN] Resolved server IP address
+)
+{
+    int rc;
+    struct addrinfo* resultPtr;
+    struct addrinfo* nextPtr;
+    struct addrinfo hints;
+    struct sockaddr_in *serverPtr;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    rc = getaddrinfo(urlStrPtr, NULL, &hints, &resultPtr);
+    if (rc)
+    {
+        LE_ERROR("IP %s not resolved: %s", urlStrPtr,  gai_strerror(rc));
+        return LE_FAULT;
+    }
+
+    for (nextPtr = resultPtr; nextPtr != NULL; nextPtr = nextPtr->ai_next)
+    {
+        serverPtr = (struct sockaddr_in*) nextPtr->ai_addr;
+        strncpy(ipStrPtr, inet_ntoa(serverPtr->sin_addr), strlen(inet_ntoa(serverPtr->sin_addr)));
+        LE_DEBUG("Hostname IP Address %s", ipStrPtr);
+        freeaddrinfo(resultPtr);
+        return LE_OK;
+    }
+    LE_ERROR("IP %s not resolved", urlStrPtr);
+    return LE_FAULT;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Extract the server name to be resolved
+ *
+ * @return
+ *      - char*     server name to be resolved
+ */
+//--------------------------------------------------------------------------------------------------
+static char* ExtractServerName
+(
+    char* urlStrPtr     ///< [IN] Server URL to extract
+)
+{
+    // Check if protocol is present in the URL
+    char* urlTempPtr = strrchr(urlStrPtr, '/');
+    if(urlTempPtr)
+    {
+        urlStrPtr = urlTempPtr + 1;
+    }
+
+    // Check if port is present in the url
+    urlTempPtr = strchr(urlStrPtr, ':');
+    if (urlTempPtr)
+    {
+        // Stop URL string on ':' char
+        *urlTempPtr = '\0';
+    }
+    return urlStrPtr;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Resolve server IP address name
+ *
+ * @return
+ *      - LE_OK             on success
+ *      - LE_BAD_PARAMETER  NULL pointer provided
+ *      - LE_FAULT          on failure
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t ResolveServerIp
+(
+    char * urlStrPtr,   ///< [IN] Server URL to resolve
+    char * ipStrPtr     ///< [OUT] Resolved server IP address
+)
+{
+    le_result_t result;
+    char *serverNamePtr;
+
+    if ((NULL == urlStrPtr)
+     || (NULL == ipStrPtr) )
+    {
+        return LE_BAD_PARAMETER;
+    }
+
+    if (!strlen(urlStrPtr))
+    {
+        return LE_FAULT;
+    }
+
+    LE_DEBUG("Try to resolve %s", urlStrPtr);
+
+    // Resolve server address
+    return ResolveIpAddress(ExtractServerName(urlStrPtr), ipStrPtr);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Open a socket to the server
  * This function is called by the LWM2MCore and must be adapted to the platform
  * The aim of this function is to create a socket and fill the configPtr structure
@@ -233,8 +344,8 @@ bool lwm2mcore_UdpClose
 
     rc = close (config.sock);
     LE_DEBUG ("close sock %d -> %d", config.sock, rc);
-    if (rc == 0)
-{
+    if (0 == rc)
+    {
         result = true;
     }
 
@@ -265,5 +376,85 @@ ssize_t lwm2mcore_UdpSend
 )
 {
     return sendto(sockfd, bufferPtr, length, flags, dest_addrPtr, addrlen);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Connect a socket
+ * This function is called by the LWM2MCore and must be adapted to the platform
+ * The aim of this function is to send data on a socket
+ *
+ * @return
+ *      - true  on success
+ *      - false on error
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+bool lwm2mcore_UdpConnect
+(
+    char* serverAddressPtr,             ///< [IN] Server address URL
+    char* hostPtr,                      ///< [IN] Host
+    char* portPtr,                      ///< [IN] Port
+    int addressFamily,                  ///< [IN] Address familly
+    struct sockaddr* saPtr,             ///< [IN] Socket address pointer
+    socklen_t* slPtr,                   ///< [IN] Socket address length
+    int* sockPtr                        ///< [IN] socket file descriptor
+)
+{
+    char ipAddressStr[LE_MDC_IPV6_ADDR_MAX_BYTES] = {0};
+    le_result_t res;
+
+    // Resolve the server address
+    res = ResolveServerIp(serverAddressPtr, ipAddressStr);
+    if (LE_OK == res)
+    {
+        struct addrinfo hints;
+        struct addrinfo* servinfoPtr = NULL;
+        struct addrinfo* p;
+        int sockfd;
+
+        // Add the route if the default route is not set by the data connection service
+        if (!le_data_GetDefaultRouteStatus())
+        {
+            LE_INFO("Add route %s", ipAddressStr);
+            res = le_data_AddRoute(ipAddressStr);
+            LE_ERROR_IF((LE_OK != res), "Not able to add the route (%s)", LE_RESULT_TXT(res));
+        }
+
+        // connect
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = addressFamily;
+        hints.ai_socktype = SOCK_DGRAM;
+
+        if ((0 != getaddrinfo(hostPtr, portPtr, &hints, &servinfoPtr)) || (servinfoPtr == NULL))
+        {
+            return false;
+        }
+
+        // we test the various addresses
+        sockfd = -1;
+        for(p = servinfoPtr; (p != NULL) && (sockfd == -1); p = p->ai_next)
+        {
+            sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+            LE_INFO("sockfd %d", sockfd);
+            if (sockfd >= 0)
+            {
+                *slPtr = p->ai_addrlen;
+                memcpy(saPtr, p->ai_addr, p->ai_addrlen);
+                if (-1 == connect(sockfd, p->ai_addr, p->ai_addrlen))
+                {
+                    close(sockfd);
+                    sockfd = -1;
+                }
+            }
+        }
+        *sockPtr = sockfd;
+        if (NULL != servinfoPtr)
+        {
+            freeaddrinfo(servinfoPtr);
+        }
+        return true;
+    }
+    return false;
 }
 

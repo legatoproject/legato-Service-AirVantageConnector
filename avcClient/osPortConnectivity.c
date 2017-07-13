@@ -1246,6 +1246,7 @@ lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
     int cellularTechLen;
     le_mdc_DataBearerTechnology_t uplinkTech;
     le_mdc_DataBearerTechnology_t downlinkTech;
+    uint32_t profileIndex;
 
     if ((!bufferPtr) || (!lenPtr))
     {
@@ -1254,7 +1255,8 @@ lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
 
     memset(cellularTech, 0, sizeof(cellularTech));
 
-    result = le_mdc_GetDataBearerTechnology(le_mdc_GetProfile(LE_MDC_DEFAULT_PROFILE),
+    profileIndex = le_data_GetCellularProfileIndex();
+    result = le_mdc_GetDataBearerTechnology(le_mdc_GetProfile((uint32_t) profileIndex),
                                             &downlinkTech,
                                             &uplinkTech);
     if (LE_OK != result)

@@ -20,6 +20,7 @@
 #include <lwm2mcore/security.h>
 #include <legato.h>
 #include <interfaces.h>
+#include <avcClient.h>
 #include <avcFsConfig.h>
 #include <avcFs.h>
 #include <sslUtilities.h>
@@ -82,7 +83,6 @@ lwm2mcore_Sid_t lwm2mcore_GetCredential
 {
     if ((bufferPtr == NULL) || (lenPtr == NULL) || (credId >= LWM2MCORE_CREDENTIAL_MAX))
     {
-        LE_ERROR("Bad parameter bufferPtr[%p] lenPtr[%p] credId[%u]", bufferPtr, lenPtr, credId);
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
@@ -96,12 +96,12 @@ lwm2mcore_Sid_t lwm2mcore_GetCredential
     le_result_t result = secStoreGlobal_Read(credsPathStr, (uint8_t*)bufferPtr, lenPtr);
     if (LE_OK != result)
     {
-        LE_ERROR("Unable to retrieve credentials for %d [%s]: %d %s",
-                 credId, CredentialLocations[credId], result, LE_RESULT_TXT(result));
+        LE_ERROR("Unable to retrieve credentials for %d: %d %s",
+                 credId, result, LE_RESULT_TXT(result));
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    LE_DEBUG("credId %d [%s], len %zu", credId, CredentialLocations[credId], *lenPtr);
+    LE_DEBUG("credId %d, len %zu", credId, *lenPtr);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
@@ -130,7 +130,6 @@ lwm2mcore_Sid_t lwm2mcore_SetCredential
 {
     if ((bufferPtr == NULL) || (credId >= LWM2MCORE_CREDENTIAL_MAX))
     {
-        LE_ERROR("Bad parameter bufferPtr[%p] len[%d] credId[%u]", bufferPtr, len, credId);
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
@@ -145,11 +144,11 @@ lwm2mcore_Sid_t lwm2mcore_SetCredential
     le_result_t result = secStoreGlobal_Write(credsPathStr, (uint8_t*)bufferPtr, len);
     if (LE_OK != result)
     {
-        LE_ERROR("Unable to write credentials for %d [%s]", credId, CredentialLocations[credId]);
+        LE_ERROR("Unable to write credentials for %d", credId);
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    LE_DEBUG("credId %d [%s], len %zu", credId, CredentialLocations[credId], len);
+    LE_DEBUG("credId %d, len %zu", credId, len);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
@@ -220,13 +219,12 @@ bool lwm2mcore_DeleteCredential
     le_result_t result = secStoreGlobal_Delete(credsPathStr);
     if ((LE_OK != result) && (LE_NOT_FOUND != result))
     {
-        LE_ERROR("Unable to delete credentials for %d [%s]: %d %s",
-                 credId, CredentialLocations[credId],
-                 result, LE_RESULT_TXT(result));
+        LE_ERROR("Unable to delete credentials for %d: %d %s",
+                 credId, result, LE_RESULT_TXT(result));
         return LE_FAULT;
     }
 
-    LE_DEBUG("credId %d [%s] deleted", credId, CredentialLocations[credId]);
+    LE_DEBUG("credId %d deleted", credId);
 
     return LE_OK;
 }

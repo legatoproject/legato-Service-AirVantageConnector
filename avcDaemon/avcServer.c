@@ -2859,7 +2859,6 @@ le_result_t le_avc_SetPollingTimer
     return LE_OK;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Receive the report from avcAppUpdate and pass it to the control APP
