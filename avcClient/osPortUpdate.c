@@ -479,6 +479,10 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdateResult
                                                     (lwm2mcore_FwUpdateResult_t*)updateResultPtr))
             {
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
+                // After device reboot on firmware update, firmware update notification flag is set
+                // to true to notify control app that a connection to server is required to inform
+                // the firmware update result. Now set this flag to false as request from server to
+                // read firmware update result succeeds.
                 packageDownloader_SetFwUpdateNotification(false);
                 LE_DEBUG("updateResult : %d", *updateResultPtr);
             }

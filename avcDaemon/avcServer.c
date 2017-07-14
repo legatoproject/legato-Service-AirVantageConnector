@@ -18,6 +18,7 @@
 #include "avcServer.h"
 #include "avData.h"
 #include "push.h"
+#include "fsSys.h"
 #include "le_print.h"
 #include "avcAppUpdate.h"
 #include "packageDownloader.h"
@@ -2945,6 +2946,31 @@ static void SetDefaultAVMSConfig
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Checks whether a FOTA installation is going on or not.
+ *
+ * @return
+ *     - True if FOTA installation is going on.
+ *     - False otherwise.
+ */
+//--------------------------------------------------------------------------------------------------
+static bool IsFotaInstalling
+(
+    void
+)
+{
+    lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
+    lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
+
+    // Check if a FW update was ongoing
+    return    (LE_OK == packageDownloader_GetFwUpdateState(&fwUpdateState))
+           && (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
+           && (LWM2MCORE_FW_UPDATE_STATE_UPDATING == fwUpdateState)
+           && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult);
+
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Check a initialization if a notification needs to be sent to the application
  */
 //--------------------------------------------------------------------------------------------------
@@ -2953,6 +2979,26 @@ static void CheckNotificationAtStartup
     void
 )
 {
+    if (fsSys_IsNewSys())
+    {
+        LE_INFO("New system installed. Removing old SOTA/FOTA resume info");
+        // New system installed, all old(SOTA or FOTA) resume info are invalid. Delete them.
+        packageDownloader_DeleteResumeInfo();
+        // Delete SOTA states and unfinished package if there exists any
+        avcApp_DeletePackage();
+        // For FOTA new firmware installation cause device reboot. In that case, FW update state and
+        // should be notified to server. In that case, don't delete FW update installation info.
+        // Otherwise delete all FW update info.
+        if (!IsFotaInstalling())
+        {
+            packageDownloader_DeleteFwUpdateInfo();
+        }
+        // Remove new system flag.
+        fsSys_RemoveNewSysFlag();
+
+        return;
+    }
+
     le_avc_Status_t updateStatus = LE_AVC_NO_UPDATE;
     bool isInstallRequest = false;
     lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
