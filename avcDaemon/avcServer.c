@@ -2548,10 +2548,10 @@ le_result_t le_avc_GetRetryTimers
     size_t* numTimers         ///< [IN/OUT] Max num of timers to get/num of timers retrieved
 )
 {
-    if (numTimers < LE_AVC_NUM_RETRY_TIMERS)
+    if (*numTimers < LE_AVC_NUM_RETRY_TIMERS)
     {
         LE_ERROR("Supplied retry timer array too small (%d). Expected %d.",
-                 numTimers, LE_AVC_NUM_RETRY_TIMERS);
+                 *numTimers, LE_AVC_NUM_RETRY_TIMERS);
         return LE_FAULT;
     }
 
@@ -2770,7 +2770,7 @@ static void SetDefaultAVMSConfig
     // dummy variables used to see if there are any current configs present
     uint32_t pollingTimerCurr = 0;
     uint16_t retryTimersCurr[LE_AVC_NUM_RETRY_TIMERS] = {0};
-    size_t numTimersCurr = 0;
+    size_t numTimersCurr = LE_AVC_NUM_RETRY_TIMERS;
 
     if (LE_FAULT == le_avc_GetPollingTimer(&pollingTimerCurr))
     {
