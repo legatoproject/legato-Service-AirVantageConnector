@@ -64,6 +64,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Number of seconds in a minute
+ */
+//--------------------------------------------------------------------------------------------------
+#define SECONDS_IN_A_MIN 60
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Current internal state.
  *
  * Used mainly to ensure that API functions don't do anything if in the wrong state.
@@ -566,7 +573,7 @@ static le_result_t AcceptDownloadPackage
         CurrentState = AVC_IDLE;
 
         // Try the install later
-        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME*60 };
+        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
 
         le_timer_SetInterval(DownloadDeferTimer, interval);
         le_timer_Start(DownloadDeferTimer);
@@ -627,7 +634,7 @@ static le_result_t AcceptInstallPackage
         CurrentState = AVC_IDLE;
 
         // Try the install later
-        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME*60 };
+        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
 
         le_timer_SetInterval(InstallDeferTimer, interval);
         le_timer_Start(InstallDeferTimer);
@@ -989,7 +996,7 @@ static le_result_t QueryInstall
         LE_INFO("Automatically deferring install, while waiting for control app to register");
 
         // Try the install later
-        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME*60 };
+        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
 
         le_timer_SetInterval(InstallDeferTimer, interval);
         le_timer_Start(InstallDeferTimer);
@@ -1010,7 +1017,7 @@ static le_result_t QueryInstall
             LE_INFO("Automatically deferring install");
 
             // Try the install later
-            le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME*60 };
+            le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
 
             le_timer_SetInterval(InstallDeferTimer, interval);
             le_timer_Start(InstallDeferTimer);
@@ -1053,7 +1060,7 @@ static le_result_t QueryDownload
         CurrentState = AVC_IDLE;
 
         // Try the download later
-        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME*60 };
+        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
 
         le_timer_SetInterval(DownloadDeferTimer, interval);
         le_timer_Start(DownloadDeferTimer);
@@ -1076,7 +1083,7 @@ static le_result_t QueryDownload
             CurrentState = AVC_IDLE;
 
             // Try the download later
-            le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME*60 };
+            le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
 
             le_timer_SetInterval(DownloadDeferTimer, interval);
             le_timer_Start(DownloadDeferTimer);
@@ -1116,7 +1123,7 @@ static le_result_t QueryUninstall
         LE_INFO("Automatically deferring uninstall, while waiting for control app to register");
 
         // Try the uninstall later
-        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME*60 };
+        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
 
         le_timer_SetInterval(UninstallDeferTimer, interval);
         le_timer_Start(UninstallDeferTimer);
@@ -1137,7 +1144,7 @@ static le_result_t QueryUninstall
             LE_INFO("Automatically deferring uninstall");
 
             // Try the uninstall later
-            le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME*60 };
+            le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
 
             le_timer_SetInterval(UninstallDeferTimer, interval);
             le_timer_Start(UninstallDeferTimer);
@@ -1176,7 +1183,7 @@ static le_result_t QueryReboot
         LE_INFO("Automatically deferring reboot, while waiting for control app to register");
 
         // Try the reboot later
-        le_clk_Time_t interval = {.sec = BLOCKED_DEFER_TIME*60};
+        le_clk_Time_t interval = {.sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
 
         le_timer_SetInterval(RebootDeferTimer, interval);
         le_timer_Start(RebootDeferTimer);
@@ -1342,6 +1349,92 @@ static le_avc_UpdateType_t ConvertToAvcType
     else
     {
         return LE_AVC_UNKNOWN_UPDATE;
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+/**
+ * Start an AVC session periodically according the polling timer config.
+ */
+//-------------------------------------------------------------------------------------------------
+static void StartPollingTimer
+(
+    void
+)
+{
+    // Polling timer, in minutes.
+    uint32_t pollingTimer = 0;
+
+    // Since SetDefaultAVMSConfig() has already been called prior to StartPollingTimer(),
+    // GetPollingTimer must return LE_OK.
+    LE_ASSERT(LE_OK == le_avc_GetPollingTimer(&pollingTimer));
+
+    if (0 == pollingTimer)
+    {
+        LE_INFO("Polling Timer disabled. AVC session will not be started periodically.");
+
+        le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
+        le_cfg_DeleteNode(iterRef, "pollingTimerSavedTimeSinceEpoch");
+        le_cfg_CommitTxn(iterRef);
+    }
+    else
+    {
+        // Remaining polling timer, in seconds.
+        uint32_t remainingPollingTimer = 0;
+        // Current time, in seconds since Epoch.
+        time_t currentTime = time(NULL);
+        // Time elapsed since last poll
+        time_t timeElapsed = 0;
+
+        le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
+
+        // This is the first time ever, since no saved time can be found.
+        if (le_cfg_IsEmpty(iterRef, "pollingTimerSavedTimeSinceEpoch"))
+        {
+            // Save the current time.
+            le_cfg_SetInt(iterRef, "pollingTimerSavedTimeSinceEpoch", currentTime);
+            // Start a session.
+            avcClient_Connect();
+        }
+        else
+        {
+            timeElapsed = currentTime - le_cfg_GetInt(iterRef,
+                                                      "pollingTimerSavedTimeSinceEpoch", 0);
+
+            // If time difference is negative, maybe the system time was altered.
+            // If the time difference exceeds the polling timer, then that means the current polling
+            // timer runs to the end.
+            // In both cases set timeElapsed to 0 which effectively start the polling timer fresh.
+            if ((timeElapsed < 0) || (timeElapsed >= (pollingTimer * SECONDS_IN_A_MIN)))
+            {
+                timeElapsed = 0;
+
+                // Save the current time.
+                le_cfg_SetInt(iterRef, "pollingTimerSavedTimeSinceEpoch", currentTime);
+                // Start a session.
+                avcClient_Connect();
+            }
+        }
+
+        remainingPollingTimer = (pollingTimer * SECONDS_IN_A_MIN) - timeElapsed;
+
+        LE_INFO("Polling Timer is set to start AVC session every %d minutes.", pollingTimer);
+        LE_INFO("The current Polling Timer will start a session in %d minutes.",
+                remainingPollingTimer/SECONDS_IN_A_MIN);
+
+        // Set a timer to start the next session.
+        le_clk_Time_t interval = {remainingPollingTimer, 0};
+
+        if (NULL == PollingTimerRef)
+        {
+            PollingTimerRef = le_timer_Create("PollingTimer");
+        }
+
+        LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
+        LE_ASSERT(LE_OK == le_timer_SetHandler(PollingTimerRef, StartPollingTimer));
+        LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
+
+        le_cfg_CommitTxn(iterRef);
     }
 }
 
@@ -1978,7 +2071,7 @@ le_result_t DeferDownload
     CurrentState = AVC_IDLE;
 
     // Try the download later
-    le_clk_Time_t interval = { .sec = (deferMinutes*60) };
+    le_clk_Time_t interval = { .sec = (deferMinutes * SECONDS_IN_A_MIN) };
 
     le_timer_SetInterval(DownloadDeferTimer, interval);
     le_timer_Start(DownloadDeferTimer);
@@ -2030,7 +2123,7 @@ static le_result_t AcceptUninstallApplication
         CurrentState = AVC_IDLE;
 
         // Try the install later
-        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME*60 };
+        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
 
         le_timer_SetInterval(UninstallDeferTimer, interval);
         le_timer_Start(UninstallDeferTimer);
@@ -2121,7 +2214,7 @@ le_result_t DeferInstall
     else if ( CurrentUpdateType == LE_AVC_APPLICATION_UPDATE )
     {
         // Try the install later
-        le_clk_Time_t interval = { .sec = (deferMinutes*60) };
+        le_clk_Time_t interval = { .sec = (deferMinutes * SECONDS_IN_A_MIN) };
 
         le_timer_SetInterval(InstallDeferTimer, interval);
         le_timer_Start(InstallDeferTimer);
@@ -2201,7 +2294,7 @@ le_result_t le_avc_DeferUninstall
     LE_DEBUG("Deferring Uninstall for %d minute.", deferMinutes);
 
     // Try the uninstall later
-    le_clk_Time_t interval = { .sec = (deferMinutes*60) };
+    le_clk_Time_t interval = { .sec = (deferMinutes * SECONDS_IN_A_MIN) };
 
     le_timer_SetInterval(UninstallDeferTimer, interval);
     le_timer_Start(UninstallDeferTimer);
@@ -2261,7 +2354,7 @@ le_result_t le_avc_DeferReboot
     LE_DEBUG("Deferring reboot for %d minute.", deferMinutes);
 
     // Try the reboot later
-    le_clk_Time_t interval = {.sec = (deferMinutes*60)};
+    le_clk_Time_t interval = {.sec = (deferMinutes * SECONDS_IN_A_MIN)};
 
     le_timer_SetInterval(RebootDeferTimer, interval);
     le_timer_Start(RebootDeferTimer);
@@ -2755,10 +2848,13 @@ le_result_t le_avc_SetPollingTimer
     }
 
     le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
-
     le_cfg_SetInt(iterRef, "pollingTimer", pollingTimer);
-
     le_cfg_CommitTxn(iterRef);
+
+    if (!le_timer_IsRunning(PollingTimerRef))
+    {
+        StartPollingTimer();
+    }
 
     return LE_OK;
 }
@@ -2930,85 +3026,6 @@ bool IsDownloadAccepted
 )
 {
     return DownloadAgreement;
-}
-
-//-------------------------------------------------------------------------------------------------
-/**
- * Start an AVC session periodically according the polling timer config.
- */
-//-------------------------------------------------------------------------------------------------
-static void StartPollingTimer
-(
-    void
-)
-{
-    // Polling timer, in minutes.
-    uint32_t pollingTimer = 0;
-
-    // Since SetDefaultAVMSConfig() has already been called prior to StartPollingTimer(),
-    // GetPollingTimer must return LE_OK.
-    LE_ASSERT(LE_OK == le_avc_GetPollingTimer(&pollingTimer));
-
-    if (0 == pollingTimer)
-    {
-        LE_INFO("Polling Timer disabled. AVC session will not be started periodically.");
-    }
-    else
-    {
-        // Remaining polling timer, in seconds.
-        uint32_t remainingPollingTimer = 0;
-        // Current time, in seconds since Epoch.
-        time_t currentTime = time(NULL);
-        // Time elapsed since last poll
-        time_t timeElapsed = 0;
-
-        le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
-
-        // This is the first time ever, since no saved time can be found.
-        if (le_cfg_IsEmpty(iterRef, "pollingTimerSavedTimeSinceEpoch"))
-        {
-            // Save the current time.
-            le_cfg_SetInt(iterRef, "pollingTimerSavedTimeSinceEpoch", currentTime);
-            // Start a session.
-            avcClient_Connect();
-        }
-        else
-        {
-            timeElapsed = currentTime - le_cfg_GetInt(iterRef,
-                                                      "pollingTimerSavedTimeSinceEpoch", 0);
-
-            // If time difference is negative, maybe the system time was altered.
-            // If the time difference exceeds the polling timer, then that means the current polling
-            // timer runs to the end.
-            // In both cases set timeElapsed to 0 which effectively start the polling timer fresh.
-            #define SECONDS_IN_A_MIN 60
-            if ((timeElapsed < 0) || (timeElapsed >= (pollingTimer * SECONDS_IN_A_MIN)))
-            {
-                timeElapsed = 0;
-
-                // Save the current time.
-                le_cfg_SetInt(iterRef, "pollingTimerSavedTimeSinceEpoch", currentTime);
-                // Start a session.
-                avcClient_Connect();
-            }
-        }
-
-        remainingPollingTimer = (pollingTimer * 60) - timeElapsed;
-
-        LE_INFO("Polling Timer is set to start AVC session every %d minutes.", pollingTimer);
-        LE_INFO("The current Polling Timer will start a session in %d minutes.",
-                remainingPollingTimer/60);
-
-        // Set a timer to start the next session.
-        le_clk_Time_t interval = {remainingPollingTimer, 0};
-        PollingTimerRef = le_timer_Create("PollingTimer");
-
-        LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
-        LE_ASSERT(LE_OK == le_timer_SetHandler(PollingTimerRef, StartPollingTimer));
-        LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
-
-        le_cfg_CommitTxn(iterRef);
-    }
 }
 
 //--------------------------------------------------------------------------------------------------
