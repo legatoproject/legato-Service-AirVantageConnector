@@ -85,11 +85,10 @@ typedef enum
     AVC_DOWNLOAD_IN_PROGRESS,    ///< Accepted download, and in progress
     AVC_INSTALL_PENDING,         ///< Received pending install; no response sent yet
     AVC_INSTALL_IN_PROGRESS,     ///< Accepted install, and in progress
-    AVC_UNINSTALL_PENDING,         ///< Received pending uninstall; no response sent yet
-    AVC_UNINSTALL_IN_PROGRESS      ///< Accepted uninstall, and in progress
+    AVC_UNINSTALL_PENDING,       ///< Received pending uninstall; no response sent yet
+    AVC_UNINSTALL_IN_PROGRESS    ///< Accepted uninstall, and in progress
 }
 AvcState_t;
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -98,7 +97,7 @@ AvcState_t;
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    uint32_t pkgSize;               ///< Package size.
+    uint32_t bytesToDownload;               ///< Package size.
 }
 PkgDownloadContext_t;
 
@@ -125,7 +124,6 @@ typedef struct
 }
 SwUninstallContext_t;
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Data associated with the UpdateStatusEvent
@@ -143,7 +141,6 @@ UpdateStatusData_t;
 //--------------------------------------------------------------------------------------------------
 // Data structures
 //--------------------------------------------------------------------------------------------------
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -170,7 +167,6 @@ static le_event_Id_t UpdateStatusEvent;
 //--------------------------------------------------------------------------------------------------
 static int32_t CurrentDownloadProgress = -1;
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Total number of bytes to download.
@@ -184,7 +180,6 @@ static int32_t CurrentTotalNumBytes = -1;
  */
 //--------------------------------------------------------------------------------------------------
 static bool DownloadAgreement = false;
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -328,7 +323,6 @@ static le_avc_ErrorCode_t AvcErrorCode = LE_AVC_ERR_NONE;
 //--------------------------------------------------------------------------------------------------
 static PkgDownloadContext_t PkgDownloadCtx;
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Current package install context
@@ -336,14 +330,12 @@ static PkgDownloadContext_t PkgDownloadCtx;
 //--------------------------------------------------------------------------------------------------
 static PkgInstallContext_t PkgInstallCtx;
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Current SW uninstall context
  */
 //--------------------------------------------------------------------------------------------------
 static SwUninstallContext_t SwUninstallCtx;
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -376,7 +368,7 @@ static char* AvcSessionStateToStr
         case LE_AVC_SESSION_STARTED:        result = "Session started";         break;
         case LE_AVC_SESSION_STOPPED:        result = "Session stopped";         break;
         case LE_AVC_REBOOT_PENDING:         result = "Reboot pending";          break;
-        case LE_AVC_CONNECTION_REQUIRED:    result = "Connection required";     break;
+        case LE_AVC_CONNECTION_PENDING:     result = "Connection pending";      break;
         case LE_AVC_AUTH_STARTED:           result = "Authentication started";  break;
         case LE_AVC_AUTH_FAILED:            result = "Authentication failed";   break;
         default:                            result = "Unknown";                 break;
@@ -406,11 +398,9 @@ static uint16_t RetryTimers[LE_AVC_NUM_RETRY_TIMERS] = {15, 60, 240, 480, 1440, 
 // ------------------------------------------------------------------------------------------------
 static le_timer_Ref_t PollingTimerRef = NULL;
 
-
 //--------------------------------------------------------------------------------------------------
 // Local functions
 //--------------------------------------------------------------------------------------------------
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -489,6 +479,37 @@ static bool IsAvcBound
     return false;
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Convert an le_avc_UpdateType_t value to a string for debugging.
+ *
+ *  @return string version of the supplied enumeration value.
+ */
+//--------------------------------------------------------------------------------------------------
+static const char* UpdateTypeToStr
+(
+    le_avc_UpdateType_t updateType  ///< The enumeration value to convert.
+)
+{
+    const char* resultPtr;
+
+    switch (updateType)
+    {
+        case LE_AVC_FIRMWARE_UPDATE:
+            resultPtr = "LE_AVC_FIRMWARE_UPDATE";
+            break;
+        case LE_AVC_FRAMEWORK_UPDATE:
+            resultPtr = "LE_AVC_FRAMEWORK_UPDATE";
+            break;
+        case LE_AVC_APPLICATION_UPDATE:
+            resultPtr = "LE_AVC_APPLICATION_UPDATE";
+            break;
+        case LE_AVC_UNKNOWN_UPDATE:
+            resultPtr = "LE_AVC_UNKNOWN_UPDATE";
+            break;
+    }
+    return resultPtr;
+}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -504,8 +525,6 @@ static void StopInstallDeferTimer
     LE_DEBUG("Stop install defer timer.");
     le_timer_Stop(InstallDeferTimer);
 }
-
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -537,7 +556,6 @@ static void StopUninstallDeferTimer
     le_timer_Stop(UninstallDeferTimer);
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Stop the reboot defer timer if it is running.
@@ -552,7 +570,6 @@ static void StopRebootDeferTimer
     LE_DEBUG("Stop reboot defer timer.");
     le_timer_Stop(RebootDeferTimer);
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -613,7 +630,6 @@ static le_result_t AcceptDownloadPackage
 
     return LE_OK;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -685,7 +701,7 @@ static void SendUpdateStatusEvent
 
     LE_DEBUG("Reporting %s", AvcSessionStateToStr(updateStatus));
     LE_DEBUG("Number of bytes to download %d", eventData.totalNumBytes);
-    LE_DEBUG("Download progress %d", eventData.downloadProgress);
+    LE_DEBUG("Progress %d", eventData.downloadProgress);
     LE_DEBUG("ContextPtr %p", eventData.contextPtr);
 
     // Send the event to interested applications
@@ -785,7 +801,7 @@ void avcServer_UpdateHandler
             CurrentDownloadProgress = dloadProgress;
             CurrentUpdateType = updateType;
 
-            if (LE_AVC_APPLICATION_UPDATE == updateType)
+            if ((LE_AVC_APPLICATION_UPDATE == updateType) && (totalNumBytes >= 0))
             {
                 // Set the bytes downloaded to workspace for resume operation
                 avcApp_SetSwUpdateBytesDownloaded();
@@ -938,7 +954,6 @@ void avcServer_UpdateHandler
     }
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Handler for client session closes for clients that use the block/unblock API.
@@ -1037,7 +1052,6 @@ static le_result_t QueryInstall
     return result;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Query if it's okay to proceed with a package download
@@ -1106,7 +1120,6 @@ static le_result_t QueryDownload
     return result;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Query if it's okay to proceed with an application uninstall
@@ -1167,7 +1180,6 @@ static le_result_t QueryUninstall
     return result;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Query if it's okay to proceed with a device reboot
@@ -1212,7 +1224,6 @@ static le_result_t QueryReboot
     return result;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Called when the download defer timer expires.
@@ -1223,7 +1234,7 @@ static void DownloadTimerExpiryHandler
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    if ( QueryDownload(PkgDownloadCtx.pkgSize) == LE_OK )
+    if ( QueryDownload(PkgDownloadCtx.bytesToDownload) == LE_OK )
     {
         // Notify the registered handler to proceed with the download; only called once.
         if (QueryDownloadHandlerRef != NULL)
@@ -1237,7 +1248,6 @@ static void DownloadTimerExpiryHandler
         }
     }
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1311,33 +1321,6 @@ static void RebootTimerExpiryHandler
         {
             LE_ERROR("Reboot handler not valid");
         }
-    }
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Function to check if the agent needs to connect to the server
- */
-//--------------------------------------------------------------------------------------------------
-static void CheckConnectionRequest
-(
-    void
-)
-{
-    bool isNotificationRequest = false;
-
-    // Use case to be checked:
-    // 1) Check that a connection is not on-going
-    // 2) connection after a device reboot due to a FOTA install
-    // Note that a control app should always be registered at this point
-    // as a status handler was added before calling this function.
-    if (   (LE_AVC_SESSION_INVALID == le_avc_GetSessionType())
-        && (LE_OK == packageDownloader_GetFwUpdateNotification(&isNotificationRequest))
-        && (true == isNotificationRequest))
-    {
-        // Notify registered control app.
-        LE_DEBUG("Reporting status LE_AVC_CONNECTION_REQUIRED");
-        SendUpdateStatusEvent(LE_AVC_CONNECTION_REQUIRED, -1, -1, StatusHandlerContextPtr);
     }
 }
 
@@ -1452,9 +1435,106 @@ static void StartPollingTimer
 }
 
 //--------------------------------------------------------------------------------------------------
+/**
+ * Init ongoing FOTA/SOTA job on resume (i.e. device restart, legato restart etc)
+ */
+//--------------------------------------------------------------------------------------------------
+static void InitAvcJobOnResume
+(
+    void
+)
+{
+    // If Current State is not idle, this means that a user agreement is required after
+    // reboot. Notify the application for this event.
+    if (AVC_DOWNLOAD_PENDING == CurrentState)
+    {
+        uint64_t numBytesToDownload = 0;
+
+        if (LE_OK == packageDownloader_BytesLeftToDownload(&numBytesToDownload))
+        {
+            LE_DEBUG("Bytes left to download: %llu", numBytesToDownload);
+            // Notify the application of package download
+            avcServer_QueryDownload(lwm2mcore_PackageDownloaderAcceptDownload, numBytesToDownload);
+        }
+    }
+    // Only FOTA install case will be handled next. SOTA case is handled separately in SOTA
+    // initialization function.
+    else if (AVC_INSTALL_PENDING == CurrentState)
+    {
+        bool isInstallRequest = false;
+        if ( (LE_OK == packageDownloader_GetFwUpdateInstallPending(&isInstallRequest))
+          && (isInstallRequest) )
+        {
+            // FOTA use case
+            ResumeFwInstall();
+        }
+    }
+    else
+    {
+        // As firmware update causes device LE_AVC_INSTALL_COMPLETE or LE_AVC_INSTALL_FAILED
+        // notification should be sent after reboot to end FOTA job. Check FW update result and set
+        // server notification flag if necessary.
+        if (LWM2MCORE_ERR_COMPLETED_OK == lwm2mcore_GetFirmwareUpdateInstallResult())
+        {
+            bool isNotificationRequest = false;
+            // Request connection to server if notification is set.
+            if (   (LE_OK == packageDownloader_GetFwUpdateNotification(&isNotificationRequest))
+                && (true == isNotificationRequest))
+            {
+                avcServer_RequestConnection(LE_AVC_FIRMWARE_UPDATE);
+            }
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
 // Internal interface functions
 //--------------------------------------------------------------------------------------------------
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to check if the agent needs to connect to the server. For FOTA it should be called
+ * only after reboot, and for SOTA it should be called after update finishes. However, this function
+ * will request connection to server only if there is no session going on.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcServer_RequestConnection
+(
+    le_avc_UpdateType_t updateType
+)
+{
+    if (LE_AVC_SESSION_INVALID != le_avc_GetSessionType())
+    {
+        LE_INFO("Already session is going on");
+        return;
+    }
+
+    if (NumStatusHandlers <= 0)
+    {
+        LE_ERROR("No control app status handler registered");
+        return;
+    }
+
+    switch(updateType)
+    {
+        case LE_AVC_FIRMWARE_UPDATE:
+            // Notify registered control app.
+            LE_DEBUG("Reporting status LE_AVC_CONNECTION_PENDING for FOTA");
+            SendUpdateStatusEvent(LE_AVC_CONNECTION_PENDING, -1, -1, StatusHandlerContextPtr);
+            break;
+
+        case LE_AVC_APPLICATION_UPDATE:
+            // Notify registered control app.
+            LE_DEBUG("Reporting status LE_AVC_CONNECTION_PENDING for SOTA");
+            SendUpdateStatusEvent(LE_AVC_CONNECTION_PENDING, -1, -1, StatusHandlerContextPtr);
+            break;
+
+        default:
+            LE_ERROR("Unsupported updateType: %s", UpdateTypeToStr(updateType));
+            break;
+
+    }
+}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1501,7 +1581,6 @@ le_result_t avcServer_QueryInstall
     return result;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Query the AVC Server if it's okay to proceed with a package download
@@ -1518,7 +1597,7 @@ le_result_t avcServer_QueryInstall
 le_result_t avcServer_QueryDownload
 (
     avcServer_DownloadHandlerFunc_t handlerFunc,    ///< [IN] Download handler function.
-    uint32_t pkgSize                                ///< [IN] Package size.
+    uint32_t bytesToDownload                        ///< [IN] Number of bytes to download
 )
 {
     le_result_t result;
@@ -1530,10 +1609,10 @@ le_result_t avcServer_QueryDownload
     }
 
     // Update download handler
-    PkgDownloadCtx.pkgSize = pkgSize;
+    PkgDownloadCtx.bytesToDownload = bytesToDownload;
     QueryDownloadHandlerRef = handlerFunc;
 
-    result = QueryDownload(pkgSize);
+    result = QueryDownload(bytesToDownload);
 
     // Reset the handler as download can proceed now.
     if (LE_BUSY != result)
@@ -1543,7 +1622,6 @@ le_result_t avcServer_QueryDownload
 
     return result;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1585,7 +1663,6 @@ le_result_t avcServer_QueryReboot
     return result;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Initializes user agreement queries of download, install and uninstall. Used after a session
@@ -1606,7 +1683,6 @@ void avcServer_InitUserAgreement
     StopUninstallDeferTimer();
     QueryUninstallHandlerRef = NULL;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1652,7 +1728,6 @@ le_result_t avcServer_QueryUninstall
 
     return result;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1713,7 +1788,6 @@ le_result_t avcServer_RequestSession
     return result;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Request the avcServer to close a AV session.
@@ -1770,7 +1844,6 @@ static void FirstLayerUpdateStatusHandler
 // API functions
 //--------------------------------------------------------------------------------------------------
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * le_avc_StatusHandler handler ADD function
@@ -1812,69 +1885,11 @@ le_avc_StatusEventHandlerRef_t le_avc_AddStatusEventHandler
     // it to true, in case it is currently false.
     IsControlAppInstalled = true;
 
-    // If Current State is not idle, this means that a user agreement is required before the
-    // reboot. Notify the application for this event.
-    if ( (AVC_DOWNLOAD_PENDING == CurrentState) || le_timer_IsRunning(DownloadDeferTimer))
-    {
-        // A user agreement for package download is required
-        uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
-        size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
-        lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
-
-        // Check if an update package URI is stored
-        if (LE_OK == packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
-        {
-            uint64_t packageSize = 0;
-
-            // Get the package size
-            if ((LWM2MCORE_FW_UPDATE_TYPE == updateType)
-               || (LWM2MCORE_SW_UPDATE_TYPE == updateType))
-            {
-                if (LE_OK != packageDownloader_GetUpdatePackageSize(&packageSize))
-                {
-                    packageSize = 0;
-                }
-            }
-            else
-            {
-                // Issue
-                packageSize = 0;
-                CurrentState = AVC_IDLE;
-            }
-            LE_INFO("packageSize %llu", packageSize);
-
-            if (packageSize)
-            {
-                // Notify the application of package download
-                pkgDwlCb_UserAgreement((uint32_t)packageSize);
-            }
-        }
-        else
-        {
-            LE_INFO("packageDownloader_GetResumeInfo ERROR");
-        }
-    }
-
-    // Check for LE_AVC_INSTALL_COMPLETE or LE_AVC_INSTALL_FAILED notification for FOTA
-    lwm2mcore_GetFirmwareUpdateInstallResult();
-
-    if (AVC_INSTALL_PENDING == CurrentState)
-    {
-        bool isInstallRequest = false;
-        if ( (LE_OK == packageDownloader_GetFwUpdateInstallPending(&isInstallRequest))
-          && (isInstallRequest) )
-        {
-            // FOTA use case
-            ResumeFwInstall();
-        }
-    }
-
-    // Check if a connection request is required
-    CheckConnectionRequest();
+    // Initialize any ongoing SOTA/FOTA job.
+    InitAvcJobOnResume();
 
     return (le_avc_StatusEventHandlerRef_t)handlerRef;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1900,7 +1915,6 @@ void le_avc_RemoveStatusEventHandler
         IsControlAppInstalled = false;
     }
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1938,7 +1952,6 @@ le_avc_SessionRequestEventHandlerRef_t le_avc_AddSessionRequestEventHandler
     }
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * le_avc_SessionRequestHandler handler REMOVE function
@@ -1973,7 +1986,6 @@ void le_avc_RemoveSessionRequestEventHandler
     SessionRequestHandlerContextPtr = NULL;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Start a session with the AirVantage server
@@ -1994,7 +2006,6 @@ le_result_t le_avc_StartSession
 {
     return avcClient_Connect();
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2034,7 +2045,6 @@ le_result_t le_avc_CheckRoute
     return avcClient_Update();
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Accept the currently pending download
@@ -2057,7 +2067,6 @@ le_result_t le_avc_AcceptDownload
 
     return AcceptDownloadPackage();
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2083,8 +2092,7 @@ le_result_t DeferDownload
     // stop activity timer when download has been deferred
     avcClient_StopActivityTimer();
 
-    // Since the decision is not to download at this time, go back to idle
-    CurrentState = AVC_IDLE;
+    LE_DEBUG("Deferring download");
 
     // Try the download later
     le_clk_Time_t interval = { .sec = (deferMinutes * SECONDS_IN_A_MIN) };
@@ -2094,7 +2102,6 @@ le_result_t DeferDownload
 
     return LE_OK;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2114,8 +2121,6 @@ le_result_t le_avc_DeferDownload
     // Defer the download.
     return DeferDownload(deferMinutes);
 }
-
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2165,7 +2170,6 @@ static le_result_t AcceptUninstallApplication
     return LE_OK;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Accept the currently pending install
@@ -2200,7 +2204,6 @@ le_result_t le_avc_AcceptInstall
         return LE_FAULT;
     }
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2288,7 +2291,6 @@ le_result_t le_avc_AcceptUninstall
     return AcceptUninstallApplication();
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Defer the currently pending uninstall
@@ -2320,7 +2322,6 @@ le_result_t le_avc_DeferUninstall
 
     return LE_OK;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2354,7 +2355,6 @@ le_result_t le_avc_AcceptReboot
 
     return LE_OK;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2395,7 +2395,6 @@ le_avc_ErrorCode_t le_avc_GetErrorCode
     return AvcErrorCode;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Get the update type of the currently pending update
@@ -2421,7 +2420,6 @@ le_result_t le_avc_GetUpdateType
     return LE_OK;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Set the update type of the currently pending update
@@ -2435,7 +2433,6 @@ void avcServer_SetUpdateType
 {
     CurrentUpdateType = updateType;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2457,7 +2454,6 @@ le_result_t le_avc_GetAppUpdateName
 {
     return LE_FAULT;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2483,7 +2479,6 @@ le_avc_BlockRequestRef_t le_avc_BlockInstall
 
     return blockRef;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2527,8 +2522,6 @@ uint16_t le_avc_GetHttpStatus
 {
     return pkgDwlCb_GetHttpStatus();
 }
-
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2646,7 +2639,6 @@ done:
     return result;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Function to write APN configuration.
@@ -2681,7 +2673,6 @@ le_result_t le_avc_SetApnConfig
 
     return LE_OK;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2748,7 +2739,6 @@ le_result_t le_avc_GetRetryTimers
     return LE_OK;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Function to set the retry timers.
@@ -2801,7 +2791,6 @@ le_result_t le_avc_SetRetryTimers
     return LE_OK;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Function to read the polling timer.
@@ -2842,7 +2831,6 @@ le_result_t le_avc_GetPollingTimer
         return LE_OK;
     }
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2913,7 +2901,6 @@ void avcServer_NotifyUserApp
     }
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Set the default AVMS config, only if no config exists.
@@ -2952,69 +2939,7 @@ static void CheckNotificationAtStartup
 {
     le_avc_Status_t updateStatus = LE_AVC_NO_UPDATE;
     bool isInstallRequest = false;
-    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
-    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
     lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
-    avcApp_InternalState_t internalState;
-
-    lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
-    lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
-
-    lwm2mcore_SwUpdateState_t swUpdateState = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
-    lwm2mcore_SwUpdateResult_t swUpdateResult = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
-
-    if (   (LE_OK == packageDownloader_GetFwUpdateState(&fwUpdateState))
-        && (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
-        && (LE_OK == packageDownloader_GetSwUpdateState(&swUpdateState))
-        && (LE_OK == packageDownloader_GetSwUpdateResult(&swUpdateResult)))
-    {
-        // Check if an update package URI is stored
-        if (LE_OK == packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
-        {
-            if (LWM2MCORE_FW_UPDATE_TYPE == updateType)
-            {
-                // Check if a FW update was ongoing
-                if ( (LWM2MCORE_FW_UPDATE_STATE_DOWNLOADING == fwUpdateState)
-                  && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult))
-                {
-                    // Package is under download
-                    updateStatus = LE_AVC_DOWNLOAD_IN_PROGRESS;
-                }
-
-                if ( (LWM2MCORE_FW_UPDATE_STATE_IDLE == fwUpdateState)
-                       && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult))
-                {
-                    // A Package URI is stored but the download is not launched
-                    // Send a notification: LE_AVC_DOWNLOAD_PENDING
-                    updateStatus = LE_AVC_DOWNLOAD_PENDING;
-                }
-            }
-            else if (LWM2MCORE_SW_UPDATE_TYPE == updateType)
-            {
-                LE_DEBUG("SW update type");
-
-                // Check if a SW update was ongoing
-                if ((LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED == swUpdateState)
-                    && (LWM2MCORE_SW_UPDATE_RESULT_INITIAL == swUpdateResult))
-                {
-                    updateStatus = LE_AVC_DOWNLOAD_IN_PROGRESS;
-                }
-
-                if ((LWM2MCORE_SW_UPDATE_STATE_INITIAL == swUpdateState)
-                    && (LE_OK == avcApp_GetSwUpdateInternalState(&internalState))
-                    && (INTERNAL_STATE_DOWNLOAD_REQUESTED == internalState))
-                {
-                    // Download requested from the server
-                    // Send a notification: LE_AVC_DOWNLOAD_PENDING
-                    updateStatus = LE_AVC_DOWNLOAD_PENDING;
-                }
-            }
-            else
-            {
-                LE_ERROR("Incorrect update type");
-            }
-        }
-    }
 
     // Check LE_AVC_INSTALL_PENDING notification for FOTA
     if ( (LE_OK == packageDownloader_GetFwUpdateInstallPending(&isInstallRequest))
@@ -3023,6 +2948,59 @@ static void CheckNotificationAtStartup
         updateStatus = LE_AVC_INSTALL_PENDING;
         updateType = LWM2MCORE_FW_UPDATE_TYPE;
     }
+    else
+    {
+        lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
+        lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
+
+        lwm2mcore_SwUpdateState_t swUpdateState = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
+        lwm2mcore_SwUpdateResult_t swUpdateResult = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
+
+        if (   (LE_OK != packageDownloader_GetFwUpdateState(&fwUpdateState))
+            || (LE_OK != packageDownloader_GetFwUpdateResult(&fwUpdateResult))
+            || (LE_OK != packageDownloader_GetSwUpdateState(&swUpdateState))
+            || (LE_OK != packageDownloader_GetSwUpdateResult(&swUpdateResult)))
+        {
+            LE_ERROR("Can't retrieve suspend information");
+            return;
+        }
+
+        LE_DEBUG("swUpdateState: %d, swUpdateResult: %d, fwUpdateState: %d, fwUpdateResult: %d",
+                  swUpdateState,
+                  swUpdateResult,
+                  fwUpdateState,
+                  fwUpdateResult);
+
+        uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
+        size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
+
+        // Check if an update package URI is stored
+        if (LE_OK == packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
+        {
+            // Resume info can successfully be retrieved, i.e. there should be some data to download
+            updateStatus = LE_AVC_DOWNLOAD_PENDING;
+        }
+        else if (((swUpdateState == LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED) ||
+                  (swUpdateState == LWM2MCORE_SW_UPDATE_STATE_DELIVERED)) &&
+                 (swUpdateResult == LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED))
+        {
+            avcApp_InternalState_t internalState;
+            // Check whether any install request was sent from server, if no request sent
+            // then reboot happened on LE_AVC_DOWNLOAD_COMPLETE but before LE_AVC_INSTALL_PENDING.
+            if ((LE_OK == avcApp_GetSwUpdateInternalState(&internalState)) &&
+                (INTERNAL_STATE_INSTALL_REQUESTED != internalState))
+            {
+                updateStatus = LE_AVC_DOWNLOAD_PENDING;
+                updateType = LWM2MCORE_SW_UPDATE_TYPE;
+            }
+        }
+        else if ((fwUpdateState == LWM2MCORE_FW_UPDATE_STATE_DOWNLOADED) &&
+                 (fwUpdateResult == LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL))
+        {
+            updateStatus = LE_AVC_DOWNLOAD_PENDING;
+            updateType = LWM2MCORE_FW_UPDATE_TYPE;
+        }
+    }
 
     LE_INFO("Init: updateStatus %d, updateType %d", updateStatus, updateType);
 
@@ -3030,7 +3008,7 @@ static void CheckNotificationAtStartup
     {
         // Send a notification to the application
         avcServer_UpdateHandler(updateStatus,
-                                updateType,
+                                ConvertToAvcType(updateType),
                                 -1,
                                 -1,
                                 LE_AVC_ERR_NONE);
@@ -3117,4 +3095,3 @@ COMPONENT_INIT
 
     avcApp_Init();
 }
-

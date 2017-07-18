@@ -112,46 +112,41 @@ static void LaunchUpdateTimerExpiryHandler
 }
 
 //--------------------------------------------------------------------------------------------------
-/* Check if FOTA download is in progress
+/* Check if any SOTA/FOTA package download is in progress
  *
  * @return
- *  true if FOTA download is in progress, false otherwise
+ *  true if package download is in progress, false otherwise
  */
 //--------------------------------------------------------------------------------------------------
-static bool IsFotaDownloading
+static bool IsPackageDownloading
 (
-    void
+    lwm2mcore_UpdateType_t updateType
 )
 {
-    lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
-    lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
+    if (updateType == LWM2MCORE_FW_UPDATE_TYPE)
+    {
 
-    return ((LE_OK == packageDownloader_GetFwUpdateState(&fwUpdateState))
-            && (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
-            && (LWM2MCORE_FW_UPDATE_STATE_DOWNLOADING == fwUpdateState)
-            && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult));
-}
+        lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
+        lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Check if SOTA download is in progress
- *
- * @return
- *  true if SOTA download is in progress, false otherwise
- */
-//--------------------------------------------------------------------------------------------------
-static bool IsSotaDownloading
-(
-    void
-)
-{
-    lwm2mcore_SwUpdateState_t swUpdateState = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
-    lwm2mcore_SwUpdateResult_t swUpdateResult = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
+        return ((LE_OK == packageDownloader_GetFwUpdateState(&fwUpdateState))
+                && (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
+                && (LWM2MCORE_FW_UPDATE_STATE_DOWNLOADING == fwUpdateState)
+                && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult));
+    }
+    else if (updateType == LWM2MCORE_SW_UPDATE_TYPE)
+    {
 
-    return ((LE_OK == avcApp_GetSwUpdateRestoreState(&swUpdateState))
-            && (LE_OK == avcApp_GetSwUpdateRestoreResult(&swUpdateResult))
-            && (LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED == swUpdateState)
-            && (LWM2MCORE_SW_UPDATE_RESULT_INITIAL == swUpdateResult));
+        lwm2mcore_SwUpdateState_t swUpdateState = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
+        lwm2mcore_SwUpdateResult_t swUpdateResult = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
+
+        return ((LE_OK == avcApp_GetSwUpdateRestoreState(&swUpdateState))
+                && (LE_OK == avcApp_GetSwUpdateRestoreResult(&swUpdateResult))
+                && (LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED == swUpdateState)
+                && (LWM2MCORE_SW_UPDATE_RESULT_INITIAL == swUpdateResult));
+    }
+
+    return false;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -206,14 +201,17 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
 
     if (0 == len)
     {
+        le_result_t result = LE_OK;
+
         // If length is 0, then the Update State shall be set to default value,
         // any active download is suspended and the package URI is deleted from storage file.
-        if (LE_OK != packageDownloader_AbortDownload(type))
-        {
-            return LWM2MCORE_ERR_GENERAL_ERROR;
-        }
+        result = packageDownloader_AbortDownload(type);
 
-        return LWM2MCORE_ERR_COMPLETED_OK;
+        // Delete old FOTA job info. No need to delete obsolete SOTA job info as for SOTA,
+        // delete command is explicitly sent from server.
+        packageDownloader_DeleteFwUpdateInfo();
+
+        return (result == LE_OK) ? LWM2MCORE_ERR_COMPLETED_OK : LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
     // Parameter check
@@ -231,10 +229,21 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
     memcpy(downloadUri, bufferPtr, len);
     LE_DEBUG("Request to download update package from URL : %s, len %d", downloadUri, len);
 
-    // Reset the update state
+    // Store URI and update type to be able to resume the download if necessary. This should be
+    // the very first step to reduce the window between receiving uri and storing it flash storage.
+    if (LE_OK != packageDownloader_SetResumeInfo(downloadUri, type))
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+    // Delete all unfinished/aborted SOTA/FOTA job info. Also, reset the update state
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
+            // Delete aborted/stale stored SOTA job info. Otherwise, they may create problem during
+            // FOTA suspend resume activity.
+            avcApp_DeletePackage();
+
+            // Now reset the state
             if (LE_OK != packageDownloader_SetFwUpdateResult(
                                                     LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL))
             {
@@ -243,6 +252,10 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
             break;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
+            // Delete aborted/stale stored FOTA job info. Otherwise, they may create problem during
+            // SOTA suspend resume activity.
+            packageDownloader_DeleteFwUpdateInfo();
+
             if (LE_OK != avcApp_SetSwUpdateResult(LWM2MCORE_SW_UPDATE_RESULT_INITIAL))
             {
                 return LWM2MCORE_ERR_GENERAL_ERROR;
@@ -977,7 +990,7 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     }
 
     // Check if a download was started
-    if (IsFotaDownloading() || IsSotaDownloading() || IsDownloadAccepted())
+    if (IsPackageDownloading(updateType) || IsDownloadAccepted())
     {
         downloadResume = true;
     }

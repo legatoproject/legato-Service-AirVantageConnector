@@ -263,6 +263,18 @@ LE_SHARED le_result_t avcServer_ReleaseSession
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Function to check if the agent needs to connect to the server. For FOTA it should be called
+ * only after reboot, and for SOTA it should be called after update finishes. However, this function
+ * will request connection to server only if there is no session going on.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcServer_RequestConnection
+(
+    le_avc_UpdateType_t updateType
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Query the AVC Server if it's okay to proceed with a device reboot
  *
  * If a reboot can't proceed right away, then the handlerRef function will be called when it is

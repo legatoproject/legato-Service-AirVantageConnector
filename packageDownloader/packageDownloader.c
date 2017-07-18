@@ -237,7 +237,7 @@ static void SuspendDownload
  *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
-static le_result_t SetResumeInfo
+le_result_t packageDownloader_SetResumeInfo
 (
     char* uriPtr,                   ///< [IN] package URI
     lwm2mcore_UpdateType_t type     ///< [IN] Update type
@@ -303,6 +303,23 @@ le_result_t packageDownloader_DeleteResumeInfo
     }
 
     return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete FW update related info.
+ */
+//--------------------------------------------------------------------------------------------------
+void packageDownloader_DeleteFwUpdateInfo
+(
+    void
+)
+{   // Deleting FW_UPDATE_STATE_PATH and FW_UPDATE_RESULT_PATH will be ok, as function for getting
+    // FW update state/result should handle the situation when these files don't exist in flash.
+    DeleteFs(FW_UPDATE_STATE_PATH);
+    DeleteFs(FW_UPDATE_RESULT_PATH);
+    DeleteFs(FW_UPDATE_NOTIFICATION_PATH);
+    DeleteFs(FW_UPDATE_INSTALL_PENDING_PATH);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1002,6 +1019,8 @@ void* packageDownloader_StoreFwPackage
     int fd;
     int ret = 0;
 
+    LE_DEBUG("Started storing FW package");
+
     pkgDwlPtr = (lwm2mcore_PackageDownloader_t*)ctxPtr;
     dwlCtxPtr = pkgDwlPtr->ctxPtr;
 
@@ -1120,12 +1139,6 @@ le_result_t packageDownloader_StartDownload
 
     // Stop activity timer to prevent NO_UPDATE notification
     avcClient_StopActivityTimer();
-
-    // Store URI and update type to be able to resume the download if necessary
-    if (LE_OK != SetResumeInfo(uriPtr, type))
-    {
-        return LE_FAULT;
-    }
 
     // Set the package downloader data structure
     memset(data.packageUri, 0, LWM2MCORE_PACKAGE_URI_MAX_LEN + 1);
@@ -1253,7 +1266,6 @@ le_result_t packageDownloader_AbortDownload
     return LE_OK;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Suspend a package download
@@ -1286,3 +1298,178 @@ le_result_t packageDownloader_SuspendDownload
     return LE_OK;
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the number of bytes to download on resume. Function will give valid data if suspend
+ * state was LE_AVC_DOWNLOAD_PENDING, LE_DOWNLOAD_IN_PROGRESS or LE_DOWNLOAD_COMPLETE.
+ *
+ * @return
+ *   - LE_OK                If function succeeded
+ *   - LE_BAD_PARAMETER     If parameter null
+ *   - LE_FAULT             If function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_BytesLeftToDownload
+(
+    uint64_t *numBytes          ///< [OUT] Number of bytes to download on resume. Will give valid
+                                ///<       data if suspend state was LE_AVC_DOWNLOAD_PENDING,
+                                ///<       LE_DOWNLOAD_IN_PROGRESS or LE_DOWNLOAD_COMPLETE.
+                                ///<       Otherwise undefined.
+)
+{
+    if (!numBytes)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LE_BAD_PARAMETER;
+    }
+
+    lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
+    lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
+
+    lwm2mcore_SwUpdateState_t swUpdateState = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
+    lwm2mcore_SwUpdateResult_t swUpdateResult = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
+
+    if (   (LE_OK != packageDownloader_GetFwUpdateState(&fwUpdateState))
+        || (LE_OK != packageDownloader_GetFwUpdateResult(&fwUpdateResult))
+        || (LE_OK != packageDownloader_GetSwUpdateState(&swUpdateState))
+        || (LE_OK != packageDownloader_GetSwUpdateResult(&swUpdateResult)))
+    {
+        LE_ERROR("Failed to retrieve suspend information");
+        return LE_FAULT;
+    }
+
+    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
+    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
+    lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
+    avcApp_InternalState_t internalState;
+
+    // Check if an update package URI is stored
+    if (LE_OK == packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
+    {
+        // Resume info can successfully be retrieved, i.e. there should be some data to download
+        uint64_t packageSize = 0;
+
+        if (LE_OK != packageDownloader_GetUpdatePackageSize(&packageSize))
+        {
+            LE_CRIT("Failed to get package size");
+            return LE_FAULT;
+        }
+
+        LE_INFO("Package size: %llu", packageSize);
+
+        // Check whether it is SW or FW update type and update status based on stored status.
+        switch (updateType)
+        {
+            case LWM2MCORE_FW_UPDATE_TYPE:
+                LE_DEBUG("FW update type");
+
+                if (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult)
+                {
+                    switch(fwUpdateState)
+                    {
+                        case LWM2MCORE_FW_UPDATE_STATE_IDLE:
+                            // No download started yet. Need to download whole package
+                            *numBytes = packageSize;
+                            return LE_OK;
+
+                        case LWM2MCORE_FW_UPDATE_STATE_DOWNLOADING:
+                        {
+                            size_t resumePos = 0;
+
+                            if (LE_OK != le_fwupdate_GetResumePosition(&resumePos))
+                            {
+                                LE_CRIT("Failed to get fwupdate resume position");
+                                return LE_FAULT;
+                            }
+
+                            LE_DEBUG("FW resume position: %zd", resumePos);
+
+                            *numBytes = packageSize - resumePos;
+                            return LE_OK;
+                        }
+                            break;
+
+                        default:
+                            LE_ERROR("Bad FOTA state: %d", fwUpdateState);
+                            return LE_FAULT;
+                    }
+                }
+                else
+                {
+                    LE_ERROR("Bad FW update result: %d", fwUpdateResult);
+                    return LE_FAULT;
+                }
+                break;
+
+            case LWM2MCORE_SW_UPDATE_TYPE:
+                LE_DEBUG("SW update type");
+
+                if ((LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED == swUpdateState)
+                    && (LWM2MCORE_SW_UPDATE_RESULT_INITIAL == swUpdateResult))
+                {
+                    size_t resumePos = 0;
+
+                    if (LE_OK != avcApp_GetResumePosition(&resumePos))
+                    {
+                        LE_CRIT("Failed to get swupdate resume position");
+                        return LE_FAULT;
+                    }
+
+                    LE_DEBUG("SW resume position: %zd", resumePos);
+
+
+                    *numBytes = packageSize - resumePos;
+
+                    return LE_OK;
+                }
+                else if ((LWM2MCORE_SW_UPDATE_STATE_INITIAL == swUpdateState)
+                    && (LE_OK == avcApp_GetSwUpdateInternalState(&internalState))
+                    && (INTERNAL_STATE_DOWNLOAD_REQUESTED == internalState))
+                {
+                    // No download started yet. Need to download whole package
+                    *numBytes = packageSize;
+                    return LE_OK;
+                }
+                else
+                {
+                    LE_ERROR("Bad SOTA state: %d, result: %d", swUpdateState, swUpdateResult);
+                    return LE_FAULT;
+                }
+                break;
+
+            default:
+                LE_CRIT("Incorrect update type");
+                return LE_FAULT;
+        }
+    }
+    else if (((swUpdateState == LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED) ||
+              (swUpdateState == LWM2MCORE_SW_UPDATE_STATE_DELIVERED)) &&
+             (swUpdateResult == LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED))
+    {
+        // Check whether any install request was sent from server, if no request sent
+        // then reboot happened on LE_AVC_DOWNLOAD_COMPLETE but before LE_AVC_INSTALL_PENDING.
+        if ((LE_OK == avcApp_GetSwUpdateInternalState(&internalState)) &&
+            (INTERNAL_STATE_INSTALL_REQUESTED != internalState))
+        {
+            *numBytes = 0;
+            return LE_OK;
+        }
+    }
+    else if ((fwUpdateState == LWM2MCORE_FW_UPDATE_STATE_DOWNLOADED) &&
+             (fwUpdateResult == LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL))
+    {
+        *numBytes = 0;
+        return LE_OK;
+    }
+    else
+    {
+        LE_ERROR("Bad state, swUpdateState: %d, swUpdateResult: %d, fwUpdateState: %d,"
+                 "fwUpdateResult: %d",
+                  swUpdateState,
+                  swUpdateResult,
+                  fwUpdateState,
+                  fwUpdateResult);
+
+        return LE_FAULT;
+    }
+}

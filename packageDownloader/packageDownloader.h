@@ -256,6 +256,22 @@ bool packageDownloader_CheckDownloadToSuspend
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Store package information necessary to resume a download if necessary (URI and package type)
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Incorrect parameter provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetResumeInfo
+(
+    char* uriPtr,                   ///< [IN] package URI
+    lwm2mcore_UpdateType_t type     ///< [IN] Update type
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Delete package information necessary to resume a download (URI and package type)
  *
  * @return
@@ -264,6 +280,16 @@ bool packageDownloader_CheckDownloadToSuspend
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_DeleteResumeInfo
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete FW update related info.
+ */
+//--------------------------------------------------------------------------------------------------
+void packageDownloader_DeleteFwUpdateInfo
 (
     void
 );
@@ -325,6 +351,25 @@ le_result_t packageDownloader_GetUpdatePackageSize
 le_result_t packageDownloader_SuspendDownload
 (
     void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the number of bytes to download on resume. Function will give valid data if suspend
+ * state was LE_AVC_DOWNLOAD_PENDING, LE_DOWNLOAD_IN_PROGRESS or LE_DOWNLOAD_COMPLETE.
+ *
+ * @return
+ *   - LE_OK                If function succeeded
+ *   - LE_BAD_PARAMETER     If parameter null
+ *   - LE_FAULT             If function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_BytesLeftToDownload
+(
+    uint64_t *numBytes          ///< [OUT] Number of bytes to download on resume. Will give valid
+                                ///<       data if suspend state was LE_AVC_DOWNLOAD_PENDING,
+                                ///<       LE_DOWNLOAD_IN_PROGRESS or LE_DOWNLOAD_COMPLETE.
+                                ///<       Otherwise undefined.
 );
 
 #endif /*_PACKAGEDOWNLOADER_H */

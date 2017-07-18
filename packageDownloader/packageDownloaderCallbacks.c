@@ -496,7 +496,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_UserAgreement
     }
     else
     {
-        LE_DEBUG("Download deffered");
+        LE_DEBUG("Download deferred");
     }
 
     return dwlResult;

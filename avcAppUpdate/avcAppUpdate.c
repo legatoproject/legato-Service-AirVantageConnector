@@ -362,7 +362,7 @@ static void DeletePackage
 )
 {
     // Remove the download directory
-    LE_FATAL_IF(le_dir_RemoveRecursive(AppDownloadPath) != LE_OK,
+    LE_ERROR_IF(le_dir_RemoveRecursive(AppDownloadPath) != LE_OK,
                 "Failed to recursively delete '%s'.",
                 AppDownloadPath);
 
@@ -809,12 +809,10 @@ static void AppInstallHandler
         // Sync file system and mark object 9 status as install completed
         MarkInstallComplete(instanceRef);
 
-        // Notify control app
-        avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE,
-                                LE_AVC_APPLICATION_UPDATE,
-                                -1,
-                                100,
-                                LE_AVC_ERR_NONE);
+        // App is installed but other ancillary works (starting app by supervisor, notifying update
+        // agent i.e. avcDaemon via status call back handler etc) may not be finished yet. So don't
+        // notify control app here. Notify control app when updateDaemon returns installation
+        // complete state via call back progress handler.
     }
     else
     {
@@ -1088,6 +1086,12 @@ static void UpdateProgressHandler
 
         case LE_UPDATE_STATE_SUCCESS:
             LE_INFO("Install completed.");
+            avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE,
+                                    LE_AVC_APPLICATION_UPDATE,
+                                    -1,
+                                    100,
+                                    LE_AVC_ERR_NONE);
+            avcServer_RequestConnection(LE_AVC_APPLICATION_UPDATE);
             le_update_End();
             break;
 
@@ -1125,6 +1129,7 @@ static void UpdateProgressHandler
             // function (otherwise, SetObj9State() may call le_update_End() again if it notices
             // installation failure).
             UpdateStarted = false;
+            avcServer_RequestConnection(LE_AVC_APPLICATION_UPDATE);
             le_update_End();
 
             SetObj9State(CurrentObj9,
@@ -2032,6 +2037,19 @@ static void SotaResume
                     if (result != LE_BUSY)
                     {
                         LaunchSwUpdate(LWM2MCORE_SW_UPDATE_TYPE, instanceId);
+                    }
+                }
+                else
+                {
+                    // Upon reboot of the board, start program deletes all the apps/system
+                    // installation intermediate directory. So SOTA package stored by avcDaemon
+                    // should be streamed to updateDaemon again.
+                    result = avcApp_StartUpdate();
+
+                    if (LE_OK != result)
+                    {
+                        LE_ERROR("Failed to resume unpack");
+                        DeletePackage();
                     }
                 }
                 break;
