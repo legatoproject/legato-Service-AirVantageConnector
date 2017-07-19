@@ -567,6 +567,12 @@ static Argument_t* GetArg
 {
     Argument_t* argPtr = NULL;
     le_dls_List_t* argListPtr = le_ref_Lookup(ArgListRefMap, argumentListRef);
+    if (NULL == argListPtr)
+    {
+        LE_ERROR("Invalid argument list (%p) provided!", argumentListRef);
+        return NULL;
+    }
+
     le_dls_Link_t* argLinkPtr = le_dls_Peek(argListPtr);
 
     while (argLinkPtr != NULL)
@@ -2316,6 +2322,12 @@ void le_avdata_ReplyExecResult
     // Clean up the argument list and safe ref.
     Argument_t* argPtr = NULL;
     le_dls_List_t* argListPtr = le_ref_Lookup(ArgListRefMap, ArgListRef);
+    if (NULL == argListPtr)
+    {
+        LE_ERROR("Invalid argument list (%p) provided!", ArgListRef);
+        return;
+    }
+
     le_dls_Link_t* argLinkPtr = le_dls_Pop(argListPtr);
 
     while (argLinkPtr != NULL)
