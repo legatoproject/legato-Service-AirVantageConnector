@@ -822,7 +822,7 @@ static le_result_t CborSafeCopyString
         return LE_FAULT;
     }
 
-    // need to reserve one byte for the null terminating byte.
+    // Need to reserve one byte for the null terminating byte.
     if (incomingStrSize > (*strSizePtr-1))
     {
         LE_ERROR("Encoded string (%d bytes) too big. Max %d bytes expected.",
@@ -986,6 +986,11 @@ static le_result_t EncodeMultiData
             }
 
             /* CBOR encoding for the leaf node itself. */
+            if (NULL == currToken)
+            {
+                LE_ERROR("currToken is NULL");
+                return LE_FAULT;
+            }
 
             // Value name.
             if (CborNoError != cbor_encode_text_stringz(&mapNode, currToken))
@@ -1020,7 +1025,7 @@ static le_result_t EncodeMultiData
         }
         else if (strcmp(currToken, savedToken) != 0)
         {
-            // we have encountered a "new" branch node, so make recursive call on the saved range.
+            // We have encountered a "new" branch node, so make recursive call on the saved range.
             if (strcmp(savedToken, "") != 0)
             {
                 maxCurrRange = i - 1;
@@ -2416,7 +2421,7 @@ le_result_t le_avdata_Push
         }
         else
         {
-            // path does not exists
+            // Path does not exists
             return LE_NOT_FOUND;
         }
     }
@@ -2595,14 +2600,19 @@ void le_avdata_DeleteRecord
 {
     // Map safeRef to desired data
     recordRef = GetRecRefFromSafeRef(recordRef, __func__);
+    if (NULL == recordRef)
+    {
+        LE_ERROR("recordRef is NULL");
+        return;
+    }
 
-    // delete record data
+    // Delete record data
     timeSeries_Delete(recordRef);
 
     le_ref_IterRef_t iterRef = le_ref_GetIterator(RecordRefMap);
     RecordRefData_t* recRefDataPtr;
 
-    // remove safe ref
+    // Remove safe ref
     while ( le_ref_NextNode(iterRef) == LE_OK )
     {
         recRefDataPtr = le_ref_GetValue(iterRef);
