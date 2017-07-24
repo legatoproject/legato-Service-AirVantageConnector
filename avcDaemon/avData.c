@@ -141,14 +141,6 @@ static lwm2mcore_CoapResponse_t AVServerResponse;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Argument list ref (for command exec).
- */
-//--------------------------------------------------------------------------------------------------
-static le_avdata_ArgumentListRef_t ArgListRef;
-
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Structure representing an asset value - a union of the possible types.
  */
 //--------------------------------------------------------------------------------------------------
@@ -1609,10 +1601,11 @@ static void ProcessAvServerExecRequest
                     #endif
 
                     // Create a safe ref with the argument list, and pass that to the handler.
-                    ArgListRef = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
+                    le_avdata_ArgumentListRef_t argListRef =
+                                         le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
 
                     // Execute the command with the argument list collected earlier.
-                    assetDataPtr->handlerPtr(path, LE_AVDATA_ACCESS_EXEC, ArgListRef,
+                    assetDataPtr->handlerPtr(path, LE_AVDATA_ACCESS_EXEC, argListRef,
                                              assetDataPtr->contextPtr);
 
                     // Note that we are not repsonding to AV server yet. The response happens when
@@ -2316,15 +2309,16 @@ le_result_t le_avdata_GetStringArgLength
 //--------------------------------------------------------------------------------------------------
 void le_avdata_ReplyExecResult
 (
-    le_result_t result
+    le_avdata_ArgumentListRef_t argListRef,  ///< [IN] Argument list ref.
+    le_result_t result                       ///< [IN] Command execution status.
 )
 {
     // Clean up the argument list and safe ref.
     Argument_t* argPtr = NULL;
-    le_dls_List_t* argListPtr = le_ref_Lookup(ArgListRefMap, ArgListRef);
+    le_dls_List_t* argListPtr = le_ref_Lookup(ArgListRefMap, argListRef);
     if (NULL == argListPtr)
     {
-        LE_ERROR("Invalid argument list (%p) provided!", ArgListRef);
+        LE_KILL_CLIENT("Invalid argument list (%p) provided!", argListRef);
         return;
     }
 
@@ -2337,7 +2331,7 @@ void le_avdata_ReplyExecResult
         argLinkPtr = le_dls_Pop(argListPtr);
     }
 
-    le_ref_DeleteRef(ArgListRefMap, ArgListRef);
+    le_ref_DeleteRef(ArgListRefMap, argListRef);
 
     // Respond to AV server with the command execution result.
     RespondToAvServer((result == LE_OK) ? COAP_RESOURCE_CHANGED : COAP_INTERNAL_ERROR, NULL, 0);
