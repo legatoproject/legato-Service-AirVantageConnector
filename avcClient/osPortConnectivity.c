@@ -618,6 +618,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSignalStrength
                     break;
 
                 case LE_MRC_RAT_UMTS:
+                case LE_MRC_RAT_TDSCDMA:
                     if (LE_OK != le_mrc_GetUmtsSignalMetrics(metricsRef, &rxLevel, &er,
                                                              &ecio, &rscp, &sinr))
                     {
@@ -1130,14 +1131,14 @@ lwm2mcore_Sid_t lwm2mcore_GetSignalBars
             break;
 
         case LE_MRC_RAT_UMTS:
+        case LE_MRC_RAT_TDSCDMA:
             if (LE_OK != le_mrc_GetUmtsSignalMetrics(metricsRef, &rxLevel, &er,
                                                      &ecio, &rscp, &sinr))
             {
                 return LWM2MCORE_ERR_GENERAL_ERROR;
             }
-
             // Ec/Io value is given with a decimal by the le_mrc API
-            ecio = ecio / 10;
+            ecio = ecio/10;
 
             while ((signalBars < SIGNAL_BARS_RANGE) && (sID != LWM2MCORE_ERR_COMPLETED_OK))
             {
@@ -1456,6 +1457,7 @@ lwm2mcore_Sid_t lwm2mcore_GetEcIo
             break;
 
         case LE_MRC_RAT_UMTS:
+        case LE_MRC_RAT_TDSCDMA:
             if (LE_OK != le_mrc_GetUmtsSignalMetrics(metricsRef, &rxLevel, &er,
                                                      &ecio, &rscp, &sinr))
             {
@@ -1534,6 +1536,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRsrp
     {
         case LE_MRC_RAT_GSM:
         case LE_MRC_RAT_UMTS:
+        case LE_MRC_RAT_TDSCDMA:
         case LE_MRC_RAT_CDMA:
             // RSRP available only for LTE
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
@@ -1607,6 +1610,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRsrq
     {
         case LE_MRC_RAT_GSM:
         case LE_MRC_RAT_UMTS:
+        case LE_MRC_RAT_TDSCDMA:
         case LE_MRC_RAT_CDMA:
             // RSRQ available only for LTE
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
@@ -1681,11 +1685,12 @@ lwm2mcore_Sid_t lwm2mcore_GetRscp
         case LE_MRC_RAT_GSM:
         case LE_MRC_RAT_LTE:
         case LE_MRC_RAT_CDMA:
-            // RSCP available only for UMTS
+        case LE_MRC_RAT_UMTS:
+            // RSCP available only for TDSCDMA
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
             break;
 
-        case LE_MRC_RAT_UMTS:
+        case LE_MRC_RAT_TDSCDMA:
             if (LE_OK != le_mrc_GetUmtsSignalMetrics(metricsRef, &rxLevel, &er,
                                                      &ecio, &rscp, &sinr))
             {
