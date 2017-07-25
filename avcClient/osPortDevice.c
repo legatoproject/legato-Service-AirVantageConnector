@@ -1346,11 +1346,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceTemperature
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
- *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
- *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
- *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
- *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetDeviceUnexpectedResets
@@ -1358,12 +1354,21 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceUnexpectedResets
     uint32_t* valuePtr  ///< [INOUT] data buffer
 )
 {
+    uint64_t count;
+
     if (!valuePtr)
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+    if (LE_OK != le_info_GetUnexpectedResetsCount(&count))
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    *valuePtr = (uint32_t)count;
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1374,11 +1379,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceUnexpectedResets
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
- *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
- *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
- *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
- *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetDeviceTotalResets
@@ -1386,12 +1387,22 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceTotalResets
     uint32_t* valuePtr  ///< [INOUT] data buffer
 )
 {
+    uint64_t expected, unexpected;
+
     if (!valuePtr)
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+    if ( (LE_OK != le_info_GetExpectedResetsCount(&expected)) ||
+         (LE_OK != le_info_GetUnexpectedResetsCount(&unexpected)) )
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    *valuePtr = (uint32_t)(expected + unexpected);
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
