@@ -37,6 +37,7 @@ requires:
     {
         $LEGATO_AVC_PA_DEFAULT
         ${LEGATO_ROOT}/components/3rdParty/tinydtls
+        ${LEGATO_ROOT}/components/3rdParty/tinycbor
         ${LEGATO_ROOT}/components/appCfg
     }
 }
@@ -49,6 +50,7 @@ sources:
     timeseriesData.c
     push.c
     avcFs.c
+
     // AVC
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/avcClient.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortConnectivity.c
@@ -121,6 +123,7 @@ cflags:
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/er-coap-13
+    -I${LEGATO_BUILD}/3rdParty/inc
     -DLWM2M_CLIENT_MODE
     -DLWM2M_LITTLE_ENDIAN
     -DLWM2M_BOOTSTRAP
@@ -141,5 +144,6 @@ ldflags:
     -lz
     -lssl
     -lcrypto
-    -ltinycbor
+    -L${LEGATO_BUILD}/3rdParty/lib -ltinycbor
 }
+

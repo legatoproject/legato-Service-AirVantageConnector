@@ -692,7 +692,7 @@ static void GetNamespacedPath
     if (le_msg_GetClientUserCreds(sessionRef, &uid, &pid) != LE_OK)
     {
         LE_KILL_CLIENT("Could not get credentials for the client.");
-        return NULL;
+        return;
     }
 
     // Look up the process's application name.
