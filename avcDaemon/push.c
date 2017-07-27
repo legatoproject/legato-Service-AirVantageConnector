@@ -31,6 +31,14 @@ static le_dls_List_t PushDataList;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Returns if data is currently being pushed to the server.
+ */
+//--------------------------------------------------------------------------------------------------
+static bool IsPushing = false;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Maximum number of items queued for push.
  * The number 10 is used because it takes max memory limit / MAX_CBOR_BUFFER_NUMBYTES
  */
@@ -56,6 +64,25 @@ typedef struct
 }
 PushData_t;
 
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Returns if the service is busy pushing data or will be pushing another set of data
+ */
+//--------------------------------------------------------------------------------------------------
+bool IsPushBusy
+(
+    void
+)
+{
+    size_t pushQueueLength = le_dls_NumLinks(&PushDataList);
+    if (IsPushing && (pushQueueLength > 0))
+    {
+        return true;
+    }
+
+    return false;
+}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -96,6 +123,7 @@ static void PushCallBackHandler
             le_dls_Remove(&PushDataList, linkPtr);
             le_mem_Release(pDataPtr);
             linkPtr = NULL;
+            IsPushing = false;
             break;
         }
 
@@ -123,6 +151,7 @@ static void PushCallBackHandler
             if (result == LE_OK)
             {
                 pDataPtr->mid = mid;
+                IsPushing = true;
             }
 
             break;
@@ -172,6 +201,7 @@ le_result_t PushBuffer
             LE_DEBUG("Data has been pushed.");
             pDataPtr->mid = mid;
             pDataPtr->isSent = true;
+            IsPushing = true;
         }
         else
         {

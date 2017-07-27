@@ -17,6 +17,28 @@
 #define MAX_CBOR_BUFFER_NUMBYTES 4096 // TODO: verify value
 
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Returns if the service is busy pushing data or will be pushing another set of data
+ */
+//--------------------------------------------------------------------------------------------------
+LE_SHARED bool IsPushBusy
+(
+    void
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Push buffer to the server
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BUSY           Data queued for push
+ *  - LE_NOT_POSSIBLE   Data queue is full, try pushing data again later
+ *  - LE_FAULT          On any other errors
+ */
+//--------------------------------------------------------------------------------------------------
 LE_SHARED le_result_t PushBuffer
 (
     uint8_t* bufferPtr,

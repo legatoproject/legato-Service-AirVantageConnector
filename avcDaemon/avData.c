@@ -37,6 +37,14 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Maximum bytes that can be pushed to the server.
+ */
+//--------------------------------------------------------------------------------------------------
+#define MAX_PUSH_BUFFER_BYTES 20000
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Map containing asset data.
  */
 //--------------------------------------------------------------------------------------------------
@@ -2441,6 +2449,87 @@ le_result_t le_avdata_Push
 
     return result;
 }
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Push data dump to a specified path on the server.
+ *
+ * @return:
+ *      - LE_OK on success.
+ *      - LE_BUSY if the service is busy pushing other data, try again later
+ *      - LE_FAULT on any other error
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avdata_PushStream
+(
+    const char* path,                          ///< [IN] Asset data path
+    int fd,                                    ///< [IN] File descriptor of data dump.
+    le_avdata_CallbackResultFunc_t handlerPtr, ///< [IN] Push result callback
+    void* contextPtr                           ///< [IN] Context pointer
+)
+{
+    // Service is busy, notify user to try another time
+    if (IsPushBusy())
+    {
+        return LE_NOT_POSSIBLE;
+    }
+
+    if (fd < 0)
+    {
+        LE_ERROR("Invalid file descriptor");
+        return LE_FAULT;
+    }
+
+    int result;
+    int bytesRead = 0;
+    uint8_t buffer[MAX_PUSH_BUFFER_BYTES+1];
+    memset(buffer, 0, sizeof(buffer));
+
+    do
+    {
+        result = (read(fd, buffer + bytesRead, (MAX_PUSH_BUFFER_BYTES - bytesRead) + 1));
+        if (result > 0)
+        {
+            bytesRead += result;
+            if (bytesRead > MAX_PUSH_BUFFER_BYTES)
+            {
+                LE_ERROR("Data dump exceeds maximum buffer size.");
+                return LE_FAULT;
+            }
+        }
+
+        if ((result < 0) && (errno != EINTR))
+        {
+            LE_ERROR("Error reading.");
+            return LE_FAULT;
+        }
+    }
+    while ((bytesRead < MAX_PUSH_BUFFER_BYTES) && (result != 0));
+
+    // Encode data. Encoded buffer must be large to store path + data + cbor mapping (5)
+    uint8_t encodedBuf[bytesRead + strlen(path) + 5];
+    CborEncoder encoder, mapEncoder;
+    CborError err;
+    cbor_encoder_init(&encoder, &encodedBuf, sizeof(encodedBuf), 0);
+    err = cbor_encoder_create_map(&encoder, &mapEncoder, 1);
+    RETURN_IF_CBOR_ERROR(err);
+    err = cbor_encode_text_stringz(&mapEncoder, path);
+    RETURN_IF_CBOR_ERROR(err);
+    err = cbor_encode_text_string(&mapEncoder, (char *)buffer, strlen(buffer));
+    RETURN_IF_CBOR_ERROR(err);
+    cbor_encoder_close_container(&encoder, &mapEncoder);
+    LE_DUMP(encodedBuf, cbor_encoder_get_buffer_size(&encoder, encodedBuf));
+
+    le_result_t res = PushBuffer(encodedBuf,
+                                cbor_encoder_get_buffer_size(&encoder, encodedBuf),
+                                LWM2MCORE_PUSH_CONTENT_CBOR,
+                                handlerPtr,
+                                contextPtr);
+
+    return res;
+}
+
 
 //--------------------------------------------------------------------------------------------------
 /**

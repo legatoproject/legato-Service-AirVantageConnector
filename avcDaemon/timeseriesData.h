@@ -25,6 +25,26 @@ typedef struct le_avdata_Record* timeSeries_RecordRef_t;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Checks the return value from the tinyCBOR encoder and returns from function if an error is found.
+ */
+//--------------------------------------------------------------------------------------------------
+#define \
+    RETURN_IF_CBOR_ERROR( err ) \
+    ({ \
+        if (err != CborNoError) \
+        { \
+            LE_ERROR("CBOR encoding error %s", cbor_error_string(err)); \
+            if (err == CborErrorOutOfMemory) \
+            { \
+                return LE_NO_MEMORY; \
+            } \
+            return LE_FAULT; \
+        } \
+    })
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Create a timeseries record
  *
  * @return:
