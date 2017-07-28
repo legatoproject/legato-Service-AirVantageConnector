@@ -55,7 +55,7 @@ static le_event_Id_t BsFailureEventId;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Denoting a session is established to the DM serevr.
+ * Denoting a session is established to the DM server.
  */
 //--------------------------------------------------------------------------------------------------
 static bool SessionStarted = false;
@@ -351,6 +351,7 @@ static int EventHandler
 )
 {
     int result = 0;
+    static bool authStartedSent = false;
 
     switch (status.event)
     {
@@ -402,6 +403,40 @@ static int EventHandler
         case LWM2MCORE_EVENT_UPDATE_FINISHED:
         case LWM2MCORE_EVENT_UPDATE_FAILED:
             result = PackageEventHandler(status);
+            break;
+
+        case LWM2MCORE_EVENT_AUTHENTICATION_STARTED:
+            // Send only the first "authentication started" notification in case the device
+            // authenticates first with the BS then the DM server
+            if (!authStartedSent)
+            {
+                avcServer_UpdateHandler(LE_AVC_AUTH_STARTED, LE_AVC_UNKNOWN_UPDATE,
+                                        -1, -1, LE_AVC_ERR_NONE);
+                authStartedSent = true;
+            }
+            if (status.u.session.type == LWM2MCORE_SESSION_BOOTSTRAP)
+            {
+                LE_DEBUG("Authentication to BS started");
+            }
+            else
+            {
+                LE_DEBUG("Authentication to DM started");
+                // Authentication with the DM server started, reset the flag
+                authStartedSent = false;
+            }
+            break;
+
+        case LWM2MCORE_EVENT_AUTHENTICATION_FAILED:
+            if (status.u.session.type == LWM2MCORE_SESSION_BOOTSTRAP)
+            {
+                LE_WARN("Authentication to BS failed");
+            }
+            else
+            {
+                LE_WARN("Authentication to DM failed");
+            }
+            avcServer_UpdateHandler(LE_AVC_AUTH_FAILED, LE_AVC_UNKNOWN_UPDATE,
+                                    -1, -1, LE_AVC_ERR_NONE);
             break;
 
         default:

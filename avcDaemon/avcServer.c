@@ -376,6 +376,8 @@ static char* AvcSessionStateToStr
         case LE_AVC_SESSION_STOPPED:        result = "Session stopped";         break;
         case LE_AVC_REBOOT_PENDING:         result = "Reboot pending";          break;
         case LE_AVC_CONNECTION_REQUIRED:    result = "Connection required";     break;
+        case LE_AVC_AUTH_STARTED:           result = "Authentication started";  break;
+        case LE_AVC_AUTH_FAILED:            result = "Authentication failed";   break;
         default:                            result = "Unknown";                 break;
 
     }
@@ -860,7 +862,7 @@ void avcServer_UpdateHandler
             break;
 
         default:
-            LE_DEBUG("Unsupported updateStatus %d", updateStatus);
+            LE_DEBUG("Unhandled updateStatus %s", AvcSessionStateToStr(updateStatus));
             break;
     }
 
