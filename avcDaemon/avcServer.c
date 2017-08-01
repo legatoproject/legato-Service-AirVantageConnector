@@ -1373,6 +1373,11 @@ static void StartPollingTimer
     void
 )
 {
+    if (NULL == PollingTimerRef)
+    {
+        PollingTimerRef = le_timer_Create("PollingTimer");
+    }
+
     // Polling timer, in minutes.
     uint32_t pollingTimer = 0;
 
@@ -1435,11 +1440,6 @@ static void StartPollingTimer
 
         // Set a timer to start the next session.
         le_clk_Time_t interval = {remainingPollingTimer, 0};
-
-        if (NULL == PollingTimerRef)
-        {
-            PollingTimerRef = le_timer_Create("PollingTimer");
-        }
 
         LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
         LE_ASSERT(LE_OK == le_timer_SetHandler(PollingTimerRef, StartPollingTimer));
@@ -2865,10 +2865,14 @@ le_result_t le_avc_SetPollingTimer
     }
 
     le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
+    uint32_t existingPollingTimerCfg = le_cfg_GetInt(iterRef, "pollingTimer", 0);
     le_cfg_SetInt(iterRef, "pollingTimer", pollingTimer);
     le_cfg_CommitTxn(iterRef);
 
-    if (!le_timer_IsRunning(PollingTimerRef))
+    // Start the polling timer if the config transitions from 0 to non-0. Note that we can't look at
+    // if the timer is running, because it's possible that this function is called at the small
+    // window between the current polling timer stopping and the next polling timer starting.
+    if ((existingPollingTimerCfg == 0) && (pollingTimer > 0))
     {
         StartPollingTimer();
     }
