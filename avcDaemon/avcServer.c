@@ -755,6 +755,12 @@ void avcServer_UpdateHandler
 {
     LE_INFO("Update state: %s", AvcSessionStateToStr(updateStatus));
 
+    if ((updateStatus != LE_AVC_SESSION_STARTED) ||
+        (updateStatus != LE_AVC_SESSION_STOPPED))
+    {
+        avcClient_RestartActivityTimer();
+    }
+
     // Keep track of the state of any pending downloads or installs.
     switch ( updateStatus )
     {
@@ -780,6 +786,7 @@ void avcServer_UpdateHandler
 
         case LE_AVC_DOWNLOAD_IN_PROGRESS:
             LE_DEBUG("Update type for DOWNLOAD is %d", updateType);
+            avcClient_StopActivityTimer();
             CurrentTotalNumBytes = totalNumBytes;
             CurrentDownloadProgress = dloadProgress;
             CurrentUpdateType = updateType;
@@ -851,12 +858,14 @@ void avcServer_UpdateHandler
 
         case LE_AVC_SESSION_STARTED:
             // Update object9 list managed by legato to lwm2mcore
+            avcClient_StartActivityTimer();
             avcApp_NotifyObj9List();
             avData_ReportSessionState(LE_AVDATA_SESSION_STARTED);
             break;
 
         case LE_AVC_INSTALL_IN_PROGRESS:
         case LE_AVC_SESSION_STOPPED:
+            avcClient_StopActivityTimer();
             // These events do not cause a state transition
             avData_ReportSessionState(LE_AVDATA_SESSION_STOPPED);
             break;
@@ -2069,6 +2078,9 @@ le_result_t DeferDownload
         return LE_FAULT;
     }
 
+    // stop activity timer when download has been deferred
+    avcClient_StopActivityTimer();
+
     // Since the decision is not to download at this time, go back to idle
     CurrentState = AVC_IDLE;
 
@@ -2208,6 +2220,9 @@ le_result_t DeferInstall
         LE_ERROR("Expected AVC_INSTALL_PENDING state; current state is %i", CurrentState);
         return LE_FAULT;
     }
+
+    // stop activity timer when installation has been deferred
+    avcClient_StopActivityTimer();
 
     if ( CurrentUpdateType == LE_AVC_FIRMWARE_UPDATE )
     {
@@ -3071,10 +3086,11 @@ COMPONENT_INIT
     push_Init();
     avcClient_Init();
 
-    // Read the user defined timeout from config tree @ /apps/avcService/modemActivityTimeout
+    // Read the user defined timeout from config tree @ /apps/avcService/activityTimeout
     le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn(AVC_SERVICE_CFG);
-    int timeout = le_cfg_GetInt(iterRef, "modemActivityTimeout", 20);
+    int timeout = le_cfg_GetInt(iterRef, "activityTimeout", 20);
     le_cfg_CancelTxn(iterRef);
+    avcClient_SetActivityTimeout(timeout);
 
     // Check to see if le_avc is bound, which means there is an installed control app.
     IsControlAppInstalled = IsAvcBound();

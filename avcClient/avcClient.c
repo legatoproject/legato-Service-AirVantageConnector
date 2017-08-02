@@ -60,7 +60,6 @@ static le_event_Id_t BsFailureEventId;
 //--------------------------------------------------------------------------------------------------
 static bool SessionStarted = false;
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Retry timers related data. RetryTimersIndex is index to the array of RetryTimers.
@@ -72,6 +71,20 @@ static le_timer_Ref_t RetryTimerRef = NULL;
 static int RetryTimersIndex = -1;
 static uint16_t RetryTimers[LE_AVC_NUM_RETRY_TIMERS] = {0};
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Used for reporting LE_AVC_NO_UPDATE if there has not been any activity between the device and
+ * the server for a specific amount of time, after a session has been started.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t ActivityTimerRef;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Default activity timer value
+ */
+//--------------------------------------------------------------------------------------------------
+#define DEFAULT_ACTIVITY_TIMER 20
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -798,6 +811,94 @@ void BsFailureHandler
 )
 {
     avcClient_Disconnect(true);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Handler function for ActivityTimerRef expiry
+ */
+//--------------------------------------------------------------------------------------------------
+static void ActivityTimerHandler
+(
+    le_timer_Ref_t timerRef    ///< This timer has expired
+)
+{
+    LE_DEBUG("Activity timer expired; reporting LE_AVC_NO_UPDATE");
+    avcServer_UpdateHandler(LE_AVC_NO_UPDATE, LE_AVC_UNKNOWN_UPDATE, -1, -1, LE_AVC_ERR_NONE);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * This function sets up the activity timer. The timeout will default to 20 seconds if
+ * user defined value doesn't exist or if the defined value is less than 0.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_SetActivityTimeout
+(
+    int timeout               ///< [IN] Timeout for activity timer
+)
+{
+    // After a session is started, if there has been no activity within the timer
+    // interval, then report LE_AVC_NO_UPDATE.
+    le_clk_Time_t timerInterval = { .sec=DEFAULT_ACTIVITY_TIMER, .usec=0 };
+
+    if (timeout > 0)
+    {
+        timerInterval.sec = timeout;
+    }
+
+    LE_DEBUG("Activity timeout set to %d seconds.", (int)timerInterval.sec);
+
+    ActivityTimerRef = le_timer_Create("Activity timer");
+    le_timer_SetInterval(ActivityTimerRef, timerInterval);
+    le_timer_SetHandler(ActivityTimerRef, ActivityTimerHandler);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Start a timer to monitor the activity between device and server.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_StartActivityTimer
+(
+    void
+)
+{
+    le_timer_Start(ActivityTimerRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Stop a timer to monitor the activity between device and server.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_StopActivityTimer
+(
+    void
+)
+{
+    if (le_timer_IsRunning(ActivityTimerRef))
+    {
+        LE_DEBUG("Stopping Activity timer");
+        le_timer_Stop(ActivityTimerRef);
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Restart a timer to monitor the activity between device and server.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_RestartActivityTimer
+(
+    void
+)
+{
+    if (le_timer_IsRunning(ActivityTimerRef))
+    {
+        LE_DEBUG("Restarting Activity timer");
+        le_timer_Restart(ActivityTimerRef);
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
