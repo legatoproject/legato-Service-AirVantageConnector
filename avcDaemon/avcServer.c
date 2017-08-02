@@ -2618,11 +2618,27 @@ le_result_t le_avc_GetApnConfig
         goto done;
     }
 
+    // if apn name is empty, we don't need to return username or password
+    if (strcmp(apnName, "") == 0)
+    {
+        le_utf8_Copy(userName, "", userNameNumElements, NULL);
+        le_utf8_Copy(userPassword, "", userPasswordNumElements, NULL);
+        goto done;
+    }
+
     result = le_cfg_GetString(iterRef, "userName", userName, userNameNumElements, "");
 
     if (result != LE_OK)
     {
         LE_ERROR("Failed to get APN User Name.");
+        goto done;
+    }
+
+    // if username is empty, we don't need to return password
+    if (strcmp(userName, "") == 0)
+    {
+        // if user name is empty, we don't need to return password
+        le_utf8_Copy(userPassword, "", userPasswordNumElements, NULL);
         goto done;
     }
 
