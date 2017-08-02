@@ -528,6 +528,7 @@ static void StopBearer
  *      - LE_OK if connection request has been sent.
  *      - LE_DUPLICATE if already connected.
  *      - LE_BUSY if currently retrying.
+ *      - LE_NOT_PERMITTED if device is in airplane mode
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcClient_Connect
@@ -535,6 +536,13 @@ le_result_t avcClient_Connect
     void
 )
 {
+    le_onoff_t radioStatus;
+    if ((le_mrc_GetRadioPower(&radioStatus) == LE_OK) && radioStatus == LE_OFF)
+    {
+        LE_INFO("Device in airplane mode.");
+        return LE_NOT_PERMITTED;
+    }
+
     if (SessionStarted)
     {
         LE_INFO("Session already started.");
