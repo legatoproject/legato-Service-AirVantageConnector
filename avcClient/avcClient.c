@@ -589,7 +589,7 @@ le_result_t avcClient_Connect
         // timers are being reset.
         if (-1 == RetryTimersIndex)
         {
-            size_t numTimers = 0;
+            size_t numTimers = NUM_ARRAY_MEMBERS(RetryTimers);
 
             if (LE_OK != le_avc_GetRetryTimers(RetryTimers, &numTimers))
             {

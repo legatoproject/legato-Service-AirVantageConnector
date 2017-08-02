@@ -2925,7 +2925,7 @@ static void SetDefaultAVMSConfig
     // dummy variables used to see if there are any current configs present
     uint32_t pollingTimerCurr = 0;
     uint16_t retryTimersCurr[LE_AVC_NUM_RETRY_TIMERS] = {0};
-    size_t numTimersCurr = LE_AVC_NUM_RETRY_TIMERS;
+    size_t numTimersCurr = NUM_ARRAY_MEMBERS(retryTimersCurr);
 
     if (LE_FAULT == le_avc_GetPollingTimer(&pollingTimerCurr))
     {
