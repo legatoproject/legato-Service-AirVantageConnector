@@ -716,7 +716,7 @@ static le_result_t EncodeResourceDeltaValue
     // get data with this timestamp from this resource
     Data_t* dataPtr = (Data_t*)GetTimestampData(resourceDataPtr,
                                                  currentTimestampPtr->timestamp);
-    Data_t* prevDataPtr;
+    Data_t* prevDataPtr = NULL;
 
     int intDelta;
     double floatDelta;

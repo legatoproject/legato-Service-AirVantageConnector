@@ -82,7 +82,7 @@ static void Lwm2mClientReceive
         else if (0 < numBytes)
         {
             char s[INET6_ADDRSTRLEN];
-            in_port_t port;
+            in_port_t port = 0;
 
             LE_DEBUG("Lwm2mClientReceive numBytes %d", numBytes);
 
