@@ -312,6 +312,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
 
     if (-1 == CheckHttpStatusCode(pkg.pkgInfo.httpRespCode))
     {
+        LE_ERROR("HTTP error %ld", pkg.pkgInfo.httpRespCode);
         return DWL_FAULT;
     }
 

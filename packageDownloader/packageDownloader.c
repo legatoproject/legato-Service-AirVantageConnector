@@ -921,8 +921,8 @@ void* packageDownloader_DownloadPackage
                 else
                 {
                     // Send download complete event.
-                    // Not setting the downloaded number of bytes and percentage allows using the last
-                    // stored values.
+                    // Not setting the downloaded number of bytes and percentage
+                    // allows using the last stored values.
                     avcServer_UpdateHandler(LE_AVC_DOWNLOAD_COMPLETE,
                                             LE_AVC_FIRMWARE_UPDATE,
                                             -1,
@@ -1060,12 +1060,25 @@ void* packageDownloader_StoreFwPackage
         if ((DOWNLOAD_STATUS_ABORT != GetDownloadStatus())
          && (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus()))
         {
+            lwm2mcore_FwUpdateResult_t fwUpdateResult;
+
             // Abort active download
             AbortDownload();
 
             // Set the update state and update
             packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
-            packageDownloader_SetFwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_UNSUPPORTED_PKG_TYPE);
+            if (LE_CLOSED == result)
+            {
+                // File descriptor has been closed before all data have been received,
+                // this is a communication error
+                fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_COMMUNICATION_ERROR;
+            }
+            else
+            {
+                // All other error codes are triggered by an incorrect package
+                fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_UNSUPPORTED_PKG_TYPE;
+            }
+            packageDownloader_SetFwUpdateResult(fwUpdateResult);
         }
 
         close(fd);
