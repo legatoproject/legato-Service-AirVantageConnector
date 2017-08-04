@@ -1112,6 +1112,9 @@ le_result_t packageDownloader_StartDownload
 
     avcServer_InitUserAgreement();
 
+    // Stop activity timer to prevent NO_UPDATE notification
+    avcClient_StopActivityTimer();
+
     // Store URI and update type to be able to resume the download if necessary
     if (LE_OK != SetResumeInfo(uriPtr, type))
     {
