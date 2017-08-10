@@ -896,10 +896,16 @@ void* packageDownloader_DownloadPackage
         // Wait for the end of the store thread used for FOTA
         if (LWM2MCORE_FW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
         {
-            void* storeRet;
-            le_thread_Join(dwlCtxPtr->storeRef, &storeRet);
-            ret = storeRet;
-            LE_DEBUG("Store thread joined with ret=%d", ret);
+            void* storeThreadReturn;
+            le_thread_Join(dwlCtxPtr->storeRef, &storeThreadReturn);
+            LE_DEBUG("Store thread joined with return value = %p", storeThreadReturn);
+
+            // Check if store thread finished with an error
+            if (storeThreadReturn < 0)
+            {
+                LE_ERROR("Package store failed");
+                ret = -1;
+            }
 
             // Delete the semaphore used to synchronize threads
             le_sem_Delete(dwlCtxPtr->semRef);
@@ -907,7 +913,7 @@ void* packageDownloader_DownloadPackage
             // Status notification is not relevant for suspend.
             if (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus())
             {
-                // Check if store thread finished with an error
+                // Check if there is any error in package download / store
                 if (ret < 0)
                 {
                     // Send download failed event and set the error to "bad package",

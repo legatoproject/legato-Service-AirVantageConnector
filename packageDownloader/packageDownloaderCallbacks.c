@@ -23,17 +23,40 @@
  * Value of 1 mebibyte in bytes
  */
 //--------------------------------------------------------------------------------------------------
-#define MEBIBYTE            (1 << 20)
+#define MEBIBYTE                        (1 << 20)
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Curl minimum download speed (expect to download atleast 100 bytes per second)
+ */
+//--------------------------------------------------------------------------------------------------
+#define CURL_MINIMUM_SPEED              100L
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Curl timeout in seconds. Timeout, if the download speed is less than CURL_MINIMUM_SPEED for
+ * more than CURL_TIMEOUT_SECONDS. 1000 seconds is chosen, so that the downloader thread has a
+ * slightly larger timeout than the store thread which has a timeout of 900 seconds.
+ */
+//--------------------------------------------------------------------------------------------------
+#define CURL_TIMEOUT_SECONDS            1000L
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Curl connection timeout (Maximum time curl can spend during connection phase)
+ */
+//--------------------------------------------------------------------------------------------------
+#define CURL_CONNECT_TIMEOUT_SECONDS    300L
 
 //--------------------------------------------------------------------------------------------------
 /**
  * HTTP status codes
  */
 //--------------------------------------------------------------------------------------------------
-#define NOT_FOUND               404
-#define INTERNAL_SERVER_ERROR   500
-#define BAD_GATEWAY             502
-#define SERVICE_UNAVAILABLE     503
+#define NOT_FOUND                       404
+#define INTERNAL_SERVER_ERROR           500
+#define BAD_GATEWAY                     502
+#define SERVICE_UNAVAILABLE             503
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -198,6 +221,7 @@ static int GetDownloadInfo
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOBODY, 1L);
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, WriteDummy);
 
+    // perform the download operation
     rc = curl_easy_perform(pkgPtr->curlPtr);
     if (CURLE_OK != rc)
     {
@@ -286,6 +310,32 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
     if (!pkg.curlPtr)
     {
         LE_ERROR("failed to initialize the curl session");
+        return DWL_FAULT;
+    }
+
+    // set the timeout for connection phase
+    rc = curl_easy_setopt(pkg.curlPtr, CURLOPT_CONNECTTIMEOUT, CURL_CONNECT_TIMEOUT_SECONDS);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("failed to set curl connection timeout: %s", curl_easy_strerror(rc));
+        return DWL_FAULT;
+    }
+
+    // set timeout for the download speed to be very low
+    rc = curl_easy_setopt(pkg.curlPtr, CURLOPT_LOW_SPEED_TIME, CURL_TIMEOUT_SECONDS);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("failed to set curl timeout: %s", curl_easy_strerror(rc));
+        return DWL_FAULT;
+    }
+
+    // set the minimum download speed expected. If the download speed continuous to
+    // be less than CURL_MINIMUM_SPEED for more than CURL_TIMEOUT_SECONDS, curl
+    // will timeout
+    rc = curl_easy_setopt(pkg.curlPtr, CURLOPT_LOW_SPEED_LIMIT, CURL_MINIMUM_SPEED);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("failed to set curl download speed limit: %s", curl_easy_strerror(rc));
         return DWL_FAULT;
     }
 
@@ -489,16 +539,26 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
         le_sem_Post(dwlCtxPtr->semRef);
     }
 
+    // perform download operation
     rc = curl_easy_perform(pkgPtr->curlPtr);
-    if (CURLE_OK != rc)
+    if (rc == CURLE_OPERATION_TIMEDOUT)
     {
-        LE_ERROR("curl_easy_perform failed: %s", curl_easy_strerror(rc));
+        LE_ERROR("Curl connection or download timeout : %s", curl_easy_strerror(rc));
+        LE_DEBUG("Curl connection timeout : %d (seconds)", CURL_CONNECT_TIMEOUT_SECONDS);
+        LE_DEBUG("Curl low speed limit : %d (bytes/second)", CURL_MINIMUM_SPEED);
+        LE_DEBUG("Curl low speed time : %d (seconds)", CURL_TIMEOUT_SECONDS);
+        return -1;
+    }
+    else if (CURLE_OK != rc)
+    {
+        LE_ERROR("failed to perform curl request: %s", curl_easy_strerror(rc));
+        return -1;
     }
 
     rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_RESPONSE_CODE, &HttpRespCode);
     if (CURLE_OK != rc)
     {
-        LE_ERROR("failed to get response code: %s", curl_easy_strerror(rc));
+        LE_WARN("failed to get response code: %s", curl_easy_strerror(rc));
     }
 
     return result;
