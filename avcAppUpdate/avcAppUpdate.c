@@ -1885,8 +1885,14 @@ static void DownloadHandler
         CurrentObj9 = NULL;
 
         StopStoringPackage(LE_FAULT);
+        // Close the fd
+        close(fd);
         return;
     }
+
+    // Close the fd
+    close(fd);
+
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2206,6 +2212,9 @@ le_result_t avcApp_StartUpdate
 
     // Start unpacking the downloaded file.
     result = le_update_Start(readFd);
+
+    // Close fd
+    close(readFd);
 
     if (result != LE_OK)
     {

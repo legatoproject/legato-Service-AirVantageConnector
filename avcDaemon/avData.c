@@ -1342,7 +1342,7 @@ static le_result_t EncodeMultiData
         {
             // When a leaf node is encountered, we need to make recursive calls on the previous
             // range of branch nodes.
-            if (strcmp(savedToken, "") != 0)
+            if (0 != strcmp(savedToken, ""))
             {
                 maxCurrRange = i - 1;
 
@@ -1386,7 +1386,7 @@ static le_result_t EncodeMultiData
             }
 
             // Reset savedToken
-            if (strcmp(savedToken, "") != 0)
+            if (0 != strcmp(savedToken, ""))
             {
                 free(savedToken);
             }
@@ -1395,7 +1395,7 @@ static le_result_t EncodeMultiData
         else if (strcmp(currToken, savedToken) != 0)
         {
             // We have encountered a "new" branch node, so make recursive call on the saved range.
-            if (strcmp(savedToken, "") != 0)
+            if (0 != strcmp(savedToken, ""))
             {
                 maxCurrRange = i - 1;
 
@@ -1411,7 +1411,7 @@ static le_result_t EncodeMultiData
             maxCurrRange = i;
 
             // Save the current token
-            if (strcmp(savedToken, "") != 0)
+            if (0 != strcmp(savedToken, ""))
             {
                 free(savedToken);
             }
@@ -1419,6 +1419,11 @@ static le_result_t EncodeMultiData
         }
         else
         {
+            // Free savedToken
+            if (0 != strcmp(savedToken, ""))
+            {
+                free(savedToken);
+            }
             // Do nothing. We've encountered the same branch node.
         }
 

@@ -212,7 +212,7 @@ static le_result_t WritePEMCertificate
 
     mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
     fd = open(certPtr, O_WRONLY | O_CREAT | O_TRUNC, mode);
-    if (!fd)
+    if (fd < 0)
     {
         LE_ERROR("failed to open %s: %m", certPtr);
         return LE_FAULT;
