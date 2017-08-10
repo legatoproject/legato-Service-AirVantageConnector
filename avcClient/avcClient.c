@@ -73,11 +73,19 @@ static uint16_t RetryTimers[LE_AVC_NUM_RETRY_TIMERS] = {0};
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Store the Legato thread, since we might need to queue a function to this thread from the download
+ * thread.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_thread_Ref_t LegatoThread = NULL;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Used for reporting LE_AVC_NO_UPDATE if there has not been any activity between the device and
  * the server for a specific amount of time, after a session has been started.
  */
 //--------------------------------------------------------------------------------------------------
-static le_timer_Ref_t ActivityTimerRef;
+static le_timer_Ref_t ActivityTimerRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -85,6 +93,13 @@ static le_timer_Ref_t ActivityTimerRef;
  */
 //--------------------------------------------------------------------------------------------------
 #define DEFAULT_ACTIVITY_TIMER 20
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Flag used to toggle activity timer
+ */
+//--------------------------------------------------------------------------------------------------
+static bool ToggleActivityTimerFlag = false;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -829,6 +844,36 @@ static void ActivityTimerHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Function queued onto LegatoThread to toggle the activity timer.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ToggleActivityTimerHandler
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    LE_DEBUG("Toggling Activity timer");
+    bool toggleFlag = *((bool*)param1Ptr);
+
+    if (!toggleFlag)
+    {
+        LE_DEBUG("Trying to stop activity timer.");
+        if (le_timer_IsRunning(ActivityTimerRef))
+        {
+            LE_DEBUG("Stopping Activity timer");
+            le_timer_Stop(ActivityTimerRef);
+        }
+    }
+    else
+    {
+        LE_DEBUG("Starting activity timer.");
+        le_timer_Start(ActivityTimerRef);
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * This function sets up the activity timer. The timeout will default to 20 seconds if
  * user defined value doesn't exist or if the defined value is less than 0.
  */
@@ -864,7 +909,11 @@ void avcClient_StartActivityTimer
     void
 )
 {
-    le_timer_Start(ActivityTimerRef);
+    if ( LegatoThread != NULL )
+    {
+        ToggleActivityTimerFlag = true;
+        le_event_QueueFunctionToThread(LegatoThread, ToggleActivityTimerHandler, &ToggleActivityTimerFlag, NULL);
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -877,27 +926,10 @@ void avcClient_StopActivityTimer
     void
 )
 {
-    if (le_timer_IsRunning(ActivityTimerRef))
+    if ( LegatoThread != NULL )
     {
-        LE_DEBUG("Stopping Activity timer");
-        le_timer_Stop(ActivityTimerRef);
-    }
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Restart a timer to monitor the activity between device and server.
- */
-//--------------------------------------------------------------------------------------------------
-void avcClient_RestartActivityTimer
-(
-    void
-)
-{
-    if (le_timer_IsRunning(ActivityTimerRef))
-    {
-        LE_DEBUG("Restarting Activity timer");
-        le_timer_Restart(ActivityTimerRef);
+        ToggleActivityTimerFlag = false;
+        le_event_QueueFunctionToThread(LegatoThread, ToggleActivityTimerHandler, &ToggleActivityTimerFlag, NULL);
     }
 }
 
@@ -914,4 +946,5 @@ void avcClient_Init
     BsFailureEventId = le_event_CreateId("BsFailure", 0);
     le_event_AddHandler("BsFailureHandler", BsFailureEventId, BsFailureHandler);
     RetryTimerRef = le_timer_Create("AvcRetryTimer");
+    LegatoThread = le_thread_GetCurrent();
 }

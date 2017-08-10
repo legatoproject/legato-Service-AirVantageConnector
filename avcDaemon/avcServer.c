@@ -363,6 +363,7 @@ static char* AvcSessionStateToStr
         case LE_AVC_NO_UPDATE:              result = "No update";               break;
         case LE_AVC_DOWNLOAD_PENDING:       result = "Download Pending";        break;
         case LE_AVC_DOWNLOAD_IN_PROGRESS:   result = "Download in Progress";    break;
+        case LE_AVC_DOWNLOAD_COMPLETE:      result = "Download complete";       break;
         case LE_AVC_DOWNLOAD_FAILED:        result = "Download Failed";         break;
         case LE_AVC_INSTALL_PENDING:        result = "Install Pending";         break;
         case LE_AVC_INSTALL_IN_PROGRESS:    result = "Install in progress";     break;
@@ -755,12 +756,6 @@ void avcServer_UpdateHandler
 {
     LE_INFO("Update state: %s", AvcSessionStateToStr(updateStatus));
 
-    if ((updateStatus != LE_AVC_SESSION_STARTED) ||
-        (updateStatus != LE_AVC_SESSION_STOPPED))
-    {
-        avcClient_RestartActivityTimer();
-    }
-
     // Keep track of the state of any pending downloads or installs.
     switch ( updateStatus )
     {
@@ -786,7 +781,6 @@ void avcServer_UpdateHandler
 
         case LE_AVC_DOWNLOAD_IN_PROGRESS:
             LE_DEBUG("Update type for DOWNLOAD is %d", updateType);
-            avcClient_StopActivityTimer();
             CurrentTotalNumBytes = totalNumBytes;
             CurrentDownloadProgress = dloadProgress;
             CurrentUpdateType = updateType;
@@ -800,6 +794,7 @@ void avcServer_UpdateHandler
 
         case LE_AVC_DOWNLOAD_COMPLETE:
             LE_DEBUG("Update type for DOWNLOAD is %d", updateType);
+            avcClient_StartActivityTimer();
             DownloadAgreement = false;
             if (totalNumBytes > 0)
             {
@@ -847,6 +842,7 @@ void avcServer_UpdateHandler
         case LE_AVC_DOWNLOAD_FAILED:
         case LE_AVC_INSTALL_FAILED:
             // There is no longer any current update, so go back to idle
+            avcClient_StartActivityTimer();
             AvcErrorCode = errorCode;
             CurrentState = AVC_IDLE;
 
@@ -994,6 +990,9 @@ static le_result_t QueryInstall
 {
     le_result_t result = LE_BUSY;
 
+    LE_INFO("Stopping activity timer during install pending.");
+    avcClient_StopActivityTimer();
+
     if (NumStatusHandlers > 0)
     {
         // Notify registered control app.
@@ -1054,6 +1053,9 @@ static le_result_t QueryDownload
 )
 {
     le_result_t result = LE_BUSY;
+
+    LE_INFO("Stopping activity timer during download pending.");
+    avcClient_StopActivityTimer();
 
     if (NumStatusHandlers > 0)
     {
