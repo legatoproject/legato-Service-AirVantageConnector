@@ -1911,7 +1911,7 @@ void le_avc_RemoveStatusEventHandler
     NumStatusHandlers--;
 
     // After all status handlers are removed automatic (default) actions will be enabled.
-    if (0 > NumStatusHandlers)
+    if (0 >= NumStatusHandlers)
     {
         IsControlAppInstalled = false;
     }
