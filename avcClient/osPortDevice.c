@@ -791,7 +791,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
 )
 {
     char tmpBufferPtr[FW_BUFFER_LENGTH];
-    uint32_t remainingLen = *lenPtr;
+    uint32_t remainingLen = 0;
     size_t len;
     uint32_t i = 0;
     ComponentVersion_t versionInfo[] =
@@ -812,6 +812,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
+    remainingLen = *lenPtr;
     LE_DEBUG("remainingLen %d", remainingLen);
 
     for (i = 0; i < NUM_ARRAY_MEMBERS(versionInfo); i++)
