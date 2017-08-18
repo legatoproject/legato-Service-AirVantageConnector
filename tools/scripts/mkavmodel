@@ -68,8 +68,8 @@ VerifyTarget()
         wp85 | wp750x)
             TARGETS=(WP8548 WP7502 WP7504)
             ;;
-        wp76xx)
-            TARGETS=(WP7601 WP7603)
+        wp76xx | wp77xx)
+            TARGETS=(WP7601 WP7601-1 WP7603 WP7603-1 WP7607 WP7607-1 WP7607-2 WP7700 WP7702)
             ;;
         em75xx)
             TARGETS=()
