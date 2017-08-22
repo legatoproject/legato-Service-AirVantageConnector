@@ -899,23 +899,31 @@ static void AppInstallHandler
 
     // Update the application's version string.
     appCfg_Iter_t appIterRef = appCfg_FindApp(appNamePtr);
-    char versionBuffer[MAX_VERSION_STR_BYTES] = "";
 
-    if (appCfg_GetVersion(appIterRef, versionBuffer, sizeof(versionBuffer)) == LE_OVERFLOW)
+    if (NULL == appIterRef)
     {
-        LE_WARN("Warning, app, '%s' version string truncated to '%s'.",
-                appNamePtr,
-                versionBuffer);
+        LE_ERROR("Configuration for known application was not found.");
     }
-
-    if (0 == strlen(versionBuffer))
+    else
     {
-        le_appInfo_GetHash(appNamePtr, versionBuffer, sizeof(versionBuffer));
+        char versionBuffer[MAX_VERSION_STR_BYTES] = "";
+
+        if (appCfg_GetVersion(appIterRef, versionBuffer, sizeof(versionBuffer)) == LE_OVERFLOW)
+        {
+            LE_WARN("Warning, app, '%s' version string truncated to '%s'.",
+                   appNamePtr,
+                   versionBuffer);
+        }
+
+        if (0 == strlen(versionBuffer))
+        {
+            le_appInfo_GetHash(appNamePtr, versionBuffer, sizeof(versionBuffer));
+        }
+
+        assetData_client_SetString(instanceRef, O9F_PKG_VERSION, versionBuffer);
+
+        appCfg_DeleteIter(appIterRef);
     }
-
-    assetData_client_SetString(instanceRef, O9F_PKG_VERSION, versionBuffer);
-
-    appCfg_DeleteIter(appIterRef);
 
     // Finished install operation, reinit object 9 instance reference.
     CurrentObj9 = NULL;
