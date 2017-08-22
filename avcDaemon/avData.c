@@ -17,6 +17,7 @@
 #include "timeseriesData.h"
 #include "avcServer.h"
 #include "le_print.h"
+#include "limit.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -41,6 +42,14 @@
  */
 //--------------------------------------------------------------------------------------------------
 #define MAX_PUSH_BUFFER_BYTES 20000
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Path to the persistent asset setting path
+ */
+//--------------------------------------------------------------------------------------------------
+#define CFG_ASSET_SETTING_PATH "/apps/avcService/settings"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -169,13 +178,15 @@ AssetValue_t;
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    le_avdata_AccessType_t serverAccess;  ///< Permitted server access to this asset data.
-    le_avdata_AccessType_t clientAccess;  ///< Permitted client access to this asset data.
-    le_avdata_DataType_t dataType;  ///< Data type of the Asset Value.
-    AssetValue_t value;             ///< Asset Value.
+    le_avdata_AccessMode_t accessMode;          ///< Access mode to this asset data.
+    le_avdata_AccessType_t serverAccess;        ///< Permitted server access to this asset data.
+    le_avdata_AccessType_t clientAccess;        ///< Permitted client access to this asset data.
+    le_avdata_DataType_t dataType;              ///< Data type of the Asset Value.
+    AssetValue_t value;                         ///< Asset Value.
     le_avdata_ResourceHandlerFunc_t handlerPtr; ///< Registered handler when asset data is accessed.
-    void* contextPtr;               // Client context for the handler.
-    le_dls_List_t arguments;        // Argument list for the handler.
+    void* contextPtr;                           ///< Client context for the handler.
+    le_dls_List_t arguments;                    ///< Argument list for the handler.
+    le_msg_SessionRef_t msgRef;                 ///< Session reference.
 }
 AssetData_t;
 
@@ -257,9 +268,18 @@ static bool IsSessionStarted = false;
 //--------------------------------------------------------------------------------------------------
 static uint32_t RequestCount = 0;
 
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Flag to check if asset data has been restored
+ */
+//--------------------------------------------------------------------------------------------------
+static bool IsRestored = false;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /* Helper functions                                                                               */
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -272,6 +292,34 @@ static void ClientCloseSessionHandler
     void*               contextPtr
 )
 {
+    // Search for the asset data references used by the closed client, and clean up any data.
+    // Only remove data associated with the closed client app namespace.
+    char* assetPathPtr;
+    AssetData_t* assetDataPtr = NULL;
+    le_hashmap_It_Ref_t iter = le_hashmap_GetIterator(AssetDataMap);
+
+    while (le_hashmap_NextNode(iter) == LE_OK)
+    {
+        assetPathPtr = le_hashmap_GetKey(iter);
+        assetDataPtr = le_hashmap_GetValue(iter);
+        if (assetDataPtr->msgRef == sessionRef)
+        {
+            // remove cache entry from configTree
+            if (assetDataPtr->accessMode == LE_AVDATA_ACCESS_SETTING)
+            {
+                le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_ASSET_SETTING_PATH);
+                le_cfg_DeleteNode(iterRef, assetPathPtr + 1);
+                le_cfg_CommitTxn(iterRef);
+            }
+
+            LE_DEBUG("Removing asset data: %s", assetPathPtr);
+            le_hashmap_Remove(AssetDataMap, assetPathPtr);
+            le_mem_Release(assetPathPtr);
+            le_mem_Release(assetDataPtr);
+        }
+
+    }
+
     // Search for the record references used by the closed client, and clean up any data.
     le_ref_IterRef_t iterRef = le_ref_GetIterator(RecordRefMap);
     RecordRefData_t* recRefDataPtr;
@@ -624,6 +672,48 @@ static AssetData_t* GetAssetData
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Get the namespaced path. The namespaced path is the application name concatenated with the
+ * asset data path.
+ */
+//--------------------------------------------------------------------------------------------------
+static void GetNamespacedPath
+(
+    const char* path,
+    char* namespacedPathPtr,
+    size_t namespacedSize
+)
+{
+    // Get the client's credentials.
+    pid_t pid;
+    uid_t uid;
+
+    le_msg_SessionRef_t sessionRef = le_avdata_GetClientSessionRef();
+
+    if (le_msg_GetClientUserCreds(sessionRef, &uid, &pid) != LE_OK)
+    {
+        LE_KILL_CLIENT("Could not get credentials for the client.");
+        return NULL;
+    }
+
+    // Look up the process's application name.
+    char appName[LE_LIMIT_APP_NAME_LEN+1];
+
+    le_result_t result = le_appInfo_GetName(pid, appName, sizeof(appName));
+    LE_FATAL_IF(result == LE_OVERFLOW, "Buffer too small to contain the application name.");
+
+    if (result != LE_OK)
+    {
+        LE_KILL_CLIENT("Could not get app name");
+    }
+
+    char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
+    snprintf(namespacedPath, sizeof(namespacedPath), "/%s%s", appName, path);
+    LE_ASSERT(le_utf8_Copy(namespacedPathPtr, namespacedPath, namespacedSize, NULL) == LE_OK);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Gets the asset value associated with the provided asset data path.
  *
  * @return:
@@ -640,7 +730,18 @@ static le_result_t GetVal
     bool isClient                      ///< [IN] Is it client or server access
 )
 {
-    AssetData_t* assetDataPtr = GetAssetData(path);
+    char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
+
+    if (isClient)
+    {
+        GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
+    }
+    else
+    {
+        le_utf8_Copy(namespacedPath, path, sizeof(namespacedPath), NULL);
+    }
+
+    AssetData_t* assetDataPtr = GetAssetData(namespacedPath);
 
     if (assetDataPtr == NULL)
     {
@@ -654,7 +755,7 @@ static le_result_t GetVal
                      LE_AVDATA_ACCESS_READ)))
     {
         char* str = isClient ? "client" : "server";
-        LE_ERROR("Asset (%s) does not have read permission for %s access.", path, str);
+        LE_ERROR("Asset (%s) does not have read permission for %s access.", namespacedPath, str);
         return LE_NOT_PERMITTED;
     }
 
@@ -664,7 +765,7 @@ static le_result_t GetVal
         le_avdata_ArgumentListRef_t argListRef
              = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
 
-        assetDataPtr->handlerPtr(path, LE_AVDATA_ACCESS_READ,
+        assetDataPtr->handlerPtr(namespacedPath, LE_AVDATA_ACCESS_READ,
                                  argListRef, assetDataPtr->contextPtr);
 
         le_ref_DeleteRef(ArgListRefMap, argListRef);
@@ -675,6 +776,45 @@ static le_result_t GetVal
     *dataTypePtr = assetDataPtr->dataType;
 
     return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Store asset data into the cfgTree to keep them persistent if legato or app restarts.
+ */
+//--------------------------------------------------------------------------------------------------
+static void StoreData
+(
+    const char* path,              ///< [IN] Asset data path
+    AssetValue_t value,            ///< [IN] Asset value
+    le_avdata_DataType_t dataType  ///< [IN] Asset value data type
+)
+{
+    le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_ASSET_SETTING_PATH);
+
+    switch (dataType)
+    {
+        case LE_AVDATA_DATA_TYPE_NONE:
+            break;
+        case LE_AVDATA_DATA_TYPE_INT:
+            le_cfg_SetInt(iterRef, path + 1, value.intValue);
+            break;
+        case LE_AVDATA_DATA_TYPE_FLOAT:
+            le_cfg_SetFloat(iterRef, path + 1, value.floatValue);
+            break;
+        case LE_AVDATA_DATA_TYPE_BOOL:
+            le_cfg_SetBool(iterRef, path + 1, value.boolValue);
+            break;
+        case LE_AVDATA_DATA_TYPE_STRING:
+            le_cfg_SetString(iterRef, path + 1, value.strValuePtr);
+            break;
+        default:
+            LE_ERROR("Invalid data type.");
+            break;
+    }
+
+    le_cfg_CommitTxn(iterRef);
 }
 
 
@@ -696,7 +836,18 @@ static le_result_t SetVal
     bool isClient                  ///< [IN] Is it client or server access
 )
 {
-    AssetData_t* assetDataPtr = GetAssetData(path);
+    char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
+
+    if (isClient)
+    {
+        GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
+    }
+    else
+    {
+        le_utf8_Copy(namespacedPath, path, sizeof(namespacedPath), NULL);
+    }
+
+    AssetData_t* assetDataPtr = GetAssetData(namespacedPath);
 
     if (assetDataPtr == NULL)
     {
@@ -710,7 +861,7 @@ static le_result_t SetVal
                      LE_AVDATA_ACCESS_WRITE)))
     {
         char* str = isClient ? "client" : "server";
-        LE_ERROR("Asset (%s) does not have write permission for %s access.", path, str);
+        LE_ERROR("Asset (%s) does not have write permission for %s access.", namespacedPath, str);
         return LE_NOT_PERMITTED;
     }
 
@@ -731,13 +882,152 @@ static le_result_t SetVal
         le_avdata_ArgumentListRef_t argListRef
              = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
 
-        assetDataPtr->handlerPtr(path, LE_AVDATA_ACCESS_WRITE,
+        assetDataPtr->handlerPtr(namespacedPath, LE_AVDATA_ACCESS_WRITE,
                                  argListRef, assetDataPtr->contextPtr);
 
         le_ref_DeleteRef(ArgListRefMap, argListRef);
     }
 
+    // Store asset data if it is a setting and asset data has been restored already
+    if ((assetDataPtr->accessMode == LE_AVDATA_ACCESS_SETTING) &&
+        IsRestored)
+    {
+        StoreData(namespacedPath, value, dataType);
+    }
+
     return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize resource
+ */
+//--------------------------------------------------------------------------------------------------
+static void InitResource
+(
+    const char* path,                 ///< [IN] Asset data path
+    le_avdata_AccessMode_t accessMode ///< [IN] Asset data access mode
+)
+{
+    // Convert access mode to access bitmasks.
+    le_avdata_AccessType_t serverAccess, clientAccess;
+    if ((ConvertAccessModeToServerAccess(accessMode, &serverAccess) != LE_OK) ||
+        (ConvertAccessModeToClientAccess(accessMode, &clientAccess) != LE_OK))
+    {
+        LE_KILL_CLIENT("Invalid access mode [%d].", accessMode);
+    }
+
+    char* assetPathPtr = le_mem_ForceAlloc(AssetPathPool);
+    AssetData_t* assetDataPtr = le_mem_ForceAlloc(AssetDataPool);
+
+    // Copy path to our internal record. Overflow should never occur.
+    LE_ASSERT(le_utf8_Copy(assetPathPtr, path, LE_AVDATA_PATH_NAME_BYTES, NULL) == LE_OK);
+
+    // Initialize the asset data.
+    // Note that the union field is zeroed out by the memset.
+    memset(assetDataPtr, 0, sizeof(AssetData_t));
+    assetDataPtr->accessMode = accessMode;
+    assetDataPtr->serverAccess = serverAccess;
+    assetDataPtr->clientAccess = clientAccess;
+    assetDataPtr->dataType = LE_AVDATA_DATA_TYPE_NONE;
+    assetDataPtr->handlerPtr = NULL;
+    assetDataPtr->contextPtr = NULL;
+    assetDataPtr->arguments = LE_DLS_LIST_INIT;
+    assetDataPtr->msgRef = le_avdata_GetClientSessionRef();
+
+    le_hashmap_Put(AssetDataMap, assetPathPtr, assetDataPtr);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Recursively find all setting asset data paths and restore them.
+ */
+//--------------------------------------------------------------------------------------------------
+static void RecursiveRestore
+(
+    le_cfg_IteratorRef_t iterRef,   ///< [IN] Config iterator to stored data
+    const char * path               ///< [IN] Asset data path
+)
+{
+    char strBuffer[LE_CFG_STR_LEN_BYTES] = "";
+
+    do
+    {
+        char nodeName[LE_CFG_STR_LEN_BYTES] = "";
+        le_cfg_GetNodeName(iterRef, "", nodeName, LE_CFG_STR_LEN_BYTES);
+        le_cfg_nodeType_t type = le_cfg_GetNodeType(iterRef, "");
+        snprintf(strBuffer, sizeof(strBuffer), "%s/%s", path, nodeName);
+
+        // keep iterating
+        if (type == LE_CFG_TYPE_STEM)
+        {
+            le_cfg_GoToFirstChild(iterRef);
+            RecursiveRestore(iterRef, strBuffer);
+            le_cfg_GoToParent(iterRef);
+        }
+        else
+        {
+            // restore asset data as setting
+            LE_INFO("Restoring asset data: %s", strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1));
+            InitResource(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1), LE_AVDATA_ACCESS_SETTING);
+            AssetValue_t assetValue;
+
+            switch (type)
+            {
+                case LE_CFG_TYPE_INT:
+                    assetValue.intValue = le_cfg_GetInt(iterRef, strBuffer, 0);
+                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1), assetValue, LE_AVDATA_DATA_TYPE_INT, false);
+                    break;
+                case LE_CFG_TYPE_FLOAT:
+                    assetValue.floatValue = le_cfg_GetFloat(iterRef, strBuffer, 0);
+                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1), assetValue, LE_AVDATA_DATA_TYPE_FLOAT, false);
+                    break;
+                case LE_CFG_TYPE_BOOL:
+                    assetValue.boolValue = le_cfg_GetBool(iterRef, strBuffer, 0);
+                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1), assetValue, LE_AVDATA_DATA_TYPE_BOOL, false);
+                    break;
+                case LE_CFG_TYPE_STRING:
+                    assetValue.strValuePtr = le_mem_ForceAlloc(StringPool);
+                    le_cfg_GetString(iterRef, strBuffer, assetValue.strValuePtr, LE_AVDATA_STRING_VALUE_BYTES, "");
+                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1), assetValue, LE_AVDATA_DATA_TYPE_STRING, false);
+                    break;
+                default:
+                    LE_DEBUG("Invalid type.");
+                    return;
+            }
+
+        }
+    }
+    while (le_cfg_GoToNextSibling(iterRef) == LE_OK);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Restore asset data from the cfgTree to keep them persistent if legato or app restarts.
+ */
+//--------------------------------------------------------------------------------------------------
+static void RestoreData
+(
+    void
+)
+{
+    LE_INFO("Restoring asset data.");
+
+
+    le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn(CFG_ASSET_SETTING_PATH);
+
+    if (le_cfg_GoToFirstChild(iterRef) != LE_OK)
+    {
+        LE_INFO("No asset data to restore.");
+        le_cfg_CancelTxn(iterRef);
+        return;
+    }
+
+    RecursiveRestore(iterRef, CFG_ASSET_SETTING_PATH);
+    le_cfg_CancelTxn(iterRef);
 }
 
 
@@ -1700,7 +1990,7 @@ static void AvServerRequestHandler
     AVServerResponse.tokenLength = tokenLength;
     AVServerResponse.contentType = LWM2MCORE_PUSH_CONTENT_CBOR;
 
-    LE_DEBUG(">>>>> Request Uri is: [%s]", path);
+    LE_INFO(">>>>> Request Uri is: [%s]", path);
 
     switch (method)
     {
@@ -1747,11 +2037,15 @@ le_avdata_ResourceEventHandlerRef_t le_avdata_AddResourceEventHandler
 {
     AssetData_t* assetDataPtr = NULL;
 
+    // Get namespaced path which is namespaced under the application name
+    char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
+    GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
+
     le_hashmap_It_Ref_t iter = le_hashmap_GetIterator(AssetDataMap);
 
     while (le_hashmap_NextNode(iter) == LE_OK)
     {
-        if (strcmp(path, le_hashmap_GetKey(iter)) == 0)
+        if (strcmp(namespacedPath, le_hashmap_GetKey(iter)) == 0)
         {
             assetDataPtr = le_hashmap_GetValue(iter);
             assetDataPtr->handlerPtr = handlerPtr;
@@ -1761,7 +2055,7 @@ le_avdata_ResourceEventHandlerRef_t le_avdata_AddResourceEventHandler
         }
     }
 
-    LE_WARN("Non-existing asset data path %s", path);
+    LE_WARN("Non-existing asset data path %s", namespacedPath);
     return NULL;
 }
 
@@ -1806,13 +2100,6 @@ le_result_t le_avdata_CreateResource
     le_avdata_AccessMode_t accessMode ///< [IN] Asset data access mode
 )
 {
-    // The path cannot already exists, and cannot be a parent or child path to any of the existing
-    // path.
-    if ((GetAssetData(path) != NULL) || IsPathParent(path) || IsPathChild(path))
-    {
-        return LE_DUPLICATE;
-    }
-
     // Check if the asset data path is legal.
     if (IsAssetDataPathValid(path) != true)
     {
@@ -1820,31 +2107,18 @@ le_result_t le_avdata_CreateResource
         return LE_FAULT;
     }
 
-    // Convert access mode to access bitmasks.
-    le_avdata_AccessType_t serverAccess, clientAccess;
-    if ((ConvertAccessModeToServerAccess(accessMode, &serverAccess) != LE_OK) ||
-        (ConvertAccessModeToClientAccess(accessMode, &clientAccess) != LE_OK))
+    // Get namespaced path which is namespaced under the application name
+    char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
+    GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
+
+    // The path cannot already exists, and cannot be a parent or child path to any of the existing
+    // path.
+    if ((GetAssetData(namespacedPath) != NULL) || IsPathParent(namespacedPath) || IsPathChild(namespacedPath))
     {
-        LE_KILL_CLIENT("Invalid access mode [%d].", accessMode);
+        return LE_DUPLICATE;
     }
 
-    char* assetPathPtr = le_mem_ForceAlloc(AssetPathPool);
-    AssetData_t* assetDataPtr = le_mem_ForceAlloc(AssetDataPool);
-
-    // Copy path to our internal record. Overflow should never occur.
-    LE_ASSERT(le_utf8_Copy(assetPathPtr, path, LE_AVDATA_PATH_NAME_BYTES, NULL) == LE_OK);
-
-    // Initialize the asset data.
-    // Note that the union field is zeroed out by the memset.
-    memset(assetDataPtr, 0, sizeof(AssetData_t));
-    assetDataPtr->serverAccess = serverAccess;
-    assetDataPtr->clientAccess = clientAccess;
-    assetDataPtr->dataType = LE_AVDATA_DATA_TYPE_NONE;
-    assetDataPtr->handlerPtr = NULL;
-    assetDataPtr->contextPtr = NULL;
-    assetDataPtr->arguments = LE_DLS_LIST_INIT;
-
-    le_hashmap_Put(AssetDataMap, assetPathPtr, assetDataPtr);
+    InitResource(namespacedPath, accessMode);
 
     return LE_OK;
 }
@@ -2396,12 +2670,15 @@ le_result_t le_avdata_Push
     AssetValue_t assetValue;
     le_avdata_DataType_t type;
 
-    if (!IsAssetDataPathValid(path))
+    char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
+    GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
+
+    if (!IsAssetDataPathValid(namespacedPath))
     {
         return LE_FAULT;
     }
 
-    le_result_t result = GetVal(path, &assetValue, &type, false);
+    le_result_t result = GetVal(namespacedPath, &assetValue, &type, false);
 
     char* pathArray[le_hashmap_Size(AssetDataMap)];
     memset(pathArray, 0, sizeof(pathArray));
@@ -2409,13 +2686,13 @@ le_result_t le_avdata_Push
 
     if (result == LE_OK)
     {
-        pathArray[0] = path;
+        pathArray[0] = namespacedPath;
         pathArrayIdx = 1;
     }
     else if (result == LE_NOT_FOUND)
     {
         // The path contain children nodes, so there might be multiple asset data under it.
-        if (IsPathParent(path))
+        if (IsPathParent(namespacedPath))
         {
             LE_DEBUG(">>>>> path not found, but is parent path. Encoding all children nodes.");
 
@@ -2430,7 +2707,7 @@ le_result_t le_avdata_Push
                 currentPath = le_hashmap_GetKey(iter);
                 assetDataPtr = le_hashmap_GetValue(iter);
 
-                if ((le_path_IsSubpath(path, currentPath, "/")) &&
+                if ((le_path_IsSubpath(namespacedPath, currentPath, "/")) &&
                     ((assetDataPtr->serverAccess & LE_AVDATA_ACCESS_READ) == LE_AVDATA_ACCESS_READ))
                 {
                     // Put the currentPath in the path array.
@@ -3060,4 +3337,8 @@ void avData_Init
     // Create safe reference map for session request references. The size of the map should be based
     // on the expected number of simultaneous requests for session. 5 of them seems reasonable.
     AvSessionRequestRefMap = le_ref_CreateMap("AVSessionRequestRef", 5);
+
+    // Restore asset data
+    RestoreData();
+    IsRestored = true;
 }
