@@ -70,7 +70,6 @@ sources:
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osUdp.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osSem.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osMutex.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osConfig.c
 
     // LWM2MCore
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/dtlsConnection.c

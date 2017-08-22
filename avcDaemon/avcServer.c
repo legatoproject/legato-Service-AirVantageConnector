@@ -23,19 +23,19 @@
 #include "avcAppUpdate.h"
 #include "packageDownloader.h"
 #include "packageDownloaderCallbacks.h"
+#include "avcFsConfig.h"
 
 //--------------------------------------------------------------------------------------------------
 // Definitions
 //--------------------------------------------------------------------------------------------------
-
 #define AVC_SERVICE_CFG "/apps/avcService"
 
 //--------------------------------------------------------------------------------------------------
 /**
- *  Path to the lwm2m configurations in the Config Tree.
+ *  Last connected polling time is invalid
  */
 //--------------------------------------------------------------------------------------------------
-#define CFG_AVC_CONFIG_PATH "system:/apps/avcService/config"
+#define LAST_CONNECTED_TIME_INVALID -1
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -69,6 +69,15 @@
  */
 //--------------------------------------------------------------------------------------------------
 #define SECONDS_IN_A_MIN 60
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Default setting for user agreement
+ *
+ * NOTE: User agreement is enabled by default, if not configured
+ */
+//--------------------------------------------------------------------------------------------------
+#define USER_AGREEMENT_DEFAULT  1
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -140,6 +149,49 @@ typedef struct
 UpdateStatusData_t;
 
 //--------------------------------------------------------------------------------------------------
+/**
+ * Data associated with user agreement configuration
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    bool connect;                   ///< is auto connect?
+    bool download;                  ///< is auto download?
+    bool install;                   ///< is auto install?
+    bool uninstall;                 ///< is auto uninstall?
+    bool reboot;                    ///< is auto reboot?
+}
+UserAgreementConfig_t;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Data associated with apn configuration
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    char apnName[LE_AVC_APN_NAME_MAX_LEN_BYTES];        ///< APN name
+    char userName[LE_AVC_USERNAME_MAX_LEN_BYTES];       ///< User name
+    char password[LE_AVC_PASSWORD_MAX_LEN_BYTES];       ///< Password
+}
+ApnConfig_t;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Data associated with avc configuration
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    uint16_t retryTimers[LE_AVC_NUM_RETRY_TIMERS];      ///< Retry timer configuration
+    UserAgreementConfig_t ua;                           ///< User agreement configuration
+    ApnConfig_t apn;                                    ///< APN configuration
+    int32_t connectionEpochTime;                        ///< UNIX time when the last connection was
+                                                        ///< made by the polling timer
+}
+AvcConfigData_t;
+
+//--------------------------------------------------------------------------------------------------
 // Data structures
 //--------------------------------------------------------------------------------------------------
 
@@ -203,19 +255,6 @@ static le_avc_SessionRequestHandlerFunc_t SessionRequestHandlerRef = NULL;
  */
 //--------------------------------------------------------------------------------------------------
 static void* SessionRequestHandlerContextPtr = NULL;
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Is there a control app installed?  If so, we don't want to take automatic actions, even if
- * the control app has not yet registered a handler.  This flag is updated at COMPONENT_INIT,
- * and also when the control app explicitly registers.
- *
- * One case that is not currently handled is if the control app is uninstalled.  Thus, once this
- * flag is set to true, it will never be set to false. This is not expected to be a problem, but
- * if it becomes an issue, we could register for app installs and uninstalls.
- */
-//--------------------------------------------------------------------------------------------------
-static bool IsControlAppInstalled = false;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -311,6 +350,20 @@ static le_timer_Ref_t RebootDeferTimer;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Timer used for deferring Connection.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t ConnectDeferTimer;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Launch connect timer
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t LaunchConnectTimer;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Error occurred during update via airvantage.
  */
 //--------------------------------------------------------------------------------------------------
@@ -380,6 +433,32 @@ static char* AvcSessionStateToStr
 
 //--------------------------------------------------------------------------------------------------
 /**
+ *  Convert user agreement enum to string
+ */
+//--------------------------------------------------------------------------------------------------
+static char* ConvertUserAgreementToString
+(
+    le_avc_UserAgreement_t userAgreement  ///< The operation that need to be converted.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    char* result;
+
+    switch (userAgreement)
+    {
+        case LE_AVC_USER_AGREEMENT_CONNECTION:  result = "Connection";   break;
+        case LE_AVC_USER_AGREEMENT_DOWNLOAD:    result = "Download";     break;
+        case LE_AVC_USER_AGREEMENT_INSTALL:     result = "Install";      break;
+        case LE_AVC_USER_AGREEMENT_UNINSTALL:   result = "Uninstall";    break;
+        case LE_AVC_USER_AGREEMENT_REBOOT:      result = "Reboot";       break;
+        default:                                result = "Unknown";      break;
+
+    }
+    return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Default values for the Polling Timer. Unit is minute. 0 means disabled.
  */
 //--------------------------------------------------------------------------------------------------
@@ -405,79 +484,45 @@ static le_timer_Ref_t PollingTimerRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Check to see if le_avc is bound to a client.
+ * Stop the defer timer if it is running.
  */
 //--------------------------------------------------------------------------------------------------
-static bool IsAvcBound
+static void StopDeferTimer
 (
-    void
+    le_avc_UserAgreement_t userAgreement   ///< [IN] Operation for which user agreement is read
 )
 {
-    le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn("system:/apps");
-
-    // If there are no apps, then there's no bindings.
-    if (le_cfg_GoToFirstChild(iterRef) != LE_OK)
+    switch (userAgreement)
     {
-        le_cfg_CancelTxn(iterRef);
-        return false;
+        case LE_AVC_USER_AGREEMENT_CONNECTION:
+            // Stop the defer timer, if user starts a session before the defer timer expires.
+            LE_DEBUG("Stop connect defer timer.");
+            le_timer_Stop(ConnectDeferTimer);
+            break;
+        case LE_AVC_USER_AGREEMENT_DOWNLOAD:
+            // Stop the defer timer, if user accepts download before the defer timer expires.
+            LE_DEBUG("Stop download defer timer.");
+            le_timer_Stop(DownloadDeferTimer);
+            break;
+        case LE_AVC_USER_AGREEMENT_INSTALL:
+            // Stop the defer timer, if user accepts install before the defer timer expires.
+            LE_DEBUG("Stop install defer timer.");
+            le_timer_Stop(InstallDeferTimer);
+            break;
+        case LE_AVC_USER_AGREEMENT_UNINSTALL:
+            // Stop the defer timer, if user accepts uninstall before the defer timer expires.
+            LE_DEBUG("Stop uninstall defer timer.");
+            le_timer_Stop(UninstallDeferTimer);
+            break;
+        case LE_AVC_USER_AGREEMENT_REBOOT:
+            // Stop the defer timer, if user accepts reboot before the defer timer expires.
+            LE_DEBUG("Stop reboot defer timer.");
+            le_timer_Stop(RebootDeferTimer);
+            break;
+        default:
+            LE_ERROR("Unknown operation");
+            break;
     }
-
-    // Loop through all installed applications.
-    do
-    {
-        char appName[LE_CFG_NAME_LEN_BYTES] = "";
-        le_cfg_GetNodeName(iterRef, ".", appName, sizeof(appName));
-
-        // Check out all of the bindings for this application.
-        le_cfg_GoToNode(iterRef, "./bindings");
-
-        if (le_cfg_GoToFirstChild(iterRef) == LE_OK)
-        {
-            // Skip avcCompat which is not a control app but has bindings to 'le_avc'
-            if (0 != strcmp(appName, "avcCompat"))
-            {
-                do
-                {
-                    // Check to see if this binding is for the <root>.le_avc service.
-                    char strBuffer[LE_CFG_STR_LEN_BYTES] = "";
-
-                    le_cfg_GetString(iterRef, "./interface", strBuffer, sizeof(strBuffer), "");
-                    if (0 == strcmp(strBuffer, "le_avc"))
-                    {
-                        // The app can be bound to the AVC app directly, or through the root user.
-                        // so check for both.
-                        le_cfg_GetString(iterRef, "./app", strBuffer, sizeof(strBuffer), "");
-                        if (0 == strcmp(strBuffer, "avcService"))
-                        {
-                            // Success.
-                            le_cfg_CancelTxn(iterRef);
-                            LE_WARN("Control app is %s", appName);
-                            return true;
-                        }
-
-                        le_cfg_GetString(iterRef, "./user", strBuffer, sizeof(strBuffer), "");
-                        if (0 == strcmp(strBuffer, "root"))
-                        {
-                            // Success.
-                            le_cfg_CancelTxn(iterRef);
-                            LE_WARN("Control app is %s", appName);
-                            return true;
-                        }
-                    }
-                }
-                while (le_cfg_GoToNextSibling(iterRef) == LE_OK);
-            }
-
-            le_cfg_GoToParent(iterRef);
-        }
-
-        le_cfg_GoToParent(iterRef);
-    }
-    while (le_cfg_GoToNextSibling(iterRef) == LE_OK);
-
-    // The binding was not found.
-    le_cfg_CancelTxn(iterRef);
-    return false;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -514,62 +559,33 @@ static const char* UpdateTypeToStr
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Stop the install defer timer if it is running.
+ * Function to read user agreement configuration
  */
 //--------------------------------------------------------------------------------------------------
-static void StopInstallDeferTimer
+static void ReadUserAgreementConfiguration
 (
     void
 )
 {
-    // Stop the defer timer, if user accepts install before the defer timer expires.
-    LE_DEBUG("Stop install defer timer.");
-    le_timer_Stop(InstallDeferTimer);
-}
+    bool UserAgreementStatus;
+    le_avc_UserAgreement_t userAgreement;
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Stop the download defer timer if it is running.
- */
-//--------------------------------------------------------------------------------------------------
-static void StopDownloadDeferTimer
-(
-    void
-)
-{
-    // Stop the defer timer, if user accepts download before the defer timer expires.
-    LE_DEBUG("Stop download defer timer.");
-    le_timer_Stop(DownloadDeferTimer);
-}
+    for (userAgreement = 0; userAgreement <= LE_AVC_USER_AGREEMENT_REBOOT; userAgreement++)
+    {
+        // Read user agreement configuration
+        le_result_t result = le_avc_GetUserAgreement(userAgreement, &UserAgreementStatus);
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Stop the uninstall defer timer if it is running.
- */
-//--------------------------------------------------------------------------------------------------
-static void StopUninstallDeferTimer
-(
-    void
-)
-{
-    // Stop the defer timer, if user accepts uninstall before the defer timer expires.
-    LE_DEBUG("Stop uninstall defer timer.");
-    le_timer_Stop(UninstallDeferTimer);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Stop the reboot defer timer if it is running.
- */
-//--------------------------------------------------------------------------------------------------
-static void StopRebootDeferTimer
-(
-    void
-)
-{
-    // Stop the defer timer, if user accepts reboot before the defer timer expires.
-    LE_DEBUG("Stop reboot defer timer.");
-    le_timer_Stop(RebootDeferTimer);
+        if (result == LE_OK)
+        {
+            LE_INFO("User agreement for %s is %s", ConvertUserAgreementToString(userAgreement),
+                                                   UserAgreementStatus ? "ENABLED" : "DISABLED");
+        }
+        else
+        {
+            LE_WARN("User agreement for %s enabled by default",
+                                                ConvertUserAgreementToString(userAgreement));
+        }
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -586,47 +602,31 @@ static le_result_t AcceptDownloadPackage
     void
 )
 {
-    // If a user app is blocking the download, then just defer for some time.  Hopefully, the
-    // next time this function is called, the user app will no longer be blocking the download.
-    if ( BlockRefCount > 0 )
+    StopDeferTimer(LE_AVC_USER_AGREEMENT_DOWNLOAD);
+
+    if(LE_AVC_DM_SESSION == le_avc_GetSessionType())
     {
-        // Since the decision is not to install at this time, go back to idle
-        CurrentState = AVC_IDLE;
-
-        // Try the install later
-        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
-
-        le_timer_SetInterval(DownloadDeferTimer, interval);
-        le_timer_Start(DownloadDeferTimer);
-    }
-    else
-    {
-        StopDownloadDeferTimer();
-
-        if(LE_AVC_DM_SESSION == le_avc_GetSessionType())
+        LE_DEBUG("Accept a package download while the device is connected to the server");
+        // Notify the registered handler to proceed with the download; only called once.
+        CurrentState = AVC_DOWNLOAD_IN_PROGRESS;
+        if (QueryDownloadHandlerRef !=  NULL)
         {
-            LE_DEBUG("Accept a package download while the device is connected to the server");
-            // Notify the registered handler to proceed with the download; only called once.
-            CurrentState = AVC_DOWNLOAD_IN_PROGRESS;
-            if (QueryDownloadHandlerRef !=  NULL)
-            {
-                QueryDownloadHandlerRef();
-                QueryDownloadHandlerRef = NULL;
-            }
-            else
-            {
-                LE_ERROR("Download handler not valid.");
-                return LE_FAULT;
-            }
+            QueryDownloadHandlerRef();
+            QueryDownloadHandlerRef = NULL;
         }
         else
         {
-            LE_DEBUG("Accept a package download while the device is not connected to the server");
-            // Connect to the server.
-            // When the device is connected, the package download will be launched.
-            DownloadAgreement = true;
-            avcClient_Connect();
+            LE_ERROR("Download handler not valid.");
+            return LE_FAULT;
         }
+    }
+    else
+    {
+        LE_DEBUG("Accept a package download while the device is not connected to the server");
+        // Connect to the server.
+        // When the device is connected, the package download will be launched.
+        DownloadAgreement = true;
+        avcClient_Connect();
     }
 
     return LE_OK;
@@ -646,8 +646,8 @@ static le_result_t AcceptInstallPackage
     void
 )
 {
-    // If a user app is blocking the install, then just defer for some time.  Hopefully, the
-    // next time this function is called, the user app will no longer be blocking the install.
+    // If a user app is blocking the update, then just defer for some time.  Hopefully, the
+    // next time this function is called, the user app will no longer be blocking the update.
     if ( BlockRefCount > 0 )
     {
         // Since the decision is not to install at this time, go back to idle
@@ -661,7 +661,7 @@ static le_result_t AcceptInstallPackage
     }
     else
     {
-        StopInstallDeferTimer();
+        StopDeferTimer(LE_AVC_USER_AGREEMENT_INSTALL);
 
         // Notify the registered handler to proceed with the install; only called once.
         CurrentState = AVC_INSTALL_IN_PROGRESS;
@@ -676,6 +676,54 @@ static le_result_t AcceptInstallPackage
             return LE_FAULT;
         }
     }
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Accept the currently pending application uninstall
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t AcceptUninstallApplication
+(
+    void
+)
+{
+    // If an user app is blocking the update, then just defer for some time.  Hopefully, the
+    // next time this function is called, the user app will no longer be blocking the update.
+    if ( BlockRefCount > 0 )
+    {
+        // Since the decision is not to uninstall at this time, go back to idle
+        CurrentState = AVC_IDLE;
+
+        // Try the uninstall later
+        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
+
+        le_timer_SetInterval(UninstallDeferTimer, interval);
+        le_timer_Start(UninstallDeferTimer);
+    }
+    else
+    {
+        StopDeferTimer(LE_AVC_USER_AGREEMENT_UNINSTALL);
+
+        // Notify the registered handler to proceed with the uninstall; only called once.
+        CurrentState = AVC_UNINSTALL_IN_PROGRESS;
+        if (QueryUninstallHandlerRef != NULL)
+        {
+            QueryUninstallHandlerRef(SwUninstallCtx.instanceId);
+            QueryUninstallHandlerRef = NULL;
+        }
+        else
+        {
+            LE_ERROR("Uninstall handler not valid");
+            return LE_FAULT;
+        }
+    }
+
     return LE_OK;
 }
 
@@ -711,7 +759,382 @@ static void SendUpdateStatusEvent
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Resend pending notification after session start
+ * Defer the currently pending connection, for the given number of minutes
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t DeferConnect
+(
+     uint32_t deferMinutes        ///< [IN] Defer time in minutes
+)
+{
+    LE_INFO("Deferring connection for %d minutes", deferMinutes);
+
+    // Try the connection later
+    le_clk_Time_t interval = { .sec = (deferMinutes * SECONDS_IN_A_MIN) };
+
+    le_timer_SetInterval(ConnectDeferTimer, interval);
+    le_timer_Start(ConnectDeferTimer);
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Defer the currently pending download, for the given number of minutes
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t DeferDownload
+(
+     uint32_t deferMinutes          ///< [IN] Defer time in minutes
+)
+{
+    if ( CurrentState != AVC_DOWNLOAD_PENDING )
+    {
+        LE_ERROR("Expected AVC_DOWNLOAD_PENDING state; current state is %i", CurrentState);
+        return LE_FAULT;
+    }
+
+    // stop activity timer when download has been deferred
+    avcClient_StopActivityTimer();
+
+    LE_DEBUG("Deferring download");
+
+    // Try the download later
+    le_clk_Time_t interval = { .sec = (deferMinutes * SECONDS_IN_A_MIN) };
+
+    le_timer_SetInterval(DownloadDeferTimer, interval);
+    le_timer_Start(DownloadDeferTimer);
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Defer the currently pending install
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t DeferInstall
+(
+    uint32_t deferMinutes           ///< [IN] Defer time in minutes
+)
+{
+    if ( CurrentState != AVC_INSTALL_PENDING )
+    {
+        LE_ERROR("Expected AVC_INSTALL_PENDING state; current state is %i", CurrentState);
+        return LE_FAULT;
+    }
+
+    // stop activity timer when installation has been deferred
+    avcClient_StopActivityTimer();
+
+    LE_DEBUG("Deferring install");
+
+    // Try the install later
+    le_clk_Time_t interval = { .sec = (deferMinutes * SECONDS_IN_A_MIN) };
+
+    le_timer_SetInterval(InstallDeferTimer, interval);
+    le_timer_Start(InstallDeferTimer);
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Defer the currently pending uninstall, for the given number of minutes
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t DeferUninstall
+(
+    uint32_t deferMinutes               ///< [IN] Defer time in minutes
+)
+{
+    if ( CurrentState != AVC_UNINSTALL_PENDING )
+    {
+        LE_ERROR("Expected AVC_UNINSTALL_PENDING state; current state is %i", CurrentState);
+        return LE_FAULT;
+    }
+
+    // stop activity timer when uninstall has been deferred
+    avcClient_StopActivityTimer();
+
+    LE_DEBUG("Deferring Uninstall for %d minute.", deferMinutes);
+
+    // Try the uninstall later
+    le_clk_Time_t interval = { .sec = (deferMinutes * SECONDS_IN_A_MIN) };
+
+    le_timer_SetInterval(UninstallDeferTimer, interval);
+    le_timer_Start(UninstallDeferTimer);
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Respond to connection pending notification
+ *
+ * @return
+ *      - LE_OK if connection can proceed right away
+ *      - LE_BUSY if waiting for response
+ *      - LE_FAULT otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t RespondToConnectionPending
+(
+    void
+)
+{
+    le_result_t result = LE_BUSY;
+    bool isUserAgreementEnabled;
+
+    LE_FATAL_IF((LE_OK != le_avc_GetUserAgreement(
+                                        LE_AVC_USER_AGREEMENT_CONNECTION,
+                                        &isUserAgreementEnabled)),
+                                        "Failed to read user agreement configuration");
+    if (!isUserAgreementEnabled)
+    {
+        // There is no control app; automatically accept any pending reboot
+        LE_INFO("Automatically accepting connect");
+        StopDeferTimer(LE_AVC_USER_AGREEMENT_CONNECTION);
+
+        result = avcClient_Connect();
+
+        if (LE_OK != result)
+        {
+            LE_ERROR("Error accepting connection");
+            result = LE_FAULT;
+        }
+    }
+    else if (NumStatusHandlers > 0)
+    {
+        // Notify registered control app.
+        SendUpdateStatusEvent(LE_AVC_CONNECTION_PENDING, -1, -1, StatusHandlerContextPtr);
+    }
+    else
+    {
+        // There is a control app installed, but the handler is not yet registered.
+        // Defer the decision to allow the control app time to register.
+        LE_INFO("Automatically deferring connect, "
+                "while waiting for control app to register");
+
+        // Try the connection later
+        le_clk_Time_t interval = {.sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
+
+        le_timer_SetInterval(ConnectDeferTimer, interval);
+        le_timer_Start(ConnectDeferTimer);
+    }
+
+    return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Respond to download pending notification
+ *
+ * @return
+ *      - LE_OK if download can proceed right away
+ *      - LE_BUSY if waiting for response
+ *      - LE_FAULT otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t RespondToDownloadPending
+(
+    int32_t totalNumBytes,          ///< [IN] Remaining number of bytes to download
+    int32_t dloadProgress           ///< [IN] Download progress
+)
+{
+    le_result_t result = LE_BUSY;
+    bool isUserAgreementEnabled;
+
+    LE_INFO("Stopping activity timer during download pending.");
+    avcClient_StopActivityTimer();
+
+    LE_FATAL_IF((LE_OK != le_avc_GetUserAgreement(
+                                       LE_AVC_USER_AGREEMENT_DOWNLOAD,
+                                       &isUserAgreementEnabled)),
+                                       "Failed to read user agreement configuration");
+    if (!isUserAgreementEnabled)
+    {
+       result = AcceptDownloadPackage();
+    }
+    else if (NumStatusHandlers > 0)
+    {
+       // Notify registered control app.
+       CurrentState = AVC_DOWNLOAD_PENDING;
+       SendUpdateStatusEvent(LE_AVC_DOWNLOAD_PENDING,
+                             totalNumBytes,
+                             dloadProgress,
+                             StatusHandlerContextPtr);
+    }
+    else
+    {
+       LE_INFO("Automatically deferring download, "
+               "while waiting for control app to register");
+       DeferDownload(BLOCKED_DEFER_TIME);
+    }
+
+    return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Respond to install pending notification
+ *
+ * @return
+ *      - LE_OK if install can proceed right away
+ *      - LE_BUSY if waiting for response
+ *      - LE_FAULT otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t RespondToInstallPending
+(
+    void
+)
+{
+    le_result_t result = LE_BUSY;
+    bool isUserAgreementEnabled;
+
+    LE_INFO("Stopping activity timer during install pending.");
+    avcClient_StopActivityTimer();
+
+    LE_FATAL_IF((LE_OK != le_avc_GetUserAgreement(
+                                        LE_AVC_USER_AGREEMENT_INSTALL,
+                                        &isUserAgreementEnabled)),
+                                        "Failed to read user agreement configuration");
+    if (!isUserAgreementEnabled)
+    {
+        LE_INFO("Automatically accepting install");
+        result = AcceptInstallPackage();
+    }
+    else if (NumStatusHandlers > 0)
+    {
+        // Notify registered control app.
+        CurrentState = AVC_INSTALL_PENDING;
+        SendUpdateStatusEvent(LE_AVC_INSTALL_PENDING, -1, -1, StatusHandlerContextPtr);
+    }
+    else
+    {
+        LE_INFO("Automatically deferring install, while waiting for control app to register");
+        DeferInstall(BLOCKED_DEFER_TIME);
+    }
+
+    return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Respond to uninstall pending notification
+ *
+ * @return
+ *      - LE_OK if uninstall can proceed right away
+ *      - LE_BUSY if waiting for response
+ *      - LE_FAULT otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t RespondToUninstallPending
+(
+    void
+)
+{
+    le_result_t result = LE_BUSY;
+    bool isUserAgreementEnabled;
+
+    LE_FATAL_IF((LE_OK != le_avc_GetUserAgreement(
+                                        LE_AVC_USER_AGREEMENT_UNINSTALL,
+                                        &isUserAgreementEnabled)),
+                                        "Failed to read user agreement configuration");
+    if (!isUserAgreementEnabled)
+    {
+        LE_INFO("Automatically accepting uninstall");
+        result = AcceptUninstallApplication();
+    }
+    else if (NumStatusHandlers > 0)
+    {
+        // Notify registered control app.
+        CurrentState = AVC_UNINSTALL_PENDING;
+        SendUpdateStatusEvent(LE_AVC_UNINSTALL_PENDING, -1, -1, StatusHandlerContextPtr);
+    }
+    else
+    {
+        // There is a control app installed, but the handler is not yet registered.  Defer
+        // the decision to allow the control app time to register.
+        LE_INFO("Automatically deferring uninstall, while waiting for control app to register");
+        DeferUninstall(BLOCKED_DEFER_TIME);
+    }
+
+    return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Respond to reboot pending notification
+ *
+ * @return
+ *      - LE_OK if reboot can proceed right away
+ *      - LE_BUSY if waiting for response
+ *      - LE_FAULT otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t RespondToRebootPending
+(
+    void
+)
+{
+    le_result_t result = LE_BUSY;
+    bool isUserAgreementEnabled;
+
+    LE_FATAL_IF((LE_OK != le_avc_GetUserAgreement(
+                                         LE_AVC_USER_AGREEMENT_REBOOT,
+                                         &isUserAgreementEnabled)),
+                                         "Failed to read user agreement configuration");
+     if (!isUserAgreementEnabled)
+     {
+         // There is no control app; automatically accept any pending reboot
+         LE_INFO("Automatically accepting reboot");
+         StopDeferTimer(LE_AVC_USER_AGREEMENT_REBOOT);
+         result = LE_OK;
+     }
+     else if (NumStatusHandlers > 0)
+     {
+         // Notify registered control app.
+         SendUpdateStatusEvent(LE_AVC_REBOOT_PENDING, -1, -1, StatusHandlerContextPtr);
+     }
+     else
+     {
+         // There is a control app installed, but the handler is not yet registered.
+         // Defer the decision to allow the control app time to register.
+         LE_INFO("Automatically deferring reboot, "
+                 "while waiting for control app to register");
+
+         // Try the reboot later
+         le_clk_Time_t interval = {.sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
+
+         le_timer_SetInterval(RebootDeferTimer, interval);
+         le_timer_Start(RebootDeferTimer);
+     }
+
+     return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Re-send pending notification after session start
  */
 //--------------------------------------------------------------------------------------------------
 static void ResendPendingNotification
@@ -733,11 +1156,11 @@ static void ResendPendingNotification
             CurrentDownloadProgress = -1;
 
             case AVC_INSTALL_PENDING:
-                reportStatus = LE_AVC_INSTALL_PENDING;
+                RespondToInstallPending();
                 break;
 
             case AVC_UNINSTALL_PENDING:
-                reportStatus = LE_AVC_UNINSTALL_PENDING;
+                RespondToUninstallPending();
                 break;
 
             // Download pending is initiated by the package downloader
@@ -745,21 +1168,72 @@ static void ResendPendingNotification
             default:
                 break;
         }
-
-        // Notify pending state to registered control app for user acceptance.
-        if ( reportStatus != LE_AVC_NO_UPDATE )
-        {
-            SendUpdateStatusEvent(reportStatus,
-                                  CurrentTotalNumBytes,
-                                  CurrentDownloadProgress,
-                                  StatusHandlerContextPtr);
-        }
     }
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Handler to receive update status notifications from PA
+ * Process user agreement queries and take an action or forward to interested application which
+ * can take decision.
+ *
+ * @return
+ *      - LE_OK if operation can proceed right away
+ *      - LE_BUSY if operation is deferred
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t ProcessUserAgreement
+(
+    le_avc_Status_t updateStatus,   ///< [IN] Update status
+    int32_t totalNumBytes,          ///< [IN] Remaining number of bytes to download
+    int32_t dloadProgress           ///< [IN] Download progress
+)
+{
+    le_result_t result = LE_BUSY;
+    bool isUserAgreementEnabled;
+
+    // Depending on user agreement configuration either process the operation
+    // within avcService or forward to control app for acceptance.
+    switch (updateStatus)
+    {
+        case LE_AVC_CONNECTION_PENDING:
+            result = RespondToConnectionPending();
+            break;
+
+        case LE_AVC_DOWNLOAD_PENDING:
+            result = RespondToDownloadPending(totalNumBytes, dloadProgress);
+            break;
+
+        case LE_AVC_INSTALL_PENDING:
+            result = RespondToInstallPending();
+            break;
+
+        case LE_AVC_UNINSTALL_PENDING:
+            result = RespondToUninstallPending();
+            break;
+
+        case LE_AVC_REBOOT_PENDING:
+             result = RespondToRebootPending();
+             break;
+
+        default:
+            LE_INFO("Update status is %s", AvcSessionStateToStr(updateStatus));
+            // Forward notifications unrelated to user agreement to interested applications.
+            SendUpdateStatusEvent(updateStatus,
+                                  totalNumBytes,
+                                  dloadProgress,
+                                  StatusHandlerContextPtr);
+
+            // Resend pending notification after session start
+            ResendPendingNotification(updateStatus);
+            break;
+    }
+
+    return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Handler to receive update status notifications
  */
 //--------------------------------------------------------------------------------------------------
 void avcServer_UpdateHandler
@@ -776,6 +1250,10 @@ void avcServer_UpdateHandler
     // Keep track of the state of any pending downloads or installs.
     switch ( updateStatus )
     {
+        case LE_AVC_CONNECTION_PENDING:
+            LE_DEBUG("Process user agreement for connection");
+            break;
+
         case LE_AVC_DOWNLOAD_PENDING:
             CurrentState = AVC_DOWNLOAD_PENDING;
 
@@ -794,6 +1272,16 @@ void avcServer_UpdateHandler
             // always re-assign the value.
             LE_DEBUG("Update type for INSTALL is %d", updateType);
             CurrentUpdateType = updateType;
+            break;
+
+        case LE_AVC_UNINSTALL_PENDING:
+            CurrentState = AVC_UNINSTALL_PENDING;
+            LE_DEBUG("Update type for Uninstall is %d", updateType);
+            CurrentUpdateType = updateType;
+            break;
+
+        case LE_AVC_REBOOT_PENDING:
+            LE_DEBUG("Process user agreement for connection");
             break;
 
         case LE_AVC_DOWNLOAD_IN_PROGRESS:
@@ -843,7 +1331,6 @@ void avcServer_UpdateHandler
             }
             break;
 
-        case LE_AVC_UNINSTALL_PENDING:
         case LE_AVC_UNINSTALL_IN_PROGRESS:
         case LE_AVC_UNINSTALL_FAILED:
         case LE_AVC_UNINSTALL_COMPLETE:
@@ -883,76 +1370,21 @@ void avcServer_UpdateHandler
             avData_ReportSessionState(LE_AVDATA_SESSION_STOPPED);
             break;
 
+        case LE_AVC_AUTH_STARTED:
+            LE_DEBUG("Authenticated started");
+            break;
+
+        case LE_AVC_AUTH_FAILED:
+            LE_DEBUG("Authenticated failed");
+            break;
+
         default:
             LE_DEBUG("Unhandled updateStatus %s", AvcSessionStateToStr(updateStatus));
             break;
     }
 
-    if (NumStatusHandlers > 0)
-    {
-        // Notify registered control app
-        SendUpdateStatusEvent(updateStatus,
-                              totalNumBytes,
-                              dloadProgress,
-                              StatusHandlerContextPtr);
-
-        // Resend pending notification after session start
-        ResendPendingNotification(updateStatus);
-    }
-    else if ( IsControlAppInstalled )
-    {
-        // There is a control app installed, but the handler is not yet registered.  Defer
-        // the decision to allow the control app time to register.
-        if ( updateStatus == LE_AVC_DOWNLOAD_PENDING )
-        {
-            LE_INFO("Automatically deferring download, while waiting for control app to register");
-            DeferDownload(BLOCKED_DEFER_TIME);
-        }
-        else if ( updateStatus == LE_AVC_INSTALL_PENDING )
-        {
-            LE_INFO("Automatically deferring install, while waiting for control app to register");
-            DeferInstall(BLOCKED_DEFER_TIME);
-        }
-        else
-        {
-            LE_DEBUG("No handler registered to receive status %i", updateStatus);
-        }
-    }
-
-    else
-    {
-        // There is no control app; automatically accept any pending downloads.
-        if ( updateStatus == LE_AVC_DOWNLOAD_PENDING )
-        {
-            LE_INFO("Automatically accepting download");
-            AcceptDownloadPackage();
-            CurrentState = AVC_DOWNLOAD_IN_PROGRESS;
-        }
-
-        // There is no control app; automatically accept any pending installs,
-        // if there are no blocking apps, otherwise, defer the install.
-        else if ( updateStatus == LE_AVC_INSTALL_PENDING )
-        {
-            if ( 0 == BlockRefCount )
-            {
-                LE_INFO("Automatically accepting install");
-                AcceptInstallPackage();
-                StopInstallDeferTimer();
-                CurrentState = AVC_INSTALL_IN_PROGRESS;
-            }
-            else
-            {
-                LE_INFO("Automatically deferring install");
-                DeferInstall(BLOCKED_DEFER_TIME);
-            }
-        }
-
-        // Otherwise, log a message
-        else
-        {
-            LE_DEBUG("No handler registered to receive status %i", updateStatus);
-        }
-    }
+    // Process user agreement or forward to control app if applicable.
+    ProcessUserAgreement(updateStatus, totalNumBytes, dloadProgress);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1004,53 +1436,7 @@ static le_result_t QueryInstall
     void
 )
 {
-    le_result_t result = LE_BUSY;
-
-    LE_INFO("Stopping activity timer during install pending.");
-    avcClient_StopActivityTimer();
-
-    if (NumStatusHandlers > 0)
-    {
-        // Notify registered control app.
-        CurrentState = AVC_INSTALL_PENDING;
-        SendUpdateStatusEvent(LE_AVC_INSTALL_PENDING, -1, -1, StatusHandlerContextPtr);
-    }
-    else if (IsControlAppInstalled)
-    {
-        // There is a control app installed, but the handler is not yet registered.  Defer
-        // the decision to allow the control app time to register.
-        LE_INFO("Automatically deferring install, while waiting for control app to register");
-
-        // Try the install later
-        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
-
-        le_timer_SetInterval(InstallDeferTimer, interval);
-        le_timer_Start(InstallDeferTimer);
-    }
-    else
-    {
-        // There is no control app; automatically accept any pending installs,
-        // if there are no blocking apps, otherwise, defer the install.
-        if ( 0 == BlockRefCount )
-        {
-            LE_INFO("Automatically accepting install");
-            StopInstallDeferTimer();
-            CurrentState = AVC_INSTALL_IN_PROGRESS;
-            result = LE_OK;
-        }
-        else
-        {
-            LE_INFO("Automatically deferring install");
-
-            // Try the install later
-            le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
-
-            le_timer_SetInterval(InstallDeferTimer, interval);
-            le_timer_Start(InstallDeferTimer);
-        }
-    }
-
-    return result;
+    return ProcessUserAgreement(LE_AVC_INSTALL_PENDING, -1, -1);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1067,58 +1453,7 @@ static le_result_t QueryDownload
     uint32_t totalNumBytes          ///< Number of bytes to download.
 )
 {
-    le_result_t result = LE_BUSY;
-
-    LE_INFO("Stopping activity timer during download pending.");
-    avcClient_StopActivityTimer();
-
-    if (NumStatusHandlers > 0)
-    {
-        // Notify registered control app.
-        CurrentState = AVC_DOWNLOAD_PENDING;
-        SendUpdateStatusEvent(LE_AVC_DOWNLOAD_PENDING, totalNumBytes, 0, StatusHandlerContextPtr);
-    }
-    else if (IsControlAppInstalled)
-    {
-        // There is a control app installed, but the handler is not yet registered.  Defer
-        // the decision to allow the control app time to register.
-        LE_INFO("Automatically deferring download, while waiting for control app to register");
-
-        // Since the decision is not to download at this time, go back to idle
-        CurrentState = AVC_IDLE;
-
-        // Try the download later
-        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
-
-        le_timer_SetInterval(DownloadDeferTimer, interval);
-        le_timer_Start(DownloadDeferTimer);
-    }
-    else
-    {
-        // There is no control app; automatically accept any pending downloads,
-        // if there are no blocking apps, otherwise, defer the download.
-        if (0 == BlockRefCount)
-        {
-            LE_INFO("Automatically accepting download");
-            CurrentState = AVC_DOWNLOAD_IN_PROGRESS;
-            result = LE_OK;
-        }
-        else
-        {
-            LE_INFO("Automatically deferring download");
-
-            // Since the decision is not to download at this time, go back to idle
-            CurrentState = AVC_IDLE;
-
-            // Try the download later
-            le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
-
-            le_timer_SetInterval(DownloadDeferTimer, interval);
-            le_timer_Start(DownloadDeferTimer);
-        }
-    }
-
-    return result;
+    return ProcessUserAgreement(LE_AVC_DOWNLOAD_PENDING, PkgDownloadCtx.bytesToDownload, 0);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1135,50 +1470,7 @@ static le_result_t QueryUninstall
     void
 )
 {
-    le_result_t result = LE_BUSY;
-
-    if (NumStatusHandlers > 0)
-    {
-        // Notify registered control app.
-        CurrentState = AVC_UNINSTALL_PENDING;
-        SendUpdateStatusEvent(LE_AVC_UNINSTALL_PENDING, -1, -1, StatusHandlerContextPtr);
-    }
-    else if (IsControlAppInstalled)
-    {
-        // There is a control app installed, but the handler is not yet registered.  Defer
-        // the decision to allow the control app time to register.
-        LE_INFO("Automatically deferring uninstall, while waiting for control app to register");
-
-        // Try the uninstall later
-        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
-
-        le_timer_SetInterval(UninstallDeferTimer, interval);
-        le_timer_Start(UninstallDeferTimer);
-    }
-    else
-    {
-        // There is no control app; automatically accept any pending uninstalls,
-        // if there are no blocking apps, otherwise, defer the uninstall.
-        if ( 0 == BlockRefCount )
-        {
-            LE_INFO("Automatically accepting uninstall");
-            StopUninstallDeferTimer();
-            CurrentState = AVC_UNINSTALL_IN_PROGRESS;
-            result = LE_OK;
-        }
-        else
-        {
-            LE_INFO("Automatically deferring uninstall");
-
-            // Try the uninstall later
-            le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
-
-            le_timer_SetInterval(UninstallDeferTimer, interval);
-            le_timer_Start(UninstallDeferTimer);
-        }
-    }
-
-    return result;
+    return ProcessUserAgreement(LE_AVC_UNINSTALL_PENDING, -1, -1);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1195,34 +1487,24 @@ static le_result_t QueryReboot
     void
 )
 {
-    le_result_t result = LE_BUSY;
+    return ProcessUserAgreement(LE_AVC_REBOOT_PENDING, -1, -1);
+}
 
-    if (NumStatusHandlers > 0)
-    {
-        // Notify registered control app.
-        SendUpdateStatusEvent(LE_AVC_REBOOT_PENDING, -1, -1, StatusHandlerContextPtr);
-    }
-    else if (IsControlAppInstalled)
-    {
-        // There is a control app installed, but the handler is not yet registered.
-        // Defer the decision to allow the control app time to register.
-        LE_INFO("Automatically deferring reboot, while waiting for control app to register");
-
-        // Try the reboot later
-        le_clk_Time_t interval = {.sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
-
-        le_timer_SetInterval(RebootDeferTimer, interval);
-        le_timer_Start(RebootDeferTimer);
-    }
-    else
-    {
-        // There is no control app; automatically accept any pending reboot
-        LE_INFO("Automatically accepting reboot");
-        StopRebootDeferTimer();
-        result = LE_OK;
-    }
-
-    return result;
+//--------------------------------------------------------------------------------------------------
+/**
+ * Query if it's okay to proceed with a device connect
+ *
+ * @return
+ *      - LE_OK if connect can proceed right away
+ *      - LE_BUSY if connect is deferred
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t QueryConnect
+(
+    void
+)
+{
+    return ProcessUserAgreement(LE_AVC_CONNECTION_PENDING, -1, -1);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1327,6 +1609,35 @@ static void RebootTimerExpiryHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Called when the connection defer timer expires.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ConnectTimerExpiryHandler
+(
+    le_timer_Ref_t timerRef    ///< Timer that expired
+)
+{
+    if (LE_OK == QueryConnect())
+    {
+        avcClient_Connect();
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Called when the launch connection timer expires
+ */
+//--------------------------------------------------------------------------------------------------
+static void LaunchConnectExpiryHandler
+(
+    le_timer_Ref_t timerRef    ///< Timer that expired
+)
+{
+    avcClient_Connect();
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Convert lwm2m core update type to avc update type
  */
 //--------------------------------------------------------------------------------------------------
@@ -1349,6 +1660,125 @@ static le_avc_UpdateType_t ConvertToAvcType
     }
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Write avc configuration parameter to platform memory
+ *
+ * @return
+ *      - LE_OK if successful
+ *      - LE_FAULT otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t SetAvcConfig
+(
+    AvcConfigData_t* configPtr   ///< [IN] configuration data buffer
+)
+{
+    if (NULL == configPtr)
+    {
+        LE_ERROR("Avc configuration pointer is null");
+        return LE_FAULT;
+    }
+
+    le_result_t result;
+    int pathLen;
+    char path[LE_FS_PATH_MAX_LEN];
+    memset(path, 0, LE_FS_PATH_MAX_LEN);
+    pathLen = snprintf(path, LE_FS_PATH_MAX_LEN, "%s/%s", AVC_CONFIG_PATH, AVC_CONFIG_PARAM);
+
+    if (pathLen > LE_FS_PATH_MAX_LEN)
+    {
+        LE_ERROR("Buffer overflow in config path");
+        return LE_FAULT;
+    }
+
+    result = WriteFs(path, configPtr, sizeof(AvcConfigData_t));
+
+    if (LE_OK == result)
+    {
+        return LE_OK;
+    }
+    else
+    {
+        LE_ERROR("Error writing to le_fs");
+        return LE_FAULT;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read avc configuration parameter to platform memory
+ *
+ * @return
+ *      - LE_OK if successful
+ *      - LE_FAULT otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t GetAvcConfig
+(
+    AvcConfigData_t* configPtr   ///< [INOUT] configuration data buffer
+)
+{
+    if (NULL == configPtr)
+    {
+        LE_ERROR("Avc configuration pointer is null");
+        return LE_FAULT;
+    }
+
+    le_result_t result;
+    int pathLen;
+    char path[LE_FS_PATH_MAX_LEN];
+    memset(path, 0, LE_FS_PATH_MAX_LEN);
+    pathLen = snprintf(path, LE_FS_PATH_MAX_LEN, "%s/%s", AVC_CONFIG_PATH, AVC_CONFIG_PARAM);
+    if (pathLen > LE_FS_PATH_MAX_LEN)
+    {
+        LE_ERROR("Buffer overflow in config path");
+        return LE_OVERFLOW;
+    }
+
+    size_t size = sizeof(AvcConfigData_t);
+    result = ReadFs(path, configPtr, &size);
+
+    if (LE_OK == result)
+    {
+        return LE_OK;
+    }
+    else
+    {
+        LE_ERROR("Error reading from %s", path);
+        return LE_UNAVAILABLE;
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+/**
+ * Connect to AV server
+ */
+//-------------------------------------------------------------------------------------------------
+static void ConnectToServer
+(
+    void
+)
+{
+    // Start a session.
+    if (LE_DUPLICATE == avcClient_Connect())
+    {
+        // Session is already connected, but wireless network could have been de-provisioned
+        // due to NAT timeout. Do a registration update to re-establish connection.
+        if (LE_OK != avcClient_Update())
+        {
+            // Restart the session if registration update fails.
+            avcClient_Disconnect(true);
+
+            // Connect after 2 seconds
+            le_clk_Time_t interval = { .sec = 2 };
+
+            le_timer_SetInterval(LaunchConnectTimer, interval);
+            le_timer_Start(LaunchConnectTimer);
+        }
+    }
+}
+
 //-------------------------------------------------------------------------------------------------
 /**
  * Start an AVC session periodically according the polling timer config.
@@ -1359,6 +1789,9 @@ static void StartPollingTimer
     void
 )
 {
+    le_result_t result;
+    AvcConfigData_t avcConfig;
+
     if (NULL == PollingTimerRef)
     {
         PollingTimerRef = le_timer_Create("PollingTimer");
@@ -1369,15 +1802,34 @@ static void StartPollingTimer
 
     // Since SetDefaultAVMSConfig() has already been called prior to StartPollingTimer(),
     // GetPollingTimer must return LE_OK.
-    LE_ASSERT(LE_OK == le_avc_GetPollingTimer(&pollingTimer));
+    if(LE_OK != le_avc_GetPollingTimer(&pollingTimer))
+    {
+        LE_ERROR("Polling timer not configured");
+        return;
+    }
 
     if (0 == pollingTimer)
     {
         LE_INFO("Polling Timer disabled. AVC session will not be started periodically.");
 
-        le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
-        le_cfg_DeleteNode(iterRef, "pollingTimerSavedTimeSinceEpoch");
-        le_cfg_CommitTxn(iterRef);
+        // Retrieve configuration from le_fs
+        result = GetAvcConfig(&avcConfig);
+        if (result != LE_OK)
+        {
+           LE_ERROR("Failed to retrieve avc config from le_fs");
+           return;
+        }
+
+        // Set the last time since epoch
+        avcConfig.connectionEpochTime = LAST_CONNECTED_TIME_INVALID;
+
+        // Write configuration to le_fs
+        result = SetAvcConfig(&avcConfig);
+        if (result != LE_OK)
+        {
+           LE_ERROR("Failed to write avc config from le_fs");
+           return;
+        }
     }
     else
     {
@@ -1388,20 +1840,33 @@ static void StartPollingTimer
         // Time elapsed since last poll
         time_t timeElapsed = 0;
 
-        le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
+        // Retrieve configuration from le_fs
+        result = GetAvcConfig(&avcConfig);
+        if (result != LE_OK)
+        {
+           LE_ERROR("Failed to retrieve avc config from le_fs");
+           return;
+        }
 
         // This is the first time ever, since no saved time can be found.
-        if (le_cfg_IsEmpty(iterRef, "pollingTimerSavedTimeSinceEpoch"))
+        if (avcConfig.connectionEpochTime == LAST_CONNECTED_TIME_INVALID)
         {
-            // Save the current time.
-            le_cfg_SetInt(iterRef, "pollingTimerSavedTimeSinceEpoch", currentTime);
-            // Start a session.
-            avcClient_Connect();
+            // Set the last time since epoch
+            avcConfig.connectionEpochTime = currentTime;
+
+            // Write configuration to le_fs
+            result = SetAvcConfig(&avcConfig);
+            if (result != LE_OK)
+            {
+               LE_ERROR("Failed to write avc config from le_fs");
+               return;
+            }
+
+            ConnectToServer();
         }
         else
         {
-            timeElapsed = currentTime - le_cfg_GetInt(iterRef,
-                                                      "pollingTimerSavedTimeSinceEpoch", 0);
+            timeElapsed = currentTime - avcConfig.connectionEpochTime;
 
             // If time difference is negative, maybe the system time was altered.
             // If the time difference exceeds the polling timer, then that means the current polling
@@ -1411,10 +1876,18 @@ static void StartPollingTimer
             {
                 timeElapsed = 0;
 
-                // Save the current time.
-                le_cfg_SetInt(iterRef, "pollingTimerSavedTimeSinceEpoch", currentTime);
-                // Start a session.
-                avcClient_Connect();
+                // Set the last time since epoch
+                avcConfig.connectionEpochTime = currentTime;
+
+                // Write configuration to le_fs
+                result = SetAvcConfig(&avcConfig);
+                if (result != LE_OK)
+                {
+                    LE_ERROR("Failed to write avc config from le_fs");
+                    return;
+                }
+
+                ConnectToServer();
             }
         }
 
@@ -1430,8 +1903,6 @@ static void StartPollingTimer
         LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
         LE_ASSERT(LE_OK == le_timer_SetHandler(PollingTimerRef, StartPollingTimer));
         LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
-
-        le_cfg_CommitTxn(iterRef);
     }
 }
 
@@ -1675,13 +2146,13 @@ void avcServer_InitUserAgreement
     void
 )
 {
-    StopDownloadDeferTimer();
+    StopDeferTimer(LE_AVC_USER_AGREEMENT_DOWNLOAD);
     QueryDownloadHandlerRef = NULL;
 
-    StopInstallDeferTimer();
+    StopDeferTimer(LE_AVC_USER_AGREEMENT_INSTALL);
     QueryInstallHandlerRef = NULL;
 
-    StopUninstallDeferTimer();
+    StopDeferTimer(LE_AVC_USER_AGREEMENT_UNINSTALL);
     QueryUninstallHandlerRef = NULL;
 }
 
@@ -1881,11 +2352,6 @@ le_avc_StatusEventHandlerRef_t le_avc_AddStatusEventHandler
     // Number of user apps registered
     NumStatusHandlers++;
 
-    // We only check at startup if the control app is installed, so this flag could be false
-    // if the control app is installed later.  Obviously control app is installed now, so set
-    // it to true, in case it is currently false.
-    IsControlAppInstalled = true;
-
     // Initialize any ongoing SOTA/FOTA job.
     InitAvcJobOnResume();
 
@@ -1909,12 +2375,6 @@ void le_avc_RemoveStatusEventHandler
 
     // Decrement number of registered handlers
     NumStatusHandlers--;
-
-    // After all status handlers are removed automatic (default) actions will be enabled.
-    if (0 >= NumStatusHandlers)
-    {
-        IsControlAppInstalled = false;
-    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2005,6 +2465,7 @@ le_result_t le_avc_StartSession
     void
 )
 {
+    StopDeferTimer(LE_AVC_USER_AGREEMENT_CONNECTION);
     return avcClient_Connect();
 }
 
@@ -2071,37 +2532,20 @@ le_result_t le_avc_AcceptDownload
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Defer the currently pending download, for the given number of minutes
+ * Defer the currently pending connection, for the given number of minutes
  *
  * @return
  *      - LE_OK on success
  *      - LE_FAULT on failure
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t DeferDownload
+le_result_t le_avc_DeferConnect
 (
-     uint32_t deferMinutes
-        ///< [IN]
+    uint32_t deferMinutes                   ///< [IN] Defer time in minutes
 )
 {
-    if ( CurrentState != AVC_DOWNLOAD_PENDING )
-    {
-        LE_ERROR("Expected AVC_DOWNLOAD_PENDING state; current state is %i", CurrentState);
-        return LE_FAULT;
-    }
-
-    // stop activity timer when download has been deferred
-    avcClient_StopActivityTimer();
-
-    LE_DEBUG("Deferring download");
-
-    // Try the download later
-    le_clk_Time_t interval = { .sec = (deferMinutes * SECONDS_IN_A_MIN) };
-
-    le_timer_SetInterval(DownloadDeferTimer, interval);
-    le_timer_Start(DownloadDeferTimer);
-
-    return LE_OK;
+    // Defer the connection.
+    return DeferConnect(deferMinutes);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2115,60 +2559,11 @@ le_result_t DeferDownload
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_DeferDownload
 (
-    uint32_t deferMinutes
-        ///< [IN]
+    uint32_t deferMinutes                   ///< [IN] Defer time in minutes
 )
 {
     // Defer the download.
     return DeferDownload(deferMinutes);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Accept the currently pending application uninstall
- *
- * @return
- *      - LE_OK on success
- *      - LE_FAULT on failure
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t AcceptUninstallApplication
-(
-    void
-)
-{
-    // If a user app is blocking the install, then just defer for some time.  Hopefully, the
-    // next time this function is called, the user app will no longer be blocking the install.
-    if ( BlockRefCount > 0 )
-    {
-        // Since the decision is not to install at this time, go back to idle
-        CurrentState = AVC_IDLE;
-
-        // Try the install later
-        le_clk_Time_t interval = { .sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
-
-        le_timer_SetInterval(UninstallDeferTimer, interval);
-        le_timer_Start(UninstallDeferTimer);
-    }
-    else
-    {
-        StopUninstallDeferTimer();
-
-        // Notify the registered handler to proceed with the install; only called once.
-        CurrentState = AVC_UNINSTALL_IN_PROGRESS;
-        if (QueryUninstallHandlerRef != NULL)
-        {
-            QueryUninstallHandlerRef(SwUninstallCtx.instanceId);
-            QueryUninstallHandlerRef = NULL;
-        }
-        else
-        {
-            LE_ERROR("Uninstall handler not valid");
-            return LE_FAULT;
-        }
-    }
-
-    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2215,55 +2610,9 @@ le_result_t le_avc_AcceptInstall
  *      - LE_FAULT on failure
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t DeferInstall
-(
-    uint32_t deferMinutes
-        ///< [IN]
-)
-{
-    if ( CurrentState != AVC_INSTALL_PENDING )
-    {
-        LE_ERROR("Expected AVC_INSTALL_PENDING state; current state is %i", CurrentState);
-        return LE_FAULT;
-    }
-
-    // stop activity timer when installation has been deferred
-    avcClient_StopActivityTimer();
-
-    if ( CurrentUpdateType == LE_AVC_FIRMWARE_UPDATE )
-    {
-        return LE_OK;
-    }
-    else if ( CurrentUpdateType == LE_AVC_APPLICATION_UPDATE )
-    {
-        // Try the install later
-        le_clk_Time_t interval = { .sec = (deferMinutes * SECONDS_IN_A_MIN) };
-
-        le_timer_SetInterval(InstallDeferTimer, interval);
-        le_timer_Start(InstallDeferTimer);
-
-        return LE_OK;
-    }
-    else
-    {
-        LE_ERROR("Unknown update type");
-        return LE_FAULT;
-    }
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Defer the currently pending install
- *
- * @return
- *      - LE_OK on success
- *      - LE_FAULT on failure
- */
-//--------------------------------------------------------------------------------------------------
 le_result_t le_avc_DeferInstall
 (
-    uint32_t deferMinutes
-        ///< [IN]
+    uint32_t deferMinutes           ///< [IN] Defer time in minutes
 )
 {
     return DeferInstall(deferMinutes);
@@ -2303,25 +2652,10 @@ le_result_t le_avc_AcceptUninstall
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_DeferUninstall
 (
-    uint32_t deferMinutes
-        ///< [IN]
+    uint32_t deferMinutes           ///< [IN] Defer time in minutes
 )
 {
-    if ( CurrentState != AVC_UNINSTALL_PENDING )
-    {
-        LE_ERROR("Expected AVC_UNINSTALL_PENDING state; current state is %i", CurrentState);
-        return LE_FAULT;
-    }
-
-    LE_DEBUG("Deferring Uninstall for %d minute.", deferMinutes);
-
-    // Try the uninstall later
-    le_clk_Time_t interval = { .sec = (deferMinutes * SECONDS_IN_A_MIN) };
-
-    le_timer_SetInterval(UninstallDeferTimer, interval);
-    le_timer_Start(UninstallDeferTimer);
-
-    return LE_OK;
+    return DeferUninstall(deferMinutes);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2338,7 +2672,7 @@ le_result_t le_avc_AcceptReboot
     void
 )
 {
-    StopRebootDeferTimer();
+    StopDeferTimer(LE_AVC_USER_AGREEMENT_REBOOT);
 
     LE_DEBUG("Accept a device reboot");
 
@@ -2600,23 +2934,23 @@ le_result_t le_avc_GetApnConfig
     size_t userPasswordNumElements ///< [IN]  Password max bytes
 )
 {
-    le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn(CFG_AVC_CONFIG_PATH);
+    AvcConfigData_t config;
     le_result_t result;
 
-    if (le_cfg_IsEmpty(iterRef, "apn"))
-    {
-        le_cfg_CancelTxn(iterRef);
-        return LE_FAULT;
-    }
-
-    le_cfg_GoToNode(iterRef, "apn");
-
-    result = le_cfg_GetString(iterRef, "name", apnName, apnNameNumElements, "");
-
+    // Retrieve apn configuration from le_fs
+    result = GetAvcConfig(&config);
     if (result != LE_OK)
     {
-        LE_ERROR("Failed to get APN Name.");
-        goto done;
+        LE_ERROR("Failed to retrieve avc config from le_fs");
+        return result;
+    }
+
+    // Copy apn name
+    result = le_utf8_Copy(apnName, config.apn.apnName, apnNameNumElements, NULL);
+    if (result != LE_OK)
+    {
+        LE_ERROR("Buffer overflow in copying apn name");
+        return result;
     }
 
     // if apn name is empty, we don't need to return username or password
@@ -2627,12 +2961,12 @@ le_result_t le_avc_GetApnConfig
         goto done;
     }
 
-    result = le_cfg_GetString(iterRef, "userName", userName, userNameNumElements, "");
-
+    // Copy user name
+    result = le_utf8_Copy(userName, config.apn.userName, userNameNumElements, NULL);
     if (result != LE_OK)
     {
-        LE_ERROR("Failed to get APN User Name.");
-        goto done;
+        LE_ERROR("Buffer overflow in copying user name");
+        return result;
     }
 
     // if username is empty, we don't need to return password
@@ -2643,16 +2977,15 @@ le_result_t le_avc_GetApnConfig
         goto done;
     }
 
-    result = le_cfg_GetString(iterRef, "password", userPassword, userPasswordNumElements, "");
-
+    // Copy password
+    result = le_utf8_Copy(userPassword, config.apn.password, userPasswordNumElements, NULL);
     if (result != LE_OK)
     {
-        LE_ERROR("Failed to get APN Password.");
-        goto done;
+        LE_ERROR("Buffer overflow in copying password");
+        return result;
     }
 
 done:
-    le_cfg_CancelTxn(iterRef);
     return result;
 }
 
@@ -2672,6 +3005,9 @@ le_result_t le_avc_SetApnConfig
     const char* userPassword ///< [IN] Password
 )
 {
+    le_result_t result = LE_OK;
+    AvcConfigData_t config;
+
     if ((strlen(apnName) > LE_AVC_APN_NAME_MAX_LEN) ||
         (strlen(userName) > LE_AVC_USERNAME_MAX_LEN) ||
         (strlen(userPassword) > LE_AVC_PASSWORD_MAX_LEN))
@@ -2679,14 +3015,45 @@ le_result_t le_avc_SetApnConfig
         return LE_OVERFLOW;
     }
 
-    le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
+    // Retrieve configuration from le_fs
+    result = GetAvcConfig(&config);
+    if (result != LE_OK)
+    {
+       LE_ERROR("Failed to retrieve avc config from le_fs");
+       return result;
+    }
 
-    le_cfg_GoToNode(iterRef, "apn");
-    le_cfg_SetString(iterRef, "name", apnName);
-    le_cfg_SetString(iterRef, "userName", userName);
-    le_cfg_SetString(iterRef, "password", userPassword);
+    // Copy apn name
+    result = le_utf8_Copy(config.apn.apnName, apnName, LE_AVC_APN_NAME_MAX_LEN, NULL);
+    if (result != LE_OK)
+    {
+        LE_ERROR("Buffer overflow in copying apn name");
+        return result;
+    }
 
-    le_cfg_CommitTxn(iterRef);
+    // Copy user name
+    result = le_utf8_Copy(config.apn.userName, userName, LE_AVC_USERNAME_MAX_LEN, NULL);
+    if (result != LE_OK)
+    {
+        LE_ERROR("Buffer overflow in copying user name");
+        return result;
+    }
+
+    // Copy password
+    result = le_utf8_Copy(config.apn.password, userPassword, LE_AVC_PASSWORD_MAX_LEN, NULL);
+    if (result != LE_OK)
+    {
+        LE_ERROR("Buffer overflow in copying password");
+        return result;
+    }
+
+    // Write configuration to le_fs
+    result = SetAvcConfig(&config);
+    if (result != LE_OK)
+    {
+       LE_ERROR("Failed to write avc config from le_fs");
+       return result;
+    }
 
     return LE_OK;
 }
@@ -2707,6 +3074,9 @@ le_result_t le_avc_GetRetryTimers
     size_t* numTimers         ///< [IN/OUT] Max num of timers to get/num of timers retrieved
 )
 {
+    AvcConfigData_t config;
+    le_result_t result;
+
     if (*numTimers < LE_AVC_NUM_RETRY_TIMERS)
     {
         LE_ERROR("Supplied retry timer array too small (%d). Expected %d.",
@@ -2714,15 +3084,13 @@ le_result_t le_avc_GetRetryTimers
         return LE_FAULT;
     }
 
-    le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn(CFG_AVC_CONFIG_PATH);
-
-    if (le_cfg_IsEmpty(iterRef, "retryTimers"))
+    // Retrieve configuration from le_fs
+    result = GetAvcConfig(&config);
+    if (result != LE_OK)
     {
-        le_cfg_CancelTxn(iterRef);
-        return LE_FAULT;
+       LE_ERROR("Failed to retrieve avc config from le_fs");
+       return result;
     }
-
-    le_cfg_GoToNode(iterRef, "retryTimers");
 
     uint16_t retryTimersCfg[LE_AVC_NUM_RETRY_TIMERS] = {0};
     char timerName[RETRY_TIMER_NAME_BYTES] = {0};
@@ -2730,7 +3098,7 @@ le_result_t le_avc_GetRetryTimers
     for (i = 0; i < LE_AVC_NUM_RETRY_TIMERS; i++)
     {
         snprintf(timerName, RETRY_TIMER_NAME_BYTES, "%d", i);
-        retryTimersCfg[i] = le_cfg_GetInt(iterRef, timerName, 0);
+        retryTimersCfg[i] = config.retryTimers[i];
 
         if ((retryTimersCfg[i] < LE_AVC_RETRY_TIMER_MIN_VAL) ||
             (retryTimersCfg[i] > LE_AVC_RETRY_TIMER_MAX_VAL))
@@ -2738,13 +3106,9 @@ le_result_t le_avc_GetRetryTimers
             LE_ERROR("The stored Retry Timer value %d is out of range. Min %d, Max %d.",
                      retryTimersCfg[i], LE_AVC_RETRY_TIMER_MIN_VAL, LE_AVC_RETRY_TIMER_MAX_VAL);
 
-            le_cfg_CancelTxn(iterRef);
             return LE_OUT_OF_RANGE;
         }
     }
-
-    le_cfg_CancelTxn(iterRef);
-
 
     for (i = 0; i < LE_AVC_NUM_RETRY_TIMERS; i++)
     {
@@ -2772,6 +3136,9 @@ le_result_t le_avc_SetRetryTimers
     size_t numTimers               ///< [IN] Number of retry timers
 )
 {
+    le_result_t result = LE_OK;
+    AvcConfigData_t config;
+
     if (numTimers < LE_AVC_NUM_RETRY_TIMERS)
     {
         LE_ERROR("Supplied retry timer array too small (%d). Expected %d.",
@@ -2791,19 +3158,29 @@ le_result_t le_avc_SetRetryTimers
         }
     }
 
-    le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
+    // Retrieve configuration from le_fs
+    result = GetAvcConfig(&config);
+    if (result != LE_OK)
+    {
+       LE_ERROR("Failed to retrieve avc config from le_fs");
+       return result;
+    }
 
-    le_cfg_GoToNode(iterRef, "retryTimers");
-
+    // Copy the retry timer values
     char timerName[RETRY_TIMER_NAME_BYTES] = {0};
-
     for (i = 0; i < LE_AVC_NUM_RETRY_TIMERS; i++)
     {
         snprintf(timerName, RETRY_TIMER_NAME_BYTES, "%d", i);
-        le_cfg_SetInt(iterRef, timerName, timerValuePtr[i]);
+        config.retryTimers[i] = timerValuePtr[i];
     }
 
-    le_cfg_CommitTxn(iterRef);
+    // Write configuration to le_fs
+    result = SetAvcConfig(&config);
+    if (result != LE_OK)
+    {
+       LE_ERROR("Failed to write avc config from le_fs");
+       return result;
+    }
 
     return LE_OK;
 }
@@ -2823,18 +3200,22 @@ le_result_t le_avc_GetPollingTimer
     uint32_t* pollingTimerPtr  ///< [OUT] Polling timer
 )
 {
-    le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn(CFG_AVC_CONFIG_PATH);
+    uint32_t pollingTimerCfg;
+    uint32_t lifetime;
+    lwm2mcore_Sid_t sid;
 
-    if (le_cfg_IsEmpty(iterRef, "pollingTimer"))
+    // read the lifetime from the server object
+    sid = lwm2mcore_GetLifetime(&lifetime);
+    if (LWM2MCORE_ERR_COMPLETED_OK != sid)
     {
-        le_cfg_CancelTxn(iterRef);
+        LE_ERROR("Unable to read lifetime from server configuration");
         return LE_FAULT;
     }
 
-    uint32_t pollingTimerCfg = le_cfg_GetInt(iterRef, "pollingTimer", 0);
+    // lifetime is in seconds and polling timer is in minutes
+    pollingTimerCfg = lifetime / SECONDS_IN_A_MIN;
 
-    le_cfg_CancelTxn(iterRef);
-
+    // check if it this configuration is allowed
     if ((pollingTimerCfg < LE_AVC_POLLING_TIMER_MIN_VAL) ||
         (pollingTimerCfg > LE_AVC_POLLING_TIMER_MAX_VAL))
     {
@@ -2863,6 +3244,10 @@ le_result_t le_avc_SetPollingTimer
     uint32_t pollingTimer ///< [IN] Polling timer
 )
 {
+    le_result_t result = LE_OK;
+    lwm2mcore_Sid_t sid;
+
+    // check if this configuration is allowed
     if ((pollingTimer < LE_AVC_POLLING_TIMER_MIN_VAL) ||
         (pollingTimer > LE_AVC_POLLING_TIMER_MAX_VAL))
     {
@@ -2871,77 +3256,178 @@ le_result_t le_avc_SetPollingTimer
         return LE_OUT_OF_RANGE;
     }
 
-    le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_AVC_CONFIG_PATH);
-    uint32_t existingPollingTimerCfg = le_cfg_GetInt(iterRef, "pollingTimer", 0);
-    le_cfg_SetInt(iterRef, "pollingTimer", pollingTimer);
-    le_cfg_CommitTxn(iterRef);
+    // lifetime in the server object is in seconds and polling timer is in minutes
+    uint32_t lifetime = pollingTimer * SECONDS_IN_A_MIN;
 
-    // Start the polling timer if the config transitions from 0 to non-0. Note that we can't look at
-    // if the timer is running, because it's possible that this function is called at the small
-    // window between the current polling timer stopping and the next polling timer starting.
-    if ((existingPollingTimerCfg == 0) && (pollingTimer > 0))
+    // set lifetime in lwm2mcore
+    sid = lwm2mcore_SetLifetime(lifetime);
+
+    if (LWM2MCORE_ERR_COMPLETED_OK != sid)
     {
-        StartPollingTimer();
+        LE_ERROR("Failed to set lifetime");
+        result = LE_FAULT;
     }
 
-    return LE_OK;
+    LE_INFO("Check if timer is running");
+    if (PollingTimerRef != NULL)
+    {
+        if (!le_timer_IsRunning(PollingTimerRef))
+        {
+            StartPollingTimer();
+        }
+    }
+
+    return result;
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Receive the report from avcAppUpdate and pass it to the control APP
- *
+ * Function to get the user agreement state
  *
  * @return
- *      - void
+ *      - LE_OK on success
+ *      - LE_FAULT otherwise
  */
 //--------------------------------------------------------------------------------------------------
-void avcServer_NotifyUserApp
+le_result_t le_avc_GetUserAgreement
 (
-    le_avc_Status_t updateStatus,
-    uint numBytes,
-    uint progress,
-    le_avc_ErrorCode_t errorCode
+    le_avc_UserAgreement_t userAgreement,   ///< [IN] Operation for which user agreement is read
+    bool* isEnabledPtr                      ///< [OUT] true if enabled
 )
 {
-    CurrentState = updateStatus;
+    le_result_t result = LE_OK;
+    AvcConfigData_t config;
 
-    LE_DEBUG("Report progress to registered handler.");
-
-    // Notify registered control app
-    SendUpdateStatusEvent(updateStatus, numBytes, progress, StatusHandlerContextPtr);
-
-    if (updateStatus == LE_AVC_INSTALL_FAILED)
+    // Retrieve configuration from le_fs
+    result = GetAvcConfig(&config);
+    if (result != LE_OK)
     {
-        LE_ERROR("Error in update Status %d.", errorCode);
-        AvcErrorCode = errorCode;
+       LE_ERROR("Failed to retrieve avc config from le_fs");
+       return result;
     }
+
+    switch (userAgreement)
+    {
+        case LE_AVC_USER_AGREEMENT_CONNECTION:
+            *isEnabledPtr = config.ua.connect;
+            break;
+        case LE_AVC_USER_AGREEMENT_DOWNLOAD:
+            *isEnabledPtr = config.ua.download;
+            break;
+        case LE_AVC_USER_AGREEMENT_INSTALL:
+            *isEnabledPtr = config.ua.install;
+            break;
+        case LE_AVC_USER_AGREEMENT_UNINSTALL:
+            *isEnabledPtr = config.ua.uninstall;
+            break;
+        case LE_AVC_USER_AGREEMENT_REBOOT:
+            *isEnabledPtr = config.ua.reboot;
+            break;
+        default:
+            *isEnabledPtr = 0;
+            result = LE_FAULT;
+            break;
+    }
+
+    return result;
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set the default AVMS config, only if no config exists.
+ * Set the default AVC config
  */
 //--------------------------------------------------------------------------------------------------
-static void SetDefaultAVMSConfig
+void le_avc_SetDefaultAvcConfig
 (
     void
 )
 {
-    // dummy variables used to see if there are any current configs present
-    uint32_t pollingTimerCurr = 0;
-    uint16_t retryTimersCurr[LE_AVC_NUM_RETRY_TIMERS] = {0};
-    size_t numTimersCurr = NUM_ARRAY_MEMBERS(retryTimersCurr);
+    AvcConfigData_t avcConfig;
+    int count;
 
-    if (LE_FAULT == le_avc_GetPollingTimer(&pollingTimerCurr))
+    memset(&avcConfig, 0, sizeof(avcConfig));
+
+    // set default retry timer values
+    for(count = 0; count < LE_AVC_NUM_RETRY_TIMERS; count++)
     {
-        le_avc_SetPollingTimer(PollingTimer);
+        avcConfig.retryTimers[count] = RetryTimers[count];
     }
 
-    if (LE_FAULT == le_avc_GetRetryTimers(retryTimersCurr, &numTimersCurr))
+    // set user agreement to default
+    avcConfig.ua.connect = USER_AGREEMENT_DEFAULT;
+    avcConfig.ua.download = USER_AGREEMENT_DEFAULT;
+    avcConfig.ua.install = USER_AGREEMENT_DEFAULT;
+    avcConfig.ua.uninstall = USER_AGREEMENT_DEFAULT;
+    avcConfig.ua.reboot = USER_AGREEMENT_DEFAULT;
+
+    // indicate device was never connected
+    avcConfig.connectionEpochTime = LAST_CONNECTED_TIME_INVALID;
+
+    // write the config file
+    SetAvcConfig(&avcConfig);
+
+    // set lifetime
+    le_avc_SetPollingTimer(PollingTimer);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to set the user agreement state
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_FAULT otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avc_SetUserAgreement
+(
+    le_avc_UserAgreement_t userAgreement,   ///< [IN] Operation for which user agreement
+                                            ///  is configured
+    bool  isEnabled                         ///< [IN] true if enabled
+)
+{
+    le_result_t result = LE_OK;
+    AvcConfigData_t config;
+
+    // Retrieve configuration from le_fs
+    result = GetAvcConfig(&config);
+    if (result != LE_OK)
     {
-        le_avc_SetRetryTimers(RetryTimers, LE_AVC_NUM_RETRY_TIMERS);
+       LE_ERROR("Failed to retrieve avc config from le_fs");
+       return result;
     }
+
+    switch (userAgreement)
+    {
+        case LE_AVC_USER_AGREEMENT_CONNECTION:
+            config.ua.connect = isEnabled;
+            break;
+        case LE_AVC_USER_AGREEMENT_DOWNLOAD:
+            config.ua.download = isEnabled;
+            break;
+        case LE_AVC_USER_AGREEMENT_INSTALL:
+            config.ua.install = isEnabled;
+            break;
+        case LE_AVC_USER_AGREEMENT_UNINSTALL:
+            config.ua.uninstall = isEnabled;
+            break;
+        case LE_AVC_USER_AGREEMENT_REBOOT:
+            config.ua.reboot = isEnabled;
+            break;
+        default:
+            LE_ERROR("User agreement configuration invalid");
+            break;
+    }
+
+    // Write configuration to le_fs
+    result = SetAvcConfig(&config);
+    if (result != LE_OK)
+    {
+       LE_ERROR("Failed to write avc config from le_fs");
+       return result;
+    }
+
+    return result;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -3120,6 +3606,12 @@ COMPONENT_INIT
     RebootDeferTimer = le_timer_Create("reboot defer timer");
     le_timer_SetHandler(RebootDeferTimer, RebootTimerExpiryHandler);
 
+    ConnectDeferTimer = le_timer_Create("connect defer timer");
+    le_timer_SetHandler(ConnectDeferTimer, ConnectTimerExpiryHandler);
+
+    LaunchConnectTimer = le_timer_Create("launch connection timer");
+    le_timer_SetHandler(LaunchConnectTimer, LaunchConnectExpiryHandler);
+
     // Initialize the sub-components
     if (LE_OK != packageDownloader_Init())
     {
@@ -3138,14 +3630,10 @@ COMPONENT_INIT
     le_cfg_CancelTxn(iterRef);
     avcClient_SetActivityTimeout(timeout);
 
-    // Check to see if le_avc is bound, which means there is an installed control app.
-    IsControlAppInstalled = IsAvcBound();
-    LE_INFO("Is control app installed? %i", IsControlAppInstalled);
+    // Display user agreement configuration
+    ReadUserAgreementConfiguration();
 
-    // Set default AVMS config values
-    SetDefaultAVMSConfig();
-
-    // Start an AVC session periodically accoridng to the Polling Timer config.
+    // Start an AVC session periodically according to the Polling Timer config.
     StartPollingTimer();
 
     // Initialize user agreement.
