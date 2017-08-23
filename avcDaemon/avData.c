@@ -855,6 +855,7 @@ static le_result_t DecodeAssetData
 )
 {
     CborType type = cbor_value_get_type(valuePtr);
+    CborError cborResult;
 
     switch (type)
     {
@@ -872,21 +873,43 @@ static le_result_t DecodeAssetData
             *typePtr = LE_AVDATA_DATA_TYPE_STRING;
             break;
         }
+
         case CborIntegerType:
             LE_DEBUG(">>>>> decoding int");
-            LE_ASSERT(CborNoError == cbor_value_get_int(valuePtr, &(assetValuePtr->intValue)));
+            cborResult = cbor_value_get_int_checked(valuePtr, &(assetValuePtr->intValue));
+
+            if(CborNoError != cborResult)
+            {
+                LE_ERROR("Error (%s) while getting integer value", cbor_error_string(cborResult));
+                return LE_FAULT;
+            }
+
             *typePtr = LE_AVDATA_DATA_TYPE_INT;
             break;
 
         case CborBooleanType:
             LE_DEBUG(">>>>> decoding bool");
-            LE_ASSERT(CborNoError == cbor_value_get_boolean(valuePtr, &(assetValuePtr->boolValue)));
+            cborResult = cbor_value_get_boolean(valuePtr, &(assetValuePtr->boolValue));
+
+            if(CborNoError != cborResult)
+            {
+                LE_ERROR("Error (%s) while getting bool value", cbor_error_string(cborResult));
+                return LE_FAULT;
+            }
+
             *typePtr = LE_AVDATA_DATA_TYPE_BOOL;
             break;
 
         case CborDoubleType:
             LE_DEBUG(">>>>> decoding float");
-            LE_ASSERT(CborNoError == cbor_value_get_double(valuePtr, &(assetValuePtr->floatValue)));
+            cborResult = cbor_value_get_double(valuePtr, &(assetValuePtr->floatValue));
+
+            if(CborNoError != cborResult)
+            {
+                LE_ERROR("Error (%s) while getting float value", cbor_error_string(cborResult));
+                return LE_FAULT;
+            }
+
             *typePtr = LE_AVDATA_DATA_TYPE_FLOAT;
             break;
 
