@@ -32,13 +32,6 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- *  Last connected polling time is invalid
- */
-//--------------------------------------------------------------------------------------------------
-#define LAST_CONNECTED_TIME_INVALID -1
-
-//--------------------------------------------------------------------------------------------------
-/**
  * This ref is returned when a session request handler is added/registered.  It is used when the
  * handler is removed.  Only one ref is needed, because only one handler can be registered at a
  * time.
@@ -78,6 +71,13 @@
  */
 //--------------------------------------------------------------------------------------------------
 #define USER_AGREEMENT_DEFAULT  1
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Value if polling timer is disabled
+ */
+//--------------------------------------------------------------------------------------------------
+#define POLLING_TIMER_DISABLED  0
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -456,13 +456,6 @@ static char* ConvertUserAgreementToString
     }
     return result;
 }
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Default values for the Polling Timer. Unit is minute. 0 means disabled.
- */
-//--------------------------------------------------------------------------------------------------
-static uint32_t PollingTimer = 0;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1781,10 +1774,14 @@ static void ConnectToServer
 
 //-------------------------------------------------------------------------------------------------
 /**
- * Start an AVC session periodically according the polling timer config.
+ * Save current epoch time to le_fs
+ *
+ * @return
+ *      - LE_OK if successful
+ *      - LE_FAULT if otherwise
  */
 //-------------------------------------------------------------------------------------------------
-static void StartPollingTimer
+static le_result_t SaveCurrentEpochTime
 (
     void
 )
@@ -1792,51 +1789,95 @@ static void StartPollingTimer
     le_result_t result;
     AvcConfigData_t avcConfig;
 
-    if (NULL == PollingTimerRef)
+    // Retrieve configuration from le_fs
+    result = GetAvcConfig(&avcConfig);
+    if (result != LE_OK)
     {
-        PollingTimerRef = le_timer_Create("PollingTimer");
+       LE_ERROR("Failed to retrieve avc config from le_fs");
+       return LE_FAULT;
     }
+
+    // Set the last time since epoch
+    avcConfig.connectionEpochTime = time(NULL);
+
+    // Write configuration to le_fs
+    result = SetAvcConfig(&avcConfig);
+    if (result != LE_OK)
+    {
+       LE_ERROR("Failed to write avc config from le_fs");
+       return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//-------------------------------------------------------------------------------------------------
+/**
+ * Called when the polling timer expires.
+ */
+//-------------------------------------------------------------------------------------------------
+static void PollingTimerExpiryHandler
+(
+    void
+)
+{
+    le_result_t result;
+    AvcConfigData_t avcConfig;
+
+    LE_INFO("Polling timer expired");
+
+    SaveCurrentEpochTime();
+
+    ConnectToServer();
+
+    // Restart the timer for the next interval
+    uint32_t pollingTimerInterval;
+    LE_ASSERT(LE_OK == le_avc_GetPollingTimer(&pollingTimerInterval));
+
+    LE_INFO("A connection to server will be made in %d minutes", pollingTimerInterval);
+
+    le_clk_Time_t interval = {.sec = pollingTimerInterval * SECONDS_IN_A_MIN};
+    LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
+    LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
+}
+
+//-------------------------------------------------------------------------------------------------
+/**
+ * Initialize the polling timer at startup.
+ *
+ * Note: This functions reads the polling timer configuration and if enabled starts the polling
+ * timer based on the current time and the last time since a connection was established.
+ */
+//-------------------------------------------------------------------------------------------------
+static void InitPollingTimer
+(
+    void
+)
+{
+    le_result_t result;
+    AvcConfigData_t avcConfig;
 
     // Polling timer, in minutes.
     uint32_t pollingTimer = 0;
 
-    // Since SetDefaultAVMSConfig() has already been called prior to StartPollingTimer(),
-    // GetPollingTimer must return LE_OK.
     if(LE_OK != le_avc_GetPollingTimer(&pollingTimer))
     {
         LE_ERROR("Polling timer not configured");
         return;
     }
 
-    if (0 == pollingTimer)
+    if (POLLING_TIMER_DISABLED == pollingTimer)
     {
         LE_INFO("Polling Timer disabled. AVC session will not be started periodically.");
-
-        // Retrieve configuration from le_fs
-        result = GetAvcConfig(&avcConfig);
-        if (result != LE_OK)
-        {
-           LE_ERROR("Failed to retrieve avc config from le_fs");
-           return;
-        }
-
-        // Set the last time since epoch
-        avcConfig.connectionEpochTime = LAST_CONNECTED_TIME_INVALID;
-
-        // Write configuration to le_fs
-        result = SetAvcConfig(&avcConfig);
-        if (result != LE_OK)
-        {
-           LE_ERROR("Failed to write avc config from le_fs");
-           return;
-        }
     }
     else
     {
         // Remaining polling timer, in seconds.
         uint32_t remainingPollingTimer = 0;
+
         // Current time, in seconds since Epoch.
         time_t currentTime = time(NULL);
+
         // Time elapsed since last poll
         time_t timeElapsed = 0;
 
@@ -1848,9 +1889,17 @@ static void StartPollingTimer
            return;
         }
 
-        // This is the first time ever, since no saved time can be found.
-        if (avcConfig.connectionEpochTime == LAST_CONNECTED_TIME_INVALID)
+        // Connect to server if polling timer elapsed
+        timeElapsed = currentTime - avcConfig.connectionEpochTime;
+
+        // If time difference is negative, maybe the system time was altered.
+        // If the time difference exceeds the polling timer, then that means the current polling
+        // timer runs to the end.
+        // In both cases set timeElapsed to 0 which effectively start the polling timer fresh.
+        if ((timeElapsed < 0) || (timeElapsed >= (pollingTimer * SECONDS_IN_A_MIN)))
         {
+            timeElapsed = 0;
+
             // Set the last time since epoch
             avcConfig.connectionEpochTime = currentTime;
 
@@ -1858,50 +1907,23 @@ static void StartPollingTimer
             result = SetAvcConfig(&avcConfig);
             if (result != LE_OK)
             {
-               LE_ERROR("Failed to write avc config from le_fs");
-               return;
+                LE_ERROR("Failed to write avc config from le_fs");
+                return;
             }
 
             ConnectToServer();
         }
-        else
-        {
-            timeElapsed = currentTime - avcConfig.connectionEpochTime;
 
-            // If time difference is negative, maybe the system time was altered.
-            // If the time difference exceeds the polling timer, then that means the current polling
-            // timer runs to the end.
-            // In both cases set timeElapsed to 0 which effectively start the polling timer fresh.
-            if ((timeElapsed < 0) || (timeElapsed >= (pollingTimer * SECONDS_IN_A_MIN)))
-            {
-                timeElapsed = 0;
-
-                // Set the last time since epoch
-                avcConfig.connectionEpochTime = currentTime;
-
-                // Write configuration to le_fs
-                result = SetAvcConfig(&avcConfig);
-                if (result != LE_OK)
-                {
-                    LE_ERROR("Failed to write avc config from le_fs");
-                    return;
-                }
-
-                ConnectToServer();
-            }
-        }
-
-        remainingPollingTimer = (pollingTimer * SECONDS_IN_A_MIN) - timeElapsed;
+        remainingPollingTimer = ((pollingTimer * SECONDS_IN_A_MIN) - timeElapsed);
 
         LE_INFO("Polling Timer is set to start AVC session every %d minutes.", pollingTimer);
-        LE_INFO("The current Polling Timer will start a session in %d minutes.",
-                remainingPollingTimer/SECONDS_IN_A_MIN);
+        LE_INFO("The current Polling Timer will start a session in %d seconds.",
+                                                                remainingPollingTimer);
 
         // Set a timer to start the next session.
-        le_clk_Time_t interval = {remainingPollingTimer, 0};
+        le_clk_Time_t interval = {.sec = remainingPollingTimer};
 
         LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
-        LE_ASSERT(LE_OK == le_timer_SetHandler(PollingTimerRef, StartPollingTimer));
         LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
     }
 }
@@ -3247,6 +3269,15 @@ le_result_t le_avc_SetPollingTimer
     le_result_t result = LE_OK;
     lwm2mcore_Sid_t sid;
 
+    // Stop polling timer if running
+    if (PollingTimerRef != NULL)
+    {
+        if (le_timer_IsRunning(PollingTimerRef))
+        {
+            LE_ASSERT(LE_OK == le_timer_Stop(PollingTimerRef));
+        }
+    }
+
     // check if this configuration is allowed
     if ((pollingTimer < LE_AVC_POLLING_TIMER_MIN_VAL) ||
         (pollingTimer > LE_AVC_POLLING_TIMER_MAX_VAL))
@@ -3268,13 +3299,31 @@ le_result_t le_avc_SetPollingTimer
         result = LE_FAULT;
     }
 
-    LE_INFO("Check if timer is running");
-    if (PollingTimerRef != NULL)
+    // Store the current time to avc config
+    result = SaveCurrentEpochTime();
+    if (result != LE_OK)
     {
-        if (!le_timer_IsRunning(PollingTimerRef))
-        {
-            StartPollingTimer();
-        }
+       LE_ERROR("Failed to set polling timer");
+       return LE_FAULT;
+    }
+
+    // Start the polling timer if enabled
+    if (pollingTimer != POLLING_TIMER_DISABLED)
+    {
+        uint32_t pollingTimeSeconds = pollingTimer * SECONDS_IN_A_MIN;
+
+        LE_INFO("Polling Timer is set to start AVC session every %d minutes.", pollingTimer);
+        LE_INFO("A connection to server will be made in %d seconds.", pollingTimeSeconds);
+
+        // Set a timer to start the next session.
+        le_clk_Time_t interval = {.sec = pollingTimeSeconds};
+
+        LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
+        LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
+    }
+    else
+    {
+        LE_INFO("Polling timer disabled");
     }
 
     return result;
@@ -3360,14 +3409,14 @@ void le_avc_SetDefaultAvcConfig
     avcConfig.ua.uninstall = USER_AGREEMENT_DEFAULT;
     avcConfig.ua.reboot = USER_AGREEMENT_DEFAULT;
 
-    // indicate device was never connected
-    avcConfig.connectionEpochTime = LAST_CONNECTED_TIME_INVALID;
+    // save current time
+    avcConfig.connectionEpochTime = time(NULL);
 
     // write the config file
     SetAvcConfig(&avcConfig);
 
     // set lifetime
-    le_avc_SetPollingTimer(PollingTimer);
+    le_avc_SetPollingTimer(POLLING_TIMER_DISABLED);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -3612,6 +3661,9 @@ COMPONENT_INIT
     LaunchConnectTimer = le_timer_Create("launch connection timer");
     le_timer_SetHandler(LaunchConnectTimer, LaunchConnectExpiryHandler);
 
+    PollingTimerRef = le_timer_Create("polling Timer");
+    le_timer_SetHandler(PollingTimerRef, PollingTimerExpiryHandler);
+
     // Initialize the sub-components
     if (LE_OK != packageDownloader_Init())
     {
@@ -3634,7 +3686,7 @@ COMPONENT_INIT
     ReadUserAgreementConfiguration();
 
     // Start an AVC session periodically according to the Polling Timer config.
-    StartPollingTimer();
+    InitPollingTimer();
 
     // Initialize user agreement.
     avcServer_InitUserAgreement();
