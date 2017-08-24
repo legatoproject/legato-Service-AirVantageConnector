@@ -733,11 +733,13 @@ static le_result_t EncodeResourceDeltaValue
     if (prevTimestampPtr != NULL)
     {
         prevDataPtr = (Data_t*)GetTimestampData(resourceDataPtr, prevTimestampPtr->timestamp);
-    }
-    if (!prevDataPtr)
-    {
-       LE_ERROR("prevDataPtr is NULL");
-       return LE_FAULT;
+
+        if (!prevDataPtr)
+        {
+           LE_ERROR("prevDataPtr is NULL");
+           return LE_FAULT;
+        }
+
     }
 
     // delta value is only applicable to int and floats
