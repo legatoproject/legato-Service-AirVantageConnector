@@ -394,6 +394,62 @@ static void UpdateEndHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Set software update state
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t SetSwUpdateState
+(
+    lwm2mcore_SwUpdateState_t swUpdateState     ///< [IN] New SW update state
+)
+{
+    le_result_t result;
+
+    result = WriteFs(SW_UPDATE_STATE_PATH,
+                     (uint8_t *)&swUpdateState,
+                     sizeof(lwm2mcore_SwUpdateState_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", SW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update result
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t SetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t swUpdateResult   ///< [IN] New SW update result
+)
+{
+    le_result_t result;
+
+    result = WriteFs(SW_UPDATE_RESULT_PATH,
+                     (uint8_t *)&swUpdateResult,
+                     sizeof(lwm2mcore_SwUpdateResult_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", SW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  *  Update the state of the object 9 instance. Also, because they are so closely related, update
  *  the update result field while we're at it.
  */
@@ -409,6 +465,7 @@ static void SetObj9State_
 )
 {
     int instanceId;
+    le_result_t rc;
 
     if (instanceRef == NULL)
     {
@@ -431,8 +488,24 @@ static void SetObj9State_
 
     LE_DEBUG("Save the state and result in a file for suspend / resume");
 
-    avcApp_SetSwUpdateState(state);
-    avcApp_SetSwUpdateResult(result);
+    rc = assetData_client_SetInt(instanceRef, O9F_UPDATE_STATE, state);
+    if (LE_OK != rc)
+    {
+        LE_ERROR("Error (%s) while setting object 9 update state", LE_RESULT_TXT(rc));
+    }
+
+    // Save state in workspace for resume operation
+    SetSwUpdateState(state);
+
+    rc = assetData_client_SetInt(instanceRef, O9F_UPDATE_RESULT, result);
+
+    if (LE_OK != rc)
+    {
+        LE_ERROR("Error (%s) while setting object 9 update result", LE_RESULT_TXT(rc));
+    }
+
+    // Save result in workspace for resume operation
+    SetSwUpdateResult(result);
 
     // Send a registration update after changing the obj state/result of the device.
     // This will trigger the server to query for the state/result.
@@ -1268,63 +1341,6 @@ static le_result_t SetSwUpdateInternalState
     if (LE_OK != result)
     {
         LE_ERROR("Failed to write %s: %s", SW_UPDATE_INTERNAL_STATE_PATH, LE_RESULT_TXT(result));
-        return LE_FAULT;
-    }
-
-    return LE_OK;
-}
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Set software update state
- *
- * @return
- *  - LE_OK     The function succeeded
- *  - LE_FAULT  The function failed
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t SetSwUpdateState
-(
-    lwm2mcore_SwUpdateState_t swUpdateState     ///< [IN] New SW update state
-)
-{
-    le_result_t result;
-
-    result = WriteFs(SW_UPDATE_STATE_PATH,
-                     (uint8_t *)&swUpdateState,
-                     sizeof(lwm2mcore_SwUpdateState_t));
-    if (LE_OK != result)
-    {
-        LE_ERROR("Failed to write %s: %s", SW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
-        return LE_FAULT;
-    }
-
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Set software update result
- *
- * @return
- *  - LE_OK     The function succeeded
- *  - LE_FAULT  The function failed
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t SetSwUpdateResult
-(
-    lwm2mcore_SwUpdateResult_t swUpdateResult   ///< [IN] New SW update result
-)
-{
-    le_result_t result;
-
-    result = WriteFs(SW_UPDATE_RESULT_PATH,
-                     (uint8_t *)&swUpdateResult,
-                     sizeof(lwm2mcore_SwUpdateResult_t));
-    if (LE_OK != result)
-    {
-        LE_ERROR("Failed to write %s: %s", SW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
         return LE_FAULT;
     }
 
