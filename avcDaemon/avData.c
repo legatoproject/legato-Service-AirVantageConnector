@@ -820,7 +820,8 @@ static void StoreData
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Sets the asset value associated with the provided asset data path.
+ * Checks asset value associated with the provided asset data path if dry run flag is set.
+ * Otherwise, sets asset value associated with the provided asset data path.
  *
  * @return:
  *      - LE_NOT_FOUND - if the path is invalid and does not point to an asset data
@@ -833,7 +834,9 @@ static le_result_t SetVal
     const char* path,              ///< [IN] Asset data path
     AssetValue_t value,            ///< [IN] Asset value
     le_avdata_DataType_t dataType, ///< [IN] Asset value data type
-    bool isClient                  ///< [IN] Is it client or server access
+    bool isClient,                 ///< [IN] Is it client or server access
+    bool isDryRun                  ///< [IN] When this flag is set, no write is performed on
+                                   ///<      assetData, rather it checks the validity of input data.
 )
 {
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
@@ -865,34 +868,38 @@ static le_result_t SetVal
         return LE_NOT_PERMITTED;
     }
 
-    // If the current data type is string, we need to free the memory for the string before
-    // assigning asset value to the new one.
-    if (assetDataPtr->dataType == LE_AVDATA_DATA_TYPE_STRING)
+    // Don't set anything if dry run flag is set.
+    if (!isDryRun)
     {
-        le_mem_Release(assetDataPtr->value.strValuePtr);
-    }
+        // If the current data type is string, we need to free the memory for the string before
+        // assigning asset value to the new one.
+        if (assetDataPtr->dataType == LE_AVDATA_DATA_TYPE_STRING)
+        {
+            le_mem_Release(assetDataPtr->value.strValuePtr);
+        }
 
-    // Set the value.
-    assetDataPtr->value = value;
-    assetDataPtr->dataType = dataType;
+        // Set the value.
+        assetDataPtr->value = value;
+        assetDataPtr->dataType = dataType;
 
-    // Call registered handler.
-    if ((!isClient) && (assetDataPtr->handlerPtr != NULL))
-    {
-        le_avdata_ArgumentListRef_t argListRef
-             = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
+        // Call registered handler.
+        if ((!isClient) && (assetDataPtr->handlerPtr != NULL))
+        {
+            le_avdata_ArgumentListRef_t argListRef
+                 = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
 
-        assetDataPtr->handlerPtr(namespacedPath, LE_AVDATA_ACCESS_WRITE,
-                                 argListRef, assetDataPtr->contextPtr);
+            assetDataPtr->handlerPtr(namespacedPath, LE_AVDATA_ACCESS_WRITE,
+                                     argListRef, assetDataPtr->contextPtr);
 
-        le_ref_DeleteRef(ArgListRefMap, argListRef);
-    }
+            le_ref_DeleteRef(ArgListRefMap, argListRef);
+        }
 
-    // Store asset data if it is a setting and asset data has been restored already
-    if ((assetDataPtr->accessMode == LE_AVDATA_ACCESS_SETTING) &&
-        IsRestored)
-    {
-        StoreData(namespacedPath, value, dataType);
+        // Store asset data if it is a setting and asset data has been restored already
+        if ((assetDataPtr->accessMode == LE_AVDATA_ACCESS_SETTING) &&
+            IsRestored)
+        {
+            StoreData(namespacedPath, value, dataType);
+        }
     }
 
     return LE_OK;
@@ -978,20 +985,36 @@ static void RecursiveRestore
             {
                 case LE_CFG_TYPE_INT:
                     assetValue.intValue = le_cfg_GetInt(iterRef, strBuffer, 0);
-                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1), assetValue, LE_AVDATA_DATA_TYPE_INT, false);
+                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
+                           assetValue,
+                           LE_AVDATA_DATA_TYPE_INT,
+                           false,
+                           false);
                     break;
                 case LE_CFG_TYPE_FLOAT:
                     assetValue.floatValue = le_cfg_GetFloat(iterRef, strBuffer, 0);
-                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1), assetValue, LE_AVDATA_DATA_TYPE_FLOAT, false);
+                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
+                           assetValue,
+                           LE_AVDATA_DATA_TYPE_FLOAT,
+                           false,
+                           false);
                     break;
                 case LE_CFG_TYPE_BOOL:
                     assetValue.boolValue = le_cfg_GetBool(iterRef, strBuffer, 0);
-                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1), assetValue, LE_AVDATA_DATA_TYPE_BOOL, false);
+                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
+                           assetValue,
+                           LE_AVDATA_DATA_TYPE_BOOL,
+                           false,
+                           false);
                     break;
                 case LE_CFG_TYPE_STRING:
                     assetValue.strValuePtr = le_mem_ForceAlloc(StringPool);
                     le_cfg_GetString(iterRef, strBuffer, assetValue.strValuePtr, LE_AVDATA_STRING_VALUE_BYTES, "");
-                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1), assetValue, LE_AVDATA_DATA_TYPE_STRING, false);
+                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
+                           assetValue,
+                           LE_AVDATA_DATA_TYPE_STRING,
+                           false,
+                           false);
                     break;
                 default:
                     LE_DEBUG("Invalid type.");
@@ -1089,6 +1112,42 @@ static le_result_t EncodeAssetData
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Checks whether provided buffer is large enough to store incoming string.
+ *
+ * @return:
+ *      - LE_FAULT on any error.
+ *      - LE_OK if success.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t CheckCborStringLen
+(
+    CborValue* valuePtr,
+    size_t strSize
+)
+{
+    size_t incomingStrSize;
+
+    // Could return fault if the incoming string is so big that the length can't fit in
+    // incomingStrSize.
+    if (CborNoError != cbor_value_calculate_string_length(valuePtr, &incomingStrSize))
+    {
+        return LE_FAULT;
+    }
+
+    // Need to reserve one byte for the null terminating byte.
+    if (incomingStrSize > (strSize-1))
+    {
+        LE_ERROR("Encoded string (%d bytes) too big. Max %d bytes expected.",
+                 incomingStrSize, (strSize-1));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Perform cbor_value_copy_text_string only if the provided buffer is large enough.
  *
  * @return:
@@ -1103,28 +1162,14 @@ static le_result_t CborSafeCopyString
     size_t* strSizePtr
 )
 {
-    size_t incomingStrSize;
-
-    // Could return fault if the incoming string is so big that the length can't fit in
-    // incomingStrSize.
-    if (CborNoError != cbor_value_calculate_string_length(valuePtr, &incomingStrSize))
-    {
-        return LE_FAULT;
-    }
-
-    // Need to reserve one byte for the null terminating byte.
-    if (incomingStrSize > (*strSizePtr-1))
-    {
-        LE_ERROR("Encoded string (%d bytes) too big. Max %d bytes expected.",
-                 incomingStrSize, (*strSizePtr-1));
-        return LE_FAULT;
-    }
-    else
+    if (LE_OK == CheckCborStringLen(valuePtr, *strSizePtr))
     {
         // We've already ensured that buffer size is sufficient, so this should not fail.
         LE_ASSERT(CborNoError == cbor_value_copy_text_string(valuePtr, str, strSizePtr, NULL));
         return LE_OK;
     }
+
+    return LE_FAULT;
 }
 
 
@@ -1139,9 +1184,10 @@ static le_result_t CborSafeCopyString
 //--------------------------------------------------------------------------------------------------
 static le_result_t DecodeAssetData
 (
-    le_avdata_DataType_t* typePtr, ///< [OUT]
-    AssetValue_t* assetValuePtr,   ///< [OUT]
-    CborValue* valuePtr            ///< [IN]
+    le_avdata_DataType_t* typePtr, ///< [OUT] AV data type
+    AssetValue_t* assetValuePtr,   ///< [OUT] Asset Data
+    CborValue* valuePtr,           ///< [IN] Cbor value containing the assetData
+    bool isDryRun                  ///< [IN] If this flag set, no memory will be allocated
 )
 {
     CborType type = cbor_value_get_type(valuePtr);
@@ -1153,13 +1199,23 @@ static le_result_t DecodeAssetData
         {
             LE_DEBUG(">>>>> decoding string");
             size_t strSize = LE_AVDATA_STRING_VALUE_BYTES;
-            assetValuePtr->strValuePtr = le_mem_ForceAlloc(StringPool);
 
-            if (LE_OK != CborSafeCopyString(valuePtr, assetValuePtr->strValuePtr, &strSize))
+            if (isDryRun)
             {
-                return LE_FAULT;
+                if (LE_OK != CheckCborStringLen(valuePtr, strSize))
+                {
+                    return LE_FAULT;
+                }
             }
+            else
+            {
+                assetValuePtr->strValuePtr = le_mem_ForceAlloc(StringPool);
 
+                if (LE_OK != CborSafeCopyString(valuePtr, assetValuePtr->strValuePtr, &strSize))
+                {
+                    return LE_FAULT;
+                }
+            }
             *typePtr = LE_AVDATA_DATA_TYPE_STRING;
             break;
         }
@@ -1394,12 +1450,12 @@ static le_result_t EncodeMultiData
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Decode the CBOR data and with the provided path as the base path, set the asset data values for
- * asset data paths.
+ * Decode the CBOR data and with the provided path as the base path. Checks only validity of input
+ * values (i.e. asset data values for specified asset data path) if dry run flag is set. Otherwise,
+ * sets the asset data values for asset data paths with input values.
  *
  * In case of any error, this function returns right away and does not perform further decoding, so
- * the CborValue out param would be in an unpredictable state and should not be used. However, any
- * values already decoded would have already been set to their corresponding asset data paths.
+ * the CborValue out param would be in an unpredictable state and should not be used.
  *
  * @return:
  *      - LE_FAULT on any error.
@@ -1411,8 +1467,9 @@ static le_result_t DecodeMultiData
     CborValue* valuePtr, ///< [OUT] CBOR value. Expected to be a map. Iterator is advanced after the
                          ///<       function call.
     char* path,          ///< [IN] base path.
-    size_t maxPathBytes  ///< [IN] Max allowed length of path including null character
-
+    size_t maxPathBytes, ///< [IN] Max allowed length of path including null character
+    bool isDryRun        ///< [IN] When this flag is set, no write is performed on assetData,
+                         ///<      rather it checks the validity of input data.
 )
 {
     // Entering a CBOR map.
@@ -1468,7 +1525,7 @@ static le_result_t DecodeMultiData
             // The value is a map
             if (cbor_value_is_map(&map))
             {
-                if (LE_OK != DecodeMultiData(&map, path, maxPathBytes))
+                if (LE_OK != DecodeMultiData(&map, path, maxPathBytes, isDryRun))
                 {
                     return LE_FAULT;
                 }
@@ -1496,13 +1553,13 @@ static le_result_t DecodeMultiData
             le_avdata_DataType_t type;
             AssetValue_t assetValue;
 
-            if (LE_OK != DecodeAssetData(&type, &assetValue, &map))
+            if (LE_OK != DecodeAssetData(&type, &assetValue, &map, isDryRun))
             {
                 return LE_FAULT;
             }
 
             setValresult = (type == LE_AVDATA_DATA_TYPE_NONE) ?
-                           LE_UNSUPPORTED : SetVal(path, assetValue, type, false);
+                           LE_UNSUPPORTED : SetVal(path, assetValue, type, false, isDryRun);
 
             if (setValresult != LE_OK)
             {
@@ -1637,7 +1694,10 @@ static le_result_t CreateArgList
         }
         else
         {
-            if (LE_OK != DecodeAssetData(&(argPtr->argValType), &(argPtr->argValue), &recursed))
+            if (LE_OK != DecodeAssetData(&(argPtr->argValType),
+                                         &(argPtr->argValue),
+                                         &recursed,
+                                         false))
             {
                 LE_ERROR("Fail to decode an argument value.");
                 return LE_BAD_PARAMETER;
@@ -1861,10 +1921,41 @@ static void ProcessAvServerWriteRequest
                 }
                 else
                 {
-                    // If the path is a parent path, decode everything under that path.
+                    // Algorithm:
+                    // 1. Check whether all requested data is valid and have proper permission
+                    // 2. Write all requested data if step 1 returns true.
+
+                    // Check all requested data by specifying dry run flag true
                     le_result_t result = DecodeMultiData(&value,
                                                          pathBuff,
-                                                         LE_AVDATA_PATH_NAME_BYTES);
+                                                         LE_AVDATA_PATH_NAME_BYTES,
+                                                         true);
+                    if (LE_OK != result)
+                    {
+                        RespondToAvServer(COAP_BAD_REQUEST, NULL, 0);
+                        return;
+                    }
+
+                    // Reinit the cbor iterator again as previous iterator is already traversed, so
+                    // iterating on the previous iterator may result undefined result.
+                    CborParser checkedParser;
+                    CborValue checkedValue;
+                    if (CborNoError != cbor_parser_init(payload, payloadLen, 0, &checkedParser,
+                                                        &checkedValue))
+                    {
+                        RespondToAvServer(COAP_BAD_REQUEST, NULL, 0);
+                        return;
+                    }
+
+                    // Now decode and save to assetData
+                    result = DecodeMultiData(&checkedValue,
+                                             pathBuff,
+                                             LE_AVDATA_PATH_NAME_BYTES,
+                                             false);
+
+                    // Data is already checked. So any failure means something bad happened.
+                    LE_CRIT_IF(result != LE_OK,
+                              "Failed to decode and write to assetData: %s", LE_RESULT_TXT(result));
 
                     RespondToAvServer(
                         (result == LE_OK) ? COAP_RESOURCE_CHANGED : COAP_BAD_REQUEST, NULL, 0);
@@ -1893,7 +1984,7 @@ static void ProcessAvServerWriteRequest
         AssetValue_t assetValue;
         lwm2mcore_CoapResponseCode_t code;
 
-        if (LE_OK != DecodeAssetData(&type, &assetValue, &value))
+        if (LE_OK != DecodeAssetData(&type, &assetValue, &value, false))
         {
             LE_DEBUG(">>>>> Fail to decode single data point.");
             code = COAP_INTERNAL_ERROR;
@@ -1901,7 +1992,7 @@ static void ProcessAvServerWriteRequest
         else
         {
             result = (type == LE_AVDATA_DATA_TYPE_NONE) ?
-                     LE_UNSUPPORTED : SetVal(path, assetValue, type, false);
+                     LE_UNSUPPORTED : SetVal(path, assetValue, type, false, false);
 
             switch (result)
             {
@@ -2184,7 +2275,7 @@ le_result_t le_avdata_SetNull
     AssetValue_t assetValue;
     memset(&assetValue, 0, sizeof(AssetValue_t));
 
-    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_NONE, true);
+    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_NONE, true, false);
 }
 
 
@@ -2249,7 +2340,7 @@ le_result_t le_avdata_SetInt
     AssetValue_t assetValue;
     assetValue.intValue = value;
 
-    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_INT, true);
+    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_INT, true, false);
 }
 
 
@@ -2314,7 +2405,7 @@ le_result_t le_avdata_SetFloat
     AssetValue_t assetValue;
     assetValue.floatValue = value;
 
-    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_FLOAT, true);
+    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_FLOAT, true, false);
 }
 
 
@@ -2379,7 +2470,7 @@ le_result_t le_avdata_SetBool
     AssetValue_t assetValue;
     assetValue.boolValue = value;
 
-    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_BOOL, true);
+    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_BOOL, true, false);
 }
 
 
@@ -2446,7 +2537,7 @@ le_result_t le_avdata_SetString
     assetValue.strValuePtr = le_mem_ForceAlloc(StringPool);
     strncpy(assetValue.strValuePtr, value, LE_AVDATA_STRING_VALUE_BYTES);
 
-    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_STRING, true);
+    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_STRING, true, false);
 }
 
 
