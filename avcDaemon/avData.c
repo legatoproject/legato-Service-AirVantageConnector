@@ -1410,7 +1410,9 @@ static le_result_t DecodeMultiData
 (
     CborValue* valuePtr, ///< [OUT] CBOR value. Expected to be a map. Iterator is advanced after the
                          ///<       function call.
-    char* path           ///< [IN] base path
+    char* path,          ///< [IN] base path.
+    size_t maxPathBytes  ///< [IN] Max allowed length of path including null character
+
 )
 {
     // Entering a CBOR map.
@@ -1443,10 +1445,21 @@ static le_result_t DecodeMultiData
                 return LE_FAULT;
             }
 
+            // Using strlen is safe as both buffers are initialized with all 0
             endingPathSegLen = strlen(buf);
+            int pathLen = strlen(path);
 
-            strcat(path, "/");
-            strcat(path, buf);
+            if (maxPathBytes <= (pathLen + endingPathSegLen + 1))  // +1 for "/"
+            {
+                LE_CRIT("Path size too big. Max allowed: %d, Actual: %d",
+                        maxPathBytes - 1,
+                        (pathLen + endingPathSegLen + 1));
+                return LE_FAULT;
+            }
+
+            // No need to check return value as length check is done before
+            le_utf8_Append(path, "/", maxPathBytes, NULL);
+            le_utf8_Append(path, buf, maxPathBytes, NULL);
 
             labelProcessed = true;
         }
@@ -1455,8 +1468,16 @@ static le_result_t DecodeMultiData
             // The value is a map
             if (cbor_value_is_map(&map))
             {
-                if (LE_OK != DecodeMultiData(&map, path))
+                if (LE_OK != DecodeMultiData(&map, path, maxPathBytes))
                 {
+                    return LE_FAULT;
+                }
+
+                if (strlen(path) < (endingPathSegLen + 1))
+                {
+                    LE_ERROR("Path length (%d) can't be smaller than its segment length (%d)",
+                             strlen(path),
+                             endingPathSegLen + 1);
                     return LE_FAULT;
                 }
 
@@ -1488,6 +1509,14 @@ static le_result_t DecodeMultiData
                 LE_ERROR("Fail to change asset data at [%s]. Result [%s]",
                          path, LE_RESULT_TXT(setValresult));
 
+                return LE_FAULT;
+            }
+
+            if (strlen(path) < (endingPathSegLen + 1))
+            {
+                LE_ERROR("Path length (%d) can't be smaller than its segment length (%d)",
+                         strlen(path),
+                         endingPathSegLen + 1);
                 return LE_FAULT;
             }
 
@@ -1820,11 +1849,26 @@ static void ProcessAvServerWriteRequest
             {
                 LE_DEBUG(">>>>> path is parent. Attempting to write the multi-value.");
 
-                // If the path is a parent path, decode everything under that path.
-                le_result_t result = DecodeMultiData(&value, path);
+                // Copy path to a buffer with maximum allowed avdata path length.
+                char pathBuff[LE_AVDATA_PATH_NAME_BYTES] = {0};
 
-                RespondToAvServer(
-                    (result == LE_OK) ? COAP_RESOURCE_CHANGED : COAP_BAD_REQUEST, NULL, 0);
+                if (LE_OK != le_utf8_Copy(pathBuff, path, LE_AVDATA_PATH_NAME_BYTES, NULL))
+                {
+                    LE_CRIT("Path (%s) is truncated as it is too big. Max allowed size: %d",
+                             pathBuff,
+                             LE_AVDATA_PATH_NAME_BYTES-1);
+                    RespondToAvServer(COAP_BAD_REQUEST, NULL, 0);
+                }
+                else
+                {
+                    // If the path is a parent path, decode everything under that path.
+                    le_result_t result = DecodeMultiData(&value,
+                                                         pathBuff,
+                                                         LE_AVDATA_PATH_NAME_BYTES);
+
+                    RespondToAvServer(
+                        (result == LE_OK) ? COAP_RESOURCE_CHANGED : COAP_BAD_REQUEST, NULL, 0);
+                }
             }
             else
             {
