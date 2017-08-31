@@ -32,6 +32,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * AVC configuration file
+ */
+//--------------------------------------------------------------------------------------------------
+#define AVC_CONFIG_FILE      AVC_CONFIG_PATH "/" AVC_CONFIG_PARAM
+
+//--------------------------------------------------------------------------------------------------
+/**
  * This ref is returned when a session request handler is added/registered.  It is used when the
  * handler is removed.  Only one ref is needed, because only one handler can be registered at a
  * time.
@@ -895,10 +902,13 @@ static le_result_t RespondToConnectionPending
     le_result_t result = LE_BUSY;
     bool isUserAgreementEnabled;
 
-    LE_FATAL_IF((LE_OK != le_avc_GetUserAgreement(
-                                        LE_AVC_USER_AGREEMENT_CONNECTION,
-                                        &isUserAgreementEnabled)),
-                                        "Failed to read user agreement configuration");
+    if (LE_OK != le_avc_GetUserAgreement(LE_AVC_USER_AGREEMENT_CONNECTION, &isUserAgreementEnabled))
+    {
+        // Use default configuration if read fails
+        LE_WARN("Using default user agreement configuration");
+        isUserAgreementEnabled = USER_AGREEMENT_DEFAULT;
+    }
+
     if (!isUserAgreementEnabled)
     {
         // There is no control app; automatically accept any pending reboot
@@ -957,10 +967,13 @@ static le_result_t RespondToDownloadPending
     LE_INFO("Stopping activity timer during download pending.");
     avcClient_StopActivityTimer();
 
-    LE_FATAL_IF((LE_OK != le_avc_GetUserAgreement(
-                                       LE_AVC_USER_AGREEMENT_DOWNLOAD,
-                                       &isUserAgreementEnabled)),
-                                       "Failed to read user agreement configuration");
+    if (LE_OK != le_avc_GetUserAgreement(LE_AVC_USER_AGREEMENT_DOWNLOAD, &isUserAgreementEnabled))
+    {
+        // Use default configuration if read fails
+        LE_WARN("Using default user agreement configuration");
+        isUserAgreementEnabled = USER_AGREEMENT_DEFAULT;
+    }
+
     if (!isUserAgreementEnabled)
     {
        result = AcceptDownloadPackage();
@@ -1005,10 +1018,13 @@ static le_result_t RespondToInstallPending
     LE_INFO("Stopping activity timer during install pending.");
     avcClient_StopActivityTimer();
 
-    LE_FATAL_IF((LE_OK != le_avc_GetUserAgreement(
-                                        LE_AVC_USER_AGREEMENT_INSTALL,
-                                        &isUserAgreementEnabled)),
-                                        "Failed to read user agreement configuration");
+    if (LE_OK != le_avc_GetUserAgreement(LE_AVC_USER_AGREEMENT_INSTALL, &isUserAgreementEnabled))
+    {
+        // Use default configuration if read fails
+        LE_WARN("Using default user agreement configuration");
+        isUserAgreementEnabled = USER_AGREEMENT_DEFAULT;
+    }
+
     if (!isUserAgreementEnabled)
     {
         LE_INFO("Automatically accepting install");
@@ -1047,10 +1063,13 @@ static le_result_t RespondToUninstallPending
     le_result_t result = LE_BUSY;
     bool isUserAgreementEnabled;
 
-    LE_FATAL_IF((LE_OK != le_avc_GetUserAgreement(
-                                        LE_AVC_USER_AGREEMENT_UNINSTALL,
-                                        &isUserAgreementEnabled)),
-                                        "Failed to read user agreement configuration");
+    if (LE_OK != le_avc_GetUserAgreement(LE_AVC_USER_AGREEMENT_UNINSTALL, &isUserAgreementEnabled))
+    {
+        // Use default configuration if read fails
+        LE_WARN("Using default user agreement configuration");
+        isUserAgreementEnabled = USER_AGREEMENT_DEFAULT;
+    }
+
     if (!isUserAgreementEnabled)
     {
         LE_INFO("Automatically accepting uninstall");
@@ -1091,10 +1110,13 @@ static le_result_t RespondToRebootPending
     le_result_t result = LE_BUSY;
     bool isUserAgreementEnabled;
 
-    LE_FATAL_IF((LE_OK != le_avc_GetUserAgreement(
-                                         LE_AVC_USER_AGREEMENT_REBOOT,
-                                         &isUserAgreementEnabled)),
-                                         "Failed to read user agreement configuration");
+    if (LE_OK != le_avc_GetUserAgreement(LE_AVC_USER_AGREEMENT_REBOOT, &isUserAgreementEnabled))
+    {
+        // Use default configuration if read fails
+        LE_WARN("Using default user agreement configuration");
+        isUserAgreementEnabled = USER_AGREEMENT_DEFAULT;
+    }
+
      if (!isUserAgreementEnabled)
      {
          // There is no control app; automatically accept any pending reboot
@@ -1667,25 +1689,15 @@ static le_result_t SetAvcConfig
     AvcConfigData_t* configPtr   ///< [IN] configuration data buffer
 )
 {
+    le_result_t result;
+
     if (NULL == configPtr)
     {
         LE_ERROR("Avc configuration pointer is null");
         return LE_FAULT;
     }
 
-    le_result_t result;
-    int pathLen;
-    char path[LE_FS_PATH_MAX_LEN];
-    memset(path, 0, LE_FS_PATH_MAX_LEN);
-    pathLen = snprintf(path, LE_FS_PATH_MAX_LEN, "%s/%s", AVC_CONFIG_PATH, AVC_CONFIG_PARAM);
-
-    if (pathLen > LE_FS_PATH_MAX_LEN)
-    {
-        LE_ERROR("Buffer overflow in config path");
-        return LE_FAULT;
-    }
-
-    result = WriteFs(path, configPtr, sizeof(AvcConfigData_t));
+    result = WriteFs(AVC_CONFIG_FILE, configPtr, sizeof(AvcConfigData_t));
 
     if (LE_OK == result)
     {
@@ -1693,7 +1705,7 @@ static le_result_t SetAvcConfig
     }
     else
     {
-        LE_ERROR("Error writing to le_fs");
+        LE_ERROR("Error writing to %s", AVC_CONFIG_FILE);
         return LE_FAULT;
     }
 }
@@ -1712,25 +1724,16 @@ static le_result_t GetAvcConfig
     AvcConfigData_t* configPtr   ///< [INOUT] configuration data buffer
 )
 {
+    le_result_t result;
+
     if (NULL == configPtr)
     {
         LE_ERROR("Avc configuration pointer is null");
         return LE_FAULT;
     }
 
-    le_result_t result;
-    int pathLen;
-    char path[LE_FS_PATH_MAX_LEN];
-    memset(path, 0, LE_FS_PATH_MAX_LEN);
-    pathLen = snprintf(path, LE_FS_PATH_MAX_LEN, "%s/%s", AVC_CONFIG_PATH, AVC_CONFIG_PARAM);
-    if (pathLen > LE_FS_PATH_MAX_LEN)
-    {
-        LE_ERROR("Buffer overflow in config path");
-        return LE_OVERFLOW;
-    }
-
     size_t size = sizeof(AvcConfigData_t);
-    result = ReadFs(path, configPtr, &size);
+    result = ReadFs(AVC_CONFIG_FILE, configPtr, &size);
 
     if (LE_OK == result)
     {
@@ -1738,7 +1741,7 @@ static le_result_t GetAvcConfig
     }
     else
     {
-        LE_ERROR("Error reading from %s", path);
+        LE_ERROR("Error reading from %s", AVC_CONFIG_FILE);
         return LE_UNAVAILABLE;
     }
 }
@@ -2332,6 +2335,44 @@ static void FirstLayerUpdateStatusHandler
                       eventDataPtr->totalNumBytes,
                       eventDataPtr->downloadProgress,
                       le_event_GetContextPtr());
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the default AVC config
+ */
+//--------------------------------------------------------------------------------------------------
+static void SetDefaultConfig
+(
+    void
+)
+{
+    AvcConfigData_t avcConfig;
+    int count;
+
+    memset(&avcConfig, 0, sizeof(avcConfig));
+
+    // set default retry timer values
+    for(count = 0; count < LE_AVC_NUM_RETRY_TIMERS; count++)
+    {
+        avcConfig.retryTimers[count] = RetryTimers[count];
+    }
+
+    // set user agreement to default
+    avcConfig.ua.connect = USER_AGREEMENT_DEFAULT;
+    avcConfig.ua.download = USER_AGREEMENT_DEFAULT;
+    avcConfig.ua.install = USER_AGREEMENT_DEFAULT;
+    avcConfig.ua.uninstall = USER_AGREEMENT_DEFAULT;
+    avcConfig.ua.reboot = USER_AGREEMENT_DEFAULT;
+
+    // save current time
+    avcConfig.connectionEpochTime = time(NULL);
+
+    // write the config file
+    SetAvcConfig(&avcConfig);
+
+    // set lifetime
+    le_avc_SetPollingTimer(POLLING_TIMER_DISABLED);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -3383,44 +3424,6 @@ le_result_t le_avc_GetUserAgreement
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set the default AVC config
- */
-//--------------------------------------------------------------------------------------------------
-void le_avc_SetDefaultAvcConfig
-(
-    void
-)
-{
-    AvcConfigData_t avcConfig;
-    int count;
-
-    memset(&avcConfig, 0, sizeof(avcConfig));
-
-    // set default retry timer values
-    for(count = 0; count < LE_AVC_NUM_RETRY_TIMERS; count++)
-    {
-        avcConfig.retryTimers[count] = RetryTimers[count];
-    }
-
-    // set user agreement to default
-    avcConfig.ua.connect = USER_AGREEMENT_DEFAULT;
-    avcConfig.ua.download = USER_AGREEMENT_DEFAULT;
-    avcConfig.ua.install = USER_AGREEMENT_DEFAULT;
-    avcConfig.ua.uninstall = USER_AGREEMENT_DEFAULT;
-    avcConfig.ua.reboot = USER_AGREEMENT_DEFAULT;
-
-    // save current time
-    avcConfig.connectionEpochTime = time(NULL);
-
-    // write the config file
-    SetAvcConfig(&avcConfig);
-
-    // set lifetime
-    le_avc_SetPollingTimer(POLLING_TIMER_DISABLED);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Function to set the user agreement state
  *
  * @return
@@ -3687,6 +3690,13 @@ COMPONENT_INIT
 
     // Start an AVC session periodically according to the Polling Timer config.
     InitPollingTimer();
+
+    // Write default if configuration file doesn't exist
+    if(LE_OK != ExistsFs(AVC_CONFIG_FILE))
+    {
+        LE_INFO("Set default configuration");
+        SetDefaultConfig();
+    }
 
     // Initialize user agreement.
     avcServer_InitUserAgreement();
