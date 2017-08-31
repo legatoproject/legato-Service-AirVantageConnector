@@ -609,10 +609,8 @@ lwm2mcore_DwlResult_t pkgDwlCb_EndDownload
 )
 {
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
-    Package_t* pkgPtr;
 
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)ctxPtr;
-    pkgPtr = (Package_t*)dwlCtxPtr->ctxPtr;
 
     if (dwlCtxPtr->semRef)
     {
@@ -621,7 +619,13 @@ lwm2mcore_DwlResult_t pkgDwlCb_EndDownload
         le_sem_Post(dwlCtxPtr->semRef);
     }
 
-    curl_easy_cleanup(pkgPtr->curlPtr);
+    // Clean up the curl context only if it was previously set
+    if (NULL != dwlCtxPtr->ctxPtr)
+    {
+        Package_t* pkgPtr;
+        pkgPtr = (Package_t*)dwlCtxPtr->ctxPtr;
+        curl_easy_cleanup(pkgPtr->curlPtr);
+    }
 
     curl_global_cleanup();
 
