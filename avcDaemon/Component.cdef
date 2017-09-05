@@ -37,7 +37,7 @@ requires:
     {
         $LEGATO_AVC_PA_DEFAULT
         ${LEGATO_ROOT}/components/3rdParty/tinydtls
-        $LEGATO_ROOT/framework/c/src/appCfg
+        ${LEGATO_ROOT}/components/appCfg
     }
 }
 
@@ -121,8 +121,9 @@ sources:
 cflags:
 {
     -I${LEGATO_ROOT}/components/airVantage/platformAdaptor/inc
-    -I${LEGATO_ROOT}/framework/c/src
-    -I${LEGATO_ROOT}/framework/c/src/appCfg
+    -I${LEGATO_ROOT}/components/appCfg
+    -I${LEGATO_ROOT}/framework/liblegato
+    -I${LEGATO_ROOT}/framework/liblegato/linux
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcAppUpdate
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient
@@ -157,4 +158,3 @@ ldflags:
     -lcrypto
     -ltinycbor
 }
-
