@@ -40,7 +40,6 @@ lwm2mcore_SocketConfig_t SocketConfig;
 
 static lwm2mcore_UdpCb_t udpCb = NULL;
 
-#define OS_SOCK_AF  AF_INET
 #define OS_SOCK_PROTO SOCK_DGRAM
 
 //--------------------------------------------------------------------------------------------------
@@ -121,7 +120,7 @@ static void Lwm2mClientReceive
  *
  */
 //--------------------------------------------------------------------------------------------------
-static int createSocket
+static int CreateSocket
 (
     const char * portStr,
     lwm2mcore_SocketConfig_t config
@@ -291,12 +290,21 @@ bool lwm2mcore_UdpOpen
 {
     bool result = false;
 
-    /* IP v4 */
+    le_mdc_ProfileRef_t profileRef = le_mdc_GetProfile(le_data_GetCellularProfileIndex());
+
+    if (le_mdc_IsIPv6(profileRef))
+    {
+        SocketConfig.af = AF_INET6;
+    }
+    else
+    {
+        SocketConfig.af = AF_INET;
+    }
+
     SocketConfig.instanceRef = instanceRef;
-    SocketConfig.af = OS_SOCK_AF;
     SocketConfig.type = LWM2MCORE_SOCK_UDP;
     SocketConfig.proto = OS_SOCK_PROTO;
-    SocketConfig.sock = createSocket (localPortPtr, SocketConfig);
+    SocketConfig.sock = CreateSocket (localPortPtr, SocketConfig);
     LE_DEBUG ("sock %d", SocketConfig.sock);
     memcpy (configPtr, &SocketConfig, sizeof (lwm2mcore_SocketConfig_t));
 
@@ -436,11 +444,12 @@ bool lwm2mcore_UdpConnect
         for(p = servinfoPtr; (p != NULL) && (sockfd == -1); p = p->ai_next)
         {
             sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-            LE_INFO("sockfd %d", sockfd);
+
             if (sockfd >= 0)
             {
                 *slPtr = p->ai_addrlen;
                 memcpy(saPtr, p->ai_addr, p->ai_addrlen);
+
                 if (-1 == connect(sockfd, p->ai_addr, p->ai_addrlen))
                 {
                     close(sockfd);
