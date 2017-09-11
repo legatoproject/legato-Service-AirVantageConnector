@@ -1063,6 +1063,9 @@ static le_result_t RespondToUninstallPending
     le_result_t result = LE_BUSY;
     bool isUserAgreementEnabled;
 
+    LE_INFO("Stopping activity timer during uninstall pending.");
+    avcClient_StopActivityTimer();
+
     if (LE_OK != le_avc_GetUserAgreement(LE_AVC_USER_AGREEMENT_UNINSTALL, &isUserAgreementEnabled))
     {
         // Use default configuration if read fails
