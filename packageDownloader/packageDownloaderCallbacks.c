@@ -492,7 +492,6 @@ lwm2mcore_DwlResult_t pkgDwlCb_UserAgreement
     else if (LE_OK == result)
     {
         LE_DEBUG("Download accepted");
-        lwm2mcore_PackageDownloaderAcceptDownload();
     }
     else
     {
