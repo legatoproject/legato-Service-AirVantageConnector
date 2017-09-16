@@ -486,26 +486,13 @@ static void SetObj9State_
     LE_ASSERT_OK(assetData_client_SetInt(instanceRef, O9F_UPDATE_STATE, state));
     LE_ASSERT_OK(assetData_client_SetInt(instanceRef, O9F_UPDATE_RESULT, result));
 
-    LE_DEBUG("Save the state and result in a file for suspend / resume");
+    LE_DEBUG("Save the state and result for on going update in a file for suspend/resume");
 
-    rc = assetData_client_SetInt(instanceRef, O9F_UPDATE_STATE, state);
-    if (LE_OK != rc)
-    {
-        LE_ERROR("Error (%s) while setting object 9 update state", LE_RESULT_TXT(rc));
-    }
-
-    // Save state in workspace for resume operation
-    SetSwUpdateState(state);
-
-    rc = assetData_client_SetInt(instanceRef, O9F_UPDATE_RESULT, result);
-
-    if (LE_OK != rc)
-    {
-        LE_ERROR("Error (%s) while setting object 9 update result", LE_RESULT_TXT(rc));
-    }
-
-    // Save result in workspace for resume operation
-    SetSwUpdateResult(result);
+    // Note: storing UpdateState and UpdateResult in flash should be done only for ongoing update
+    // Following two function checks whether any update is going on and sets UpdateResult and
+    // UpdateState in flash if there is any.
+    avcApp_SetSwUpdateState(state);
+    avcApp_SetSwUpdateResult(result);
 
     // Send a registration update after changing the obj state/result of the device.
     // This will trigger the server to query for the state/result.
@@ -2792,11 +2779,11 @@ le_result_t avcApp_GetResumePosition
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software update result in asset data and SW update workspace.
+ * Set software update result in asset data and SW update workspace for ongoing update.
  *
  * @return:
  *      - LE_OK on success
- *      - LE_NOT_FOUND if instance not found
+ *      - LE_NOT_FOUND if no ongoing update.
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
@@ -2809,7 +2796,7 @@ le_result_t avcApp_SetSwUpdateResult
 
     if (CurrentObj9 == NULL)
     {
-        LE_CRIT("Bad object 9 instance(null)");
+        LE_ERROR("No update is going on. CurrentObj9 = null");
         return LE_NOT_FOUND;
     }
 
@@ -2858,11 +2845,11 @@ le_result_t avcApp_SetSwUpdateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software update state in asset data and SW update workspace
+ * Set software update state in asset data and SW update workspace for ongoing update.
  *
  * @return:
  *      - LE_OK on success
- *      - LE_NOT_FOUND if instance not found
+ *      - LE_NOT_FOUND if no ongoing update.
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
@@ -2875,7 +2862,7 @@ le_result_t avcApp_SetSwUpdateState
 
     if (CurrentObj9 == NULL)
     {
-        LE_CRIT("Bad object 9 instance(null)");
+        LE_ERROR("No update is going on. CurrentObj9 = null");
         return LE_NOT_FOUND;
     }
 

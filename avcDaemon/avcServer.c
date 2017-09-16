@@ -1025,6 +1025,7 @@ static le_result_t RespondToInstallPending
         isUserAgreementEnabled = USER_AGREEMENT_DEFAULT;
     }
 
+    CurrentState = AVC_INSTALL_PENDING;
     if (!isUserAgreementEnabled)
     {
         LE_INFO("Automatically accepting install");
@@ -1033,7 +1034,6 @@ static le_result_t RespondToInstallPending
     else if (NumStatusHandlers > 0)
     {
         // Notify registered control app.
-        CurrentState = AVC_INSTALL_PENDING;
         SendUpdateStatusEvent(LE_AVC_INSTALL_PENDING, -1, -1, StatusHandlerContextPtr);
     }
     else
@@ -1073,6 +1073,8 @@ static le_result_t RespondToUninstallPending
         isUserAgreementEnabled = USER_AGREEMENT_DEFAULT;
     }
 
+    CurrentState = AVC_UNINSTALL_PENDING;
+
     if (!isUserAgreementEnabled)
     {
         LE_INFO("Automatically accepting uninstall");
@@ -1081,7 +1083,6 @@ static le_result_t RespondToUninstallPending
     else if (NumStatusHandlers > 0)
     {
         // Notify registered control app.
-        CurrentState = AVC_UNINSTALL_PENDING;
         SendUpdateStatusEvent(LE_AVC_UNINSTALL_PENDING, -1, -1, StatusHandlerContextPtr);
     }
     else

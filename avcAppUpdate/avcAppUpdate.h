@@ -324,11 +324,11 @@ le_result_t avcApp_GetPackageVersion
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software update state in asset data and SW update workspace
+ * Set software update state in asset data and SW update workspace for ongoing update.
  *
  * @return:
  *      - LE_OK on success
- *      - LE_NOT_FOUND if instance not found
+ *      - LE_NOT_FOUND if no ongoing update.
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
@@ -340,11 +340,11 @@ le_result_t  avcApp_SetSwUpdateState
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software update result in asset data and SW update workspace.
+ * Set software update result in asset data and SW update workspace for ongoing update.
  *
  * @return:
  *      - LE_OK on success
- *      - LE_NOT_FOUND if instance not found
+ *      - LE_NOT_FOUND if no ongoing update.
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
