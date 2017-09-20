@@ -850,7 +850,10 @@ void* packageDownloader_DownloadPackage
 {
     lwm2mcore_PackageDownloader_t* pkgDwlPtr;
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
-    static int ret = 0;
+    static int ret;
+
+    // Initialize the ret value at every start
+    ret = 0;
 
     // Connect to services used by this thread
     secStoreGlobal_ConnectService();
