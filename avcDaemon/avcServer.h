@@ -49,7 +49,9 @@ typedef void (*avcServer_UninstallHandlerFunc_t)
 //--------------------------------------------------------------------------------------------------
 typedef void (*avcServer_DownloadHandlerFunc_t)
 (
-    void
+    const char*            uriPtr,  ///< Package URI
+    lwm2mcore_UpdateType_t type,    ///< Update type (FW/SW)
+    bool                   resume   ///< Indicates if it is a download resume
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -70,18 +72,16 @@ typedef void (*avcServer_RebootHandlerFunc_t)
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Query the AVC Server if it's okay to proceed with an application install
+ * Query the AVC Server if it's okay to proceed with an application install.
  *
  * If an install can't proceed right away, then the handlerRef function will be called when it is
  * okay to proceed with an install. Note that handlerRef will be called at most once.
+ * If an install can proceed right away, it will be launched.
  *
- * @return
- *      - LE_OK if install can proceed right away (handlerRef will not be called)
- *      - LE_BUSY if handlerRef will be called later to notify when install can proceed
- *      - LE_FAULT on error
+ * @return None
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED le_result_t avcServer_QueryInstall
+LE_SHARED void avcServer_QueryInstall
 (
     avcServer_InstallHandlerFunc_t handlerRef,  ///< [IN] Handler to receive install response.
     lwm2mcore_UpdateType_t type,                ///< [IN] Update type.
@@ -90,37 +90,16 @@ LE_SHARED le_result_t avcServer_QueryInstall
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Report the status of install back to the control app
- *
- */
-//--------------------------------------------------------------------------------------------------
-LE_SHARED void avcServer_ReportInstallProgress
-(
-    le_avc_Status_t updateStatus,
-    uint installProgress,          ///< [IN]  Percentage of install completed.
-                                   ///        Applicable only when le_avc_Status_t is one of
-                                   ///        LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_INSTALL_COMPLETE
-                                   ///        or LE_AVC_INSTALL_FAILED.
-    le_avc_ErrorCode_t errorCode   ///< [IN]  Error code if installation failed.
-                                   ///        Applicable only when le_avc_Status_t is
-                                   ///        LE_AVC_INSTALL_FAILED.
-);
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Query the AVC Server if it's okay to proceed with an application uninstall
+ * Query the AVC Server if it's okay to proceed with an application uninstall.
  *
  * If an uninstall can't proceed right away, then the handlerRef function will be called when it is
  * okay to proceed with an uninstall. Note that handlerRef will be called at most once.
+ * If an uninstall can proceed right away, it will be launched.
  *
- * @return
- *      - LE_OK if uninstall can proceed right away (handlerRef will not be called)
- *      - LE_BUSY if handlerRef will be called later to notify when uninstall can proceed
- *      - LE_FAULT on error
+ * @return None
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED le_result_t avcServer_QueryUninstall
+LE_SHARED void avcServer_QueryUninstall
 (
     avcServer_UninstallHandlerFunc_t handlerRef,  ///< [IN] Handler to receive uninstall response.
     uint16_t instanceId                           ///< Instance Id (0 for FW, any value for SW)
@@ -141,21 +120,22 @@ LE_SHARED void avcServer_SetUpdateType
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Query the AVC Server if it's okay to proceed with an package download
+ * Query the AVC Server if it's okay to proceed with a package download.
  *
  * If a download can't proceed right away, then the handlerRef function will be called when it is
  * okay to proceed with a download. Note that handlerRef will be called at most once.
+ * If a download can proceed right away, it will be launched.
  *
- * @return
- *      - LE_OK if download can proceed right away (handlerRef will not be called)
- *      - LE_BUSY if handlerRef will be called later to notify when download can proceed
- *      - LE_FAULT on error
+ * @return None
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED le_result_t avcServer_QueryDownload
+LE_SHARED void avcServer_QueryDownload
 (
-    avcServer_DownloadHandlerFunc_t handlerFunc,    ///< [IN] Download handler function.
-    uint32_t pkgSize                                ///< [IN] Package size.
+    avcServer_DownloadHandlerFunc_t handlerFunc,    ///< [IN] Download handler function
+    uint64_t bytesToDownload,                       ///< [IN] Number of bytes to download
+    lwm2mcore_UpdateType_t type,                    ///< [IN] Update type
+    char* uriPtr,                                   ///< [IN] Update package URI
+    bool resume                                     ///< [IN] Is it a download resume?
 );
 
 
@@ -275,18 +255,16 @@ void avcServer_RequestConnection
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Query the AVC Server if it's okay to proceed with a device reboot
+ * Query the AVC Server if it's okay to proceed with a device reboot.
  *
  * If a reboot can't proceed right away, then the handlerRef function will be called when it is
  * okay to proceed with a reboot. Note that handlerRef will be called at most once.
+ * If a reboot can proceed right away, it will be launched.
  *
- * @return
- *      - LE_OK if reboot can proceed right away (handlerRef will not be called)
- *      - LE_BUSY if handlerRef will be called later to notify when reboot can proceed
- *      - LE_FAULT on error
+ * @return None
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED le_result_t avcServer_QueryReboot
+LE_SHARED void avcServer_QueryReboot
 (
     avcServer_RebootHandlerFunc_t handlerFunc   ///< [IN] Reboot handler function.
 );

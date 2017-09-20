@@ -606,10 +606,7 @@ static void LaunchRebootTimerExpiryHandler
     le_timer_Delete(timerRef);
 
     // Check if reboot can be launched now
-    if (LE_OK == avcServer_QueryReboot(LaunchReboot))
-    {
-        LaunchReboot();
-    }
+    avcServer_QueryReboot(LaunchReboot);
 }
 
 //--------------------------------------------------------------------------------------------------

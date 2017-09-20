@@ -28,6 +28,12 @@
 //--------------------------------------------------------------------------------------------------
 // Definitions
 //--------------------------------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * AVC configuration path
+ */
+//--------------------------------------------------------------------------------------------------
 #define AVC_SERVICE_CFG "/apps/avcService"
 
 //--------------------------------------------------------------------------------------------------
@@ -108,13 +114,20 @@ typedef enum
 AvcState_t;
 
 //--------------------------------------------------------------------------------------------------
+// Data structures
+//--------------------------------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------------------------
 /**
  * Package download context
  */
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    uint32_t bytesToDownload;               ///< Package size.
+    uint64_t                bytesToDownload;                        ///< Package size.
+    lwm2mcore_UpdateType_t  type;                                   ///< Update type.
+    char                    uri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];   ///< Update package URI.
+    bool                    resume;                                 ///< Is it a download resume?
 }
 PkgDownloadContext_t;
 
@@ -140,6 +153,21 @@ typedef struct
     uint16_t instanceId;            ///< Instance Id (0 for FW, any value for SW)
 }
 SwUninstallContext_t;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Data associated with the AvcUpdateStatusEvent
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    le_avc_Status_t     updateStatus;   ///< Update status
+    le_avc_UpdateType_t updateType;     ///< Update type
+    int32_t             totalNumBytes;  ///< Total number of bytes to download
+    int32_t             dloadProgress;  ///< Download Progress in percent
+    le_avc_ErrorCode_t  errorCode;      ///< Error code
+}
+AvcUpdateStatusData_t;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -199,10 +227,6 @@ typedef struct
 AvcConfigData_t;
 
 //--------------------------------------------------------------------------------------------------
-// Data structures
-//--------------------------------------------------------------------------------------------------
-
-//--------------------------------------------------------------------------------------------------
 /**
  * The current state of any update.
  *
@@ -212,6 +236,13 @@ AvcConfigData_t;
  */
 //--------------------------------------------------------------------------------------------------
 static AvcState_t CurrentState = AVC_IDLE;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Event for reporting update status notification to AVC service
+ */
+//--------------------------------------------------------------------------------------------------
+static le_event_Id_t AvcUpdateStatusEvent;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -376,7 +407,6 @@ static le_timer_Ref_t LaunchConnectTimer;
 //--------------------------------------------------------------------------------------------------
 static le_avc_ErrorCode_t AvcErrorCode = LE_AVC_ERR_NONE;
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Current package download context
@@ -400,6 +430,25 @@ static SwUninstallContext_t SwUninstallCtx;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Default values for the Retry Timers. Unit is minute. 0 means disabled.
+ */
+//--------------------------------------------------------------------------------------------------
+static uint16_t RetryTimers[LE_AVC_NUM_RETRY_TIMERS] = {15, 60, 240, 480, 1440, 2880, 0, 0};
+
+// -------------------------------------------------------------------------------------------------
+/**
+ *  Polling Timer reference. Time interval to automatically start an AVC session.
+ */
+// ------------------------------------------------------------------------------------------------
+static le_timer_Ref_t PollingTimerRef = NULL;
+
+
+//--------------------------------------------------------------------------------------------------
+// Local functions
+//--------------------------------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------------------------
+/**
  *  Convert avc session state to string.
  */
 //--------------------------------------------------------------------------------------------------
@@ -407,7 +456,6 @@ static char* AvcSessionStateToStr
 (
     le_avc_Status_t state  ///< The session state to convert.
 )
-//--------------------------------------------------------------------------------------------------
 {
     char* result;
 
@@ -447,7 +495,6 @@ static char* ConvertUserAgreementToString
 (
     le_avc_UserAgreement_t userAgreement  ///< The operation that need to be converted.
 )
-//--------------------------------------------------------------------------------------------------
 {
     char* result;
 
@@ -463,24 +510,6 @@ static char* ConvertUserAgreementToString
     }
     return result;
 }
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Default values for the Retry Timers. Unit is minute. 0 means disabled.
- */
-//--------------------------------------------------------------------------------------------------
-static uint16_t RetryTimers[LE_AVC_NUM_RETRY_TIMERS] = {15, 60, 240, 480, 1440, 2880, 0, 0};
-
-// -------------------------------------------------------------------------------------------------
-/**
- *  Polling Timer reference. Time interval to automatically start an AVC session.
- */
-// ------------------------------------------------------------------------------------------------
-static le_timer_Ref_t PollingTimerRef = NULL;
-
-//--------------------------------------------------------------------------------------------------
-// Local functions
-//--------------------------------------------------------------------------------------------------
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -604,14 +633,14 @@ static le_result_t AcceptDownloadPackage
 {
     StopDeferTimer(LE_AVC_USER_AGREEMENT_DOWNLOAD);
 
-    if(LE_AVC_DM_SESSION == le_avc_GetSessionType())
+    if (LE_AVC_DM_SESSION == le_avc_GetSessionType())
     {
         LE_DEBUG("Accept a package download while the device is connected to the server");
         // Notify the registered handler to proceed with the download; only called once.
         CurrentState = AVC_DOWNLOAD_IN_PROGRESS;
-        if (QueryDownloadHandlerRef !=  NULL)
+        if (NULL != QueryDownloadHandlerRef)
         {
-            QueryDownloadHandlerRef();
+            QueryDownloadHandlerRef(PkgDownloadCtx.uri, PkgDownloadCtx.type, PkgDownloadCtx.resume);
             QueryDownloadHandlerRef = NULL;
         }
         else
@@ -722,6 +751,39 @@ static le_result_t AcceptUninstallApplication
             LE_ERROR("Uninstall handler not valid");
             return LE_FAULT;
         }
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Accept the currently pending device reboot.
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t AcceptDeviceReboot
+(
+    void
+)
+{
+    LE_DEBUG("Accept a device reboot");
+
+    StopDeferTimer(LE_AVC_USER_AGREEMENT_REBOOT);
+
+    // Notify the registered handler to proceed with the reboot; only called once.
+    if (QueryRebootHandlerRef !=  NULL)
+    {
+        QueryRebootHandlerRef();
+        QueryRebootHandlerRef = NULL;
+    }
+    else
+    {
+        LE_ERROR("Reboot handler not valid.");
+        return LE_FAULT;
     }
 
     return LE_OK;
@@ -886,6 +948,34 @@ static le_result_t DeferUninstall
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Defer the currently pending reboot, for the given number of minutes
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t DeferReboot
+(
+    uint32_t deferMinutes               ///< [IN] Defer time in minutes
+)
+{
+    // Stop activity timer when reboot has been deferred
+    avcClient_StopActivityTimer();
+
+    LE_DEBUG("Deferring reboot for %d minute.", deferMinutes);
+
+    // Try the reboot later
+    le_clk_Time_t interval = { .sec = (deferMinutes * SECONDS_IN_A_MIN) };
+
+    le_timer_SetInterval(RebootDeferTimer, interval);
+    le_timer_Start(RebootDeferTimer);
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Respond to connection pending notification
  *
  * @return
@@ -967,6 +1057,15 @@ static le_result_t RespondToDownloadPending
     LE_INFO("Stopping activity timer during download pending.");
     avcClient_StopActivityTimer();
 
+    // Check if download was already accepted.
+    // This is necessary if an interrupted download was accepted without connection: accepting it
+    // triggers a connection, and afterwards the download should start without user agreement.
+    if (DownloadAgreement)
+    {
+        return AcceptDownloadPackage();
+    }
+
+    // Otherwise check user agreement
     if (LE_OK != le_avc_GetUserAgreement(LE_AVC_USER_AGREEMENT_DOWNLOAD, &isUserAgreementEnabled))
     {
         // Use default configuration if read fails
@@ -1125,8 +1224,7 @@ static le_result_t RespondToRebootPending
      {
          // There is no control app; automatically accept any pending reboot
          LE_INFO("Automatically accepting reboot");
-         StopDeferTimer(LE_AVC_USER_AGREEMENT_REBOOT);
-         result = LE_OK;
+         result = AcceptDeviceReboot();
      }
      else if (NumStatusHandlers > 0)
      {
@@ -1137,14 +1235,8 @@ static le_result_t RespondToRebootPending
      {
          // There is a control app installed, but the handler is not yet registered.
          // Defer the decision to allow the control app time to register.
-         LE_INFO("Automatically deferring reboot, "
-                 "while waiting for control app to register");
-
-         // Try the reboot later
-         le_clk_Time_t interval = {.sec = BLOCKED_DEFER_TIME * SECONDS_IN_A_MIN };
-
-         le_timer_SetInterval(RebootDeferTimer, interval);
-         le_timer_Start(RebootDeferTimer);
+         LE_INFO("Automatically deferring reboot, while waiting for control app to register");
+         DeferReboot(BLOCKED_DEFER_TIME);
      }
 
      return result;
@@ -1235,7 +1327,6 @@ static le_result_t ProcessUserAgreement
              break;
 
         default:
-            LE_INFO("Update status is %s", AvcSessionStateToStr(updateStatus));
             // Forward notifications unrelated to user agreement to interested applications.
             SendUpdateStatusEvent(updateStatus,
                                   totalNumBytes,
@@ -1255,19 +1346,17 @@ static le_result_t ProcessUserAgreement
  * Handler to receive update status notifications
  */
 //--------------------------------------------------------------------------------------------------
-void avcServer_UpdateHandler
+static void ProcessUpdateStatus
 (
-    le_avc_Status_t updateStatus,
-    le_avc_UpdateType_t updateType,
-    int32_t totalNumBytes,
-    int32_t dloadProgress,
-    le_avc_ErrorCode_t errorCode
+    void* contextPtr
 )
 {
-    LE_INFO("Update state: %s", AvcSessionStateToStr(updateStatus));
+    AvcUpdateStatusData_t* data = (AvcUpdateStatusData_t*)contextPtr;
+
+    LE_INFO("Update state: %s", AvcSessionStateToStr(data->updateStatus));
 
     // Keep track of the state of any pending downloads or installs.
-    switch ( updateStatus )
+    switch (data->updateStatus)
     {
         case LE_AVC_CONNECTION_PENDING:
             LE_DEBUG("Process user agreement for connection");
@@ -1276,11 +1365,14 @@ void avcServer_UpdateHandler
         case LE_AVC_DOWNLOAD_PENDING:
             CurrentState = AVC_DOWNLOAD_PENDING;
 
-            CurrentDownloadProgress = dloadProgress;
-            CurrentTotalNumBytes = totalNumBytes;
+            CurrentDownloadProgress = data->dloadProgress;
+            CurrentTotalNumBytes = data->totalNumBytes;
 
-            LE_DEBUG("Update type for DOWNLOAD is %d", updateType);
-            CurrentUpdateType = updateType;
+            if (LE_AVC_UNKNOWN_UPDATE != data->updateType)
+            {
+                LE_DEBUG("Update type for DOWNLOAD is %d", data->updateType);
+                CurrentUpdateType = data->updateType;
+            }
             break;
 
         case LE_AVC_INSTALL_PENDING:
@@ -1289,14 +1381,21 @@ void avcServer_UpdateHandler
             // If the device resets during a FOTA download, then the CurrentUpdateType is lost
             // and needs to be assigned again.  Since we don't easily know if a reset happened,
             // always re-assign the value.
-            LE_DEBUG("Update type for INSTALL is %d", updateType);
-            CurrentUpdateType = updateType;
+            if (LE_AVC_UNKNOWN_UPDATE != data->updateType)
+            {
+                LE_DEBUG("Update type for INSTALL is %d", data->updateType);
+                CurrentUpdateType = data->updateType;
+            }
             break;
 
         case LE_AVC_UNINSTALL_PENDING:
             CurrentState = AVC_UNINSTALL_PENDING;
-            LE_DEBUG("Update type for Uninstall is %d", updateType);
-            CurrentUpdateType = updateType;
+
+            if (LE_AVC_UNKNOWN_UPDATE != data->updateType)
+            {
+                LE_DEBUG("Update type for UNINSTALL is %d", data->updateType);
+                CurrentUpdateType = data->updateType;
+            }
             break;
 
         case LE_AVC_REBOOT_PENDING:
@@ -1304,12 +1403,12 @@ void avcServer_UpdateHandler
             break;
 
         case LE_AVC_DOWNLOAD_IN_PROGRESS:
-            LE_DEBUG("Update type for DOWNLOAD is %d", updateType);
-            CurrentTotalNumBytes = totalNumBytes;
-            CurrentDownloadProgress = dloadProgress;
-            CurrentUpdateType = updateType;
+            LE_DEBUG("Update type for DOWNLOAD is %d", data->updateType);
+            CurrentTotalNumBytes = data->totalNumBytes;
+            CurrentDownloadProgress = data->dloadProgress;
+            CurrentUpdateType = data->updateType;
 
-            if ((LE_AVC_APPLICATION_UPDATE == updateType) && (totalNumBytes >= 0))
+            if ((LE_AVC_APPLICATION_UPDATE == data->updateType) && (data->totalNumBytes >= 0))
             {
                 // Set the bytes downloaded to workspace for resume operation
                 avcApp_SetSwUpdateBytesDownloaded();
@@ -1317,30 +1416,30 @@ void avcServer_UpdateHandler
             break;
 
         case LE_AVC_DOWNLOAD_COMPLETE:
-            LE_DEBUG("Update type for DOWNLOAD is %d", updateType);
+            LE_DEBUG("Update type for DOWNLOAD is %d", data->updateType);
             avcClient_StartActivityTimer();
             DownloadAgreement = false;
-            if (totalNumBytes > 0)
+            if (data->totalNumBytes > 0)
             {
-                CurrentTotalNumBytes = totalNumBytes;
+                CurrentTotalNumBytes = data->totalNumBytes;
             }
             else
             {
                 // Use last stored value
-                totalNumBytes = CurrentTotalNumBytes;
+                data->totalNumBytes = CurrentTotalNumBytes;
             }
-            if (dloadProgress > 0)
+            if (data->dloadProgress > 0)
             {
-                CurrentDownloadProgress = dloadProgress;
+                CurrentDownloadProgress = data->dloadProgress;
             }
             else
             {
                 // Use last stored value
-                dloadProgress = CurrentDownloadProgress;
+                data->dloadProgress = CurrentDownloadProgress;
             }
-            CurrentUpdateType = updateType;
+            CurrentUpdateType = data->updateType;
 
-            if (LE_AVC_APPLICATION_UPDATE == updateType)
+            if (LE_AVC_APPLICATION_UPDATE == data->updateType)
             {
                 // Set the bytes downloaded to workspace for resume operation
                 avcApp_SetSwUpdateBytesDownloaded();
@@ -1366,10 +1465,10 @@ void avcServer_UpdateHandler
         case LE_AVC_INSTALL_FAILED:
             // There is no longer any current update, so go back to idle
             avcClient_StartActivityTimer();
-            AvcErrorCode = errorCode;
+            AvcErrorCode = data->errorCode;
             CurrentState = AVC_IDLE;
 
-            if (LE_AVC_APPLICATION_UPDATE == updateType)
+            if (LE_AVC_APPLICATION_UPDATE == data->updateType)
             {
                 avcApp_DeletePackage();
             }
@@ -1384,6 +1483,7 @@ void avcServer_UpdateHandler
 
         case LE_AVC_INSTALL_IN_PROGRESS:
         case LE_AVC_SESSION_STOPPED:
+            DownloadAgreement = false;
             avcClient_StopActivityTimer();
             // These events do not cause a state transition
             avData_ReportSessionState(LE_AVDATA_SESSION_STOPPED);
@@ -1398,12 +1498,37 @@ void avcServer_UpdateHandler
             break;
 
         default:
-            LE_DEBUG("Unhandled updateStatus %s", AvcSessionStateToStr(updateStatus));
+            LE_DEBUG("Unhandled updateStatus %s", AvcSessionStateToStr(data->updateStatus));
             break;
     }
 
     // Process user agreement or forward to control app if applicable.
-    ProcessUserAgreement(updateStatus, totalNumBytes, dloadProgress);
+    ProcessUserAgreement(data->updateStatus, data->totalNumBytes, data->dloadProgress);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Send update status notifications to AVC server
+ */
+//--------------------------------------------------------------------------------------------------
+void avcServer_UpdateStatus
+(
+    le_avc_Status_t updateStatus,   ///< Update status
+    le_avc_UpdateType_t updateType, ///< Update type
+    int32_t totalNumBytes,          ///< Total number of bytes to download (-1 if not set)
+    int32_t dloadProgress,          ///< Download Progress in percent (-1 if not set)
+    le_avc_ErrorCode_t errorCode    ///< Error code
+)
+{
+    AvcUpdateStatusData_t updateStatusData;
+
+    updateStatusData.updateStatus  = updateStatus;
+    updateStatusData.updateType    = updateType;
+    updateStatusData.totalNumBytes = totalNumBytes;
+    updateStatusData.dloadProgress = dloadProgress;
+    updateStatusData.errorCode     = errorCode;
+
+    le_event_Report(AvcUpdateStatusEvent, &updateStatusData, sizeof(updateStatusData));
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1443,91 +1568,6 @@ static void ClientCloseSessionHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Query if it's okay to proceed with an application install
- *
- * @return
- *      - LE_OK if install can proceed right away
- *      - LE_BUSY if install is deferred
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t QueryInstall
-(
-    void
-)
-{
-    return ProcessUserAgreement(LE_AVC_INSTALL_PENDING, -1, -1);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Query if it's okay to proceed with a package download
- *
- * @return
- *      - LE_OK if download can proceed right away
- *      - LE_BUSY if download is deferred
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t QueryDownload
-(
-    uint32_t totalNumBytes          ///< Number of bytes to download.
-)
-{
-    return ProcessUserAgreement(LE_AVC_DOWNLOAD_PENDING, PkgDownloadCtx.bytesToDownload, 0);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Query if it's okay to proceed with an application uninstall
- *
- * @return
- *      - LE_OK if uninstall can proceed right away
- *      - LE_BUSY if uninstall is deferred
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t QueryUninstall
-(
-    void
-)
-{
-    return ProcessUserAgreement(LE_AVC_UNINSTALL_PENDING, -1, -1);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Query if it's okay to proceed with a device reboot
- *
- * @return
- *      - LE_OK if reboot can proceed right away
- *      - LE_BUSY if reboot is deferred
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t QueryReboot
-(
-    void
-)
-{
-    return ProcessUserAgreement(LE_AVC_REBOOT_PENDING, -1, -1);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Query if it's okay to proceed with a device connect
- *
- * @return
- *      - LE_OK if connect can proceed right away
- *      - LE_BUSY if connect is deferred
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t QueryConnect
-(
-    void
-)
-{
-    return ProcessUserAgreement(LE_AVC_CONNECTION_PENDING, -1, -1);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Called when the download defer timer expires.
  */
 //--------------------------------------------------------------------------------------------------
@@ -1536,19 +1576,11 @@ static void DownloadTimerExpiryHandler
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    if ( QueryDownload(PkgDownloadCtx.bytesToDownload) == LE_OK )
-    {
-        // Notify the registered handler to proceed with the download; only called once.
-        if (QueryDownloadHandlerRef != NULL)
-        {
-            QueryDownloadHandlerRef();
-            QueryDownloadHandlerRef = NULL;
-        }
-        else
-        {
-            LE_ERROR("Download handler not valid");
-        }
-    }
+    avcServer_UpdateStatus(LE_AVC_DOWNLOAD_PENDING,
+                           PkgDownloadCtx.bytesToDownload,
+                           PkgDownloadCtx.type,
+                           0,
+                           LE_AVC_ERR_NONE);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1561,19 +1593,11 @@ static void InstallTimerExpiryHandler
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    if ( QueryInstall() == LE_OK )
-    {
-        // Notify the registered handler to proceed with the install; only called once.
-        if (QueryInstallHandlerRef != NULL)
-        {
-            QueryInstallHandlerRef(PkgInstallCtx.type, PkgInstallCtx.instanceId);
-            QueryInstallHandlerRef = NULL;
-        }
-        else
-        {
-            LE_ERROR("Install handler not valid");
-        }
-    }
+    avcServer_UpdateStatus(LE_AVC_INSTALL_PENDING,
+                           LE_AVC_UNKNOWN_UPDATE,
+                           -1,
+                           -1,
+                           LE_AVC_ERR_NONE);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1586,19 +1610,11 @@ static void UninstallTimerExpiryHandler
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    if ( QueryUninstall() == LE_OK )
-    {
-        // Notify the registered handler to proceed with the uninstall; only called once.
-        if (QueryUninstallHandlerRef != NULL)
-        {
-            QueryUninstallHandlerRef(SwUninstallCtx.instanceId);
-            QueryUninstallHandlerRef = NULL;
-        }
-        else
-        {
-            LE_ERROR("Uninstall handler not valid");
-        }
-    }
+    avcServer_UpdateStatus(LE_AVC_UNINSTALL_PENDING,
+                           LE_AVC_UNKNOWN_UPDATE,
+                           -1,
+                           -1,
+                           LE_AVC_ERR_NONE);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1611,19 +1627,11 @@ static void RebootTimerExpiryHandler
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    if (LE_OK == QueryReboot())
-    {
-        // Notify the registered handler to proceed with the reboot; only called once.
-        if (NULL != QueryRebootHandlerRef)
-        {
-            QueryRebootHandlerRef();
-            QueryRebootHandlerRef = NULL;
-        }
-        else
-        {
-            LE_ERROR("Reboot handler not valid");
-        }
-    }
+    avcServer_UpdateStatus(LE_AVC_REBOOT_PENDING,
+                           LE_AVC_UNKNOWN_UPDATE,
+                           -1,
+                           -1,
+                           LE_AVC_ERR_NONE);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1636,10 +1644,11 @@ static void ConnectTimerExpiryHandler
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    if (LE_OK == QueryConnect())
-    {
-        avcClient_Connect();
-    }
+    avcServer_UpdateStatus(LE_AVC_CONNECTION_PENDING,
+                           LE_AVC_UNKNOWN_UPDATE,
+                           -1,
+                           -1,
+                           LE_AVC_ERR_NONE);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1954,8 +1963,23 @@ static void InitAvcJobOnResume
         if (LE_OK == packageDownloader_BytesLeftToDownload(&numBytesToDownload))
         {
             LE_DEBUG("Bytes left to download: %llu", numBytesToDownload);
+
+            uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
+            size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
+            lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
+            memset(downloadUri, 0, sizeof(downloadUri));
+
+            // Retrieve resume information if download is not complete
+            if (numBytesToDownload)
+            {
+                packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType);
+            }
+
             // Notify the application of package download
-            avcServer_QueryDownload(lwm2mcore_PackageDownloaderAcceptDownload, numBytesToDownload);
+            packageDownloader_GetDownloadAgreement(numBytesToDownload,
+                                                   updateType,
+                                                   downloadUri,
+                                                   true);
         }
     }
     // Only FOTA install case will be handled next. SOTA case is handled separately in SOTA
@@ -2016,18 +2040,26 @@ void avcServer_RequestConnection
         return;
     }
 
-    switch(updateType)
+    switch (updateType)
     {
         case LE_AVC_FIRMWARE_UPDATE:
             // Notify registered control app.
             LE_DEBUG("Reporting status LE_AVC_CONNECTION_PENDING for FOTA");
-            SendUpdateStatusEvent(LE_AVC_CONNECTION_PENDING, -1, -1, StatusHandlerContextPtr);
+            avcServer_UpdateStatus(LE_AVC_CONNECTION_PENDING,
+                                   LE_AVC_FIRMWARE_UPDATE,
+                                   -1,
+                                   -1,
+                                   LE_AVC_ERR_NONE);
             break;
 
         case LE_AVC_APPLICATION_UPDATE:
             // Notify registered control app.
             LE_DEBUG("Reporting status LE_AVC_CONNECTION_PENDING for SOTA");
-            SendUpdateStatusEvent(LE_AVC_CONNECTION_PENDING, -1, -1, StatusHandlerContextPtr);
+            avcServer_UpdateStatus(LE_AVC_CONNECTION_PENDING,
+                                   LE_AVC_APPLICATION_UPDATE,
+                                   -1,
+                                   -1,
+                                   LE_AVC_ERR_NONE);
             break;
 
         default:
@@ -2039,30 +2071,26 @@ void avcServer_RequestConnection
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Query the AVC Server if it's okay to proceed with an application install
+ * Query the AVC Server if it's okay to proceed with an application install.
  *
  * If an install can't proceed right away, then the handlerRef function will be called when it is
  * okay to proceed with an install. Note that handlerRef will be called at most once.
+ * If an install can proceed right away, it will be launched.
  *
- * @return
- *      - LE_OK if install can proceed right away (handlerRef will not be called)
- *      - LE_BUSY if handlerRef will be called later to notify when install can proceed
- *      - LE_FAULT on error
+ * @return None
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcServer_QueryInstall
+void avcServer_QueryInstall
 (
     avcServer_InstallHandlerFunc_t handlerRef,  ///< [IN] Handler to receive install response.
     lwm2mcore_UpdateType_t  type,               ///< [IN] update type.
     uint16_t instanceId                         ///< [IN] instance id (0 for fw install).
 )
 {
-    le_result_t result;
-
-    if ( QueryInstallHandlerRef != NULL )
+    if (NULL != QueryInstallHandlerRef)
     {
         LE_ERROR("Duplicate install attempt");
-        return LE_FAULT;
+        return;
     }
 
     // Update install handler
@@ -2071,97 +2099,84 @@ le_result_t avcServer_QueryInstall
     PkgInstallCtx.instanceId = instanceId;
     QueryInstallHandlerRef = handlerRef;
 
-    result = QueryInstall();
-
-    // Reset the handler as install can proceed now.
-    if (LE_BUSY != result)
-    {
-        QueryInstallHandlerRef = NULL;
-    }
-
-    return result;
+    avcServer_UpdateStatus(LE_AVC_INSTALL_PENDING,
+                           ConvertToAvcType(PkgInstallCtx.type),
+                           -1,
+                           -1,
+                           LE_AVC_ERR_NONE);
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Query the AVC Server if it's okay to proceed with a package download
+ * Query the AVC Server if it's okay to proceed with a package download.
  *
  * If a download can't proceed right away, then the handlerRef function will be called when it is
  * okay to proceed with a download. Note that handlerRef will be called at most once.
+ * If a download can proceed right away, it will be launched.
  *
- * @return
- *      - LE_OK if download can proceed right away (handlerRef will not be called)
- *      - LE_BUSY if handlerRef will be called later to notify when download can proceed
- *      - LE_FAULT on error
+ * @return None
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcServer_QueryDownload
+void avcServer_QueryDownload
 (
-    avcServer_DownloadHandlerFunc_t handlerFunc,    ///< [IN] Download handler function.
-    uint32_t bytesToDownload                        ///< [IN] Number of bytes to download
+    avcServer_DownloadHandlerFunc_t handlerFunc,    ///< [IN] Download handler function
+    uint64_t bytesToDownload,                       ///< [IN] Number of bytes to download
+    lwm2mcore_UpdateType_t type,                    ///< [IN] Update type
+    char* uriPtr,                                   ///< [IN] Update package URI
+    bool resume                                     ///< [IN] Is it a download resume?
 )
 {
-    le_result_t result;
-
-    if ( QueryDownloadHandlerRef != NULL )
+    if (NULL != QueryDownloadHandlerRef)
     {
         LE_ERROR("Duplicate download attempt");
-        return LE_FAULT;
+        return;
     }
 
     // Update download handler
-    PkgDownloadCtx.bytesToDownload = bytesToDownload;
     QueryDownloadHandlerRef = handlerFunc;
+    memset(&PkgDownloadCtx, 0, sizeof(PkgDownloadCtx));
+    PkgDownloadCtx.bytesToDownload = bytesToDownload;
+    PkgDownloadCtx.type = type;
+    memcpy(PkgDownloadCtx.uri, uriPtr, strlen(uriPtr));
+    PkgDownloadCtx.resume = resume;
 
-    result = QueryDownload(bytesToDownload);
-
-    // Reset the handler as download can proceed now.
-    if (LE_BUSY != result)
-    {
-        QueryDownloadHandlerRef = NULL;
-    }
-
-    return result;
+    avcServer_UpdateStatus(LE_AVC_DOWNLOAD_PENDING,
+                           ConvertToAvcType(PkgDownloadCtx.type),
+                           PkgDownloadCtx.bytesToDownload,
+                           0,
+                           LE_AVC_ERR_NONE);
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Query the AVC Server if it's okay to proceed with a device reboot
+ * Query the AVC Server if it's okay to proceed with a device reboot.
  *
  * If a reboot can't proceed right away, then the handlerRef function will be called when it is
  * okay to proceed with a reboot. Note that handlerRef will be called at most once.
+ * If a reboot can proceed right away, it will be launched.
  *
- * @return
- *      - LE_OK if reboot can proceed right away (handlerRef will not be called)
- *      - LE_BUSY if handlerRef will be called later to notify when reboot can proceed
- *      - LE_FAULT on error
+ * @return None
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcServer_QueryReboot
+void avcServer_QueryReboot
 (
     avcServer_RebootHandlerFunc_t handlerFunc   ///< [IN] Reboot handler function.
 )
 {
-    le_result_t result;
-
     if (NULL != QueryRebootHandlerRef)
     {
         LE_ERROR("Duplicate reboot attempt");
-        return LE_FAULT;
+        return;
     }
 
     // Update reboot handler
     QueryRebootHandlerRef = handlerFunc;
 
-    result = QueryReboot();
-
-    // Reset the handler as reboot can proceed now.
-    if (LE_BUSY != result)
-    {
-        QueryRebootHandlerRef = NULL;
-    }
-
-    return result;
+    avcServer_UpdateStatus(LE_AVC_REBOOT_PENDING,
+                           LE_AVC_UNKNOWN_UPDATE,
+                           -1,
+                           -1,
+                           LE_AVC_ERR_NONE);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2187,74 +2202,39 @@ void avcServer_InitUserAgreement
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Query the AVC Server if it's okay to proceed with an application uninstall
+ * Query the AVC Server if it's okay to proceed with an application uninstall.
  *
  * If an uninstall can't proceed right away, then the handlerRef function will be called when it is
  * okay to proceed with an uninstall. Note that handlerRef will be called at most once.
+ * If an uninstall can proceed right away, it will be launched.
  *
- * @return
- *      - LE_OK if uninstall can proceed right away (handlerRef will not be called)
- *      - LE_BUSY if handlerRef will be called later to notify when uninstall can proceed
- *      - LE_FAULT on error
+ * @return None
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcServer_QueryUninstall
+void avcServer_QueryUninstall
 (
     avcServer_UninstallHandlerFunc_t handlerRef,  ///< [IN] Handler to receive install response.
     uint16_t instanceId                           ///< Instance Id (0 for FW, any value for SW)
 )
 {
-    le_result_t result;
-
     // Return busy, if user tries to uninstall multiple apps together
     // As the query is already in progress, both the apps will be removed after we get permission
     // for a single uninstall
-    if ( QueryUninstallHandlerRef != NULL )
+    if (NULL != QueryUninstallHandlerRef)
     {
         LE_ERROR("Duplicate uninstall attempt");
-        return LE_BUSY;
+        return;
     }
 
     // Update uninstall handler
     SwUninstallCtx.instanceId = instanceId;
     QueryUninstallHandlerRef = handlerRef;
 
-    result = QueryUninstall();
-
-    // Reset the handler as uninstall can proceed now.
-    if (LE_BUSY != result)
-    {
-        QueryUninstallHandlerRef = NULL;
-    }
-
-    return result;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Receive the report from avcAppUpdate and pass it to the control APP
- *
- *
- * @return
- *      - void
- */
-//--------------------------------------------------------------------------------------------------
-void avcServer_ReportInstallProgress
-(
-    le_avc_Status_t updateStatus,
-    uint installProgress,
-    le_avc_ErrorCode_t errorCode
-)
-{
-    LE_DEBUG("Report install progress to registered handler.");
-
-    // Notify registered control app
-    SendUpdateStatusEvent(updateStatus, -1, installProgress, StatusHandlerContextPtr);
-
-    if (updateStatus == LE_AVC_INSTALL_FAILED)
-    {
-        AvcErrorCode = errorCode;
-    }
+    avcServer_UpdateStatus(LE_AVC_UNINSTALL_PENDING,
+                           LE_AVC_APPLICATION_UPDATE,
+                           -1,
+                           -1,
+                           LE_AVC_ERR_NONE);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2739,23 +2719,7 @@ le_result_t le_avc_AcceptReboot
     void
 )
 {
-    StopDeferTimer(LE_AVC_USER_AGREEMENT_REBOOT);
-
-    LE_DEBUG("Accept a device reboot");
-
-    // Notify the registered handler to proceed with the reboot; only called once.
-    if (QueryRebootHandlerRef !=  NULL)
-    {
-        QueryRebootHandlerRef();
-        QueryRebootHandlerRef = NULL;
-    }
-    else
-    {
-        LE_ERROR("Reboot handler not valid.");
-        return LE_FAULT;
-    }
-
-    return LE_OK;
+    return AcceptDeviceReboot();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2772,15 +2736,7 @@ le_result_t le_avc_DeferReboot
     uint32_t deferMinutes   ///< [IN] Minutes to defer the reboot
 )
 {
-    LE_DEBUG("Deferring reboot for %d minute.", deferMinutes);
-
-    // Try the reboot later
-    le_clk_Time_t interval = {.sec = (deferMinutes * SECONDS_IN_A_MIN)};
-
-    le_timer_SetInterval(RebootDeferTimer, interval);
-    le_timer_Start(RebootDeferTimer);
-
-    return LE_OK;
+    return DeferReboot(deferMinutes);
 }
 
 
@@ -3582,8 +3538,8 @@ static void CheckNotificationAtStartup
                   fwUpdateState,
                   fwUpdateResult);
 
-        uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
-        size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
+        uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
+        size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
 
         // Check if an update package URI is stored
         if (LE_OK == packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
@@ -3618,25 +3574,12 @@ static void CheckNotificationAtStartup
     if (LE_AVC_NO_UPDATE != updateStatus)
     {
         // Send a notification to the application
-        avcServer_UpdateHandler(updateStatus,
-                                ConvertToAvcType(updateType),
-                                -1,
-                                -1,
-                                LE_AVC_ERR_NONE);
+        avcServer_UpdateStatus(updateStatus,
+                               ConvertToAvcType(updateType),
+                               -1,
+                               -1,
+                               LE_AVC_ERR_NONE);
     }
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Function to check the user agreement for download
- */
-//--------------------------------------------------------------------------------------------------
-bool IsDownloadAccepted
-(
-    void
-)
-{
-    return DownloadAgreement;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -3646,8 +3589,12 @@ bool IsDownloadAccepted
 //--------------------------------------------------------------------------------------------------
 COMPONENT_INIT
 {
-    // Initialize update status event
+    // Create update status events
+    AvcUpdateStatusEvent = le_event_CreateId("AVC Update Status", sizeof(AvcUpdateStatusData_t));
     UpdateStatusEvent = le_event_CreateId("Update Status", sizeof(UpdateStatusData_t));
+
+    // Register handler for AVC service update status
+    le_event_AddHandler("AVC Update Status event", AvcUpdateStatusEvent, ProcessUpdateStatus);
 
     // Create safe reference map for block references. The size of the map should be based on
     // the expected number of simultaneous block requests, so take a reasonable guess.

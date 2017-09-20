@@ -89,17 +89,24 @@ static le_timer_Ref_t ActivityTimerRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Default activity timer value
+ * Pool used to pass activity timer events to the main thread
  */
 //--------------------------------------------------------------------------------------------------
-#define DEFAULT_ACTIVITY_TIMER 20
+static le_mem_PoolRef_t ActivityTimerEventsPool;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Flag used to toggle activity timer
+ * Default activity timer value
  */
 //--------------------------------------------------------------------------------------------------
-static bool ToggleActivityTimerFlag = false;
+#define DEFAULT_ACTIVITY_TIMER              20
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Size of activity timer events memory pool
+ */
+//--------------------------------------------------------------------------------------------------
+#define ACTIVITY_TIMER_EVENTS_POOL_SIZE     5
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -244,15 +251,15 @@ static int PackageEventHandler
         case LWM2MCORE_EVENT_DOWNLOAD_PROGRESS:
             if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
+                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
+                                       status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
+                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
+                                       status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else
             {
@@ -271,9 +278,9 @@ static int PackageEventHandler
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_COMPLETE, LE_AVC_APPLICATION_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
+                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_COMPLETE, LE_AVC_APPLICATION_UPDATE,
+                                       status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else
             {
@@ -285,15 +292,15 @@ static int PackageEventHandler
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FAILED:
             if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_FAILED, LE_AVC_FIRMWARE_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
+                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED, LE_AVC_FIRMWARE_UPDATE,
+                                       status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_DOWNLOAD_FAILED, LE_AVC_APPLICATION_UPDATE,
-                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
+                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED, LE_AVC_APPLICATION_UPDATE,
+                                       status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else
             {
@@ -304,13 +311,13 @@ static int PackageEventHandler
         case LWM2MCORE_EVENT_UPDATE_STARTED:
             if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
-                                        -1, -1, LE_AVC_ERR_NONE);
+                avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
-                                        -1, -1, LE_AVC_ERR_NONE);
+                avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
             }
             else
             {
@@ -321,13 +328,13 @@ static int PackageEventHandler
         case LWM2MCORE_EVENT_UPDATE_FINISHED:
             if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
-                                        -1, -1, LE_AVC_ERR_NONE);
+                avcServer_UpdateStatus(LE_AVC_INSTALL_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
-                                        -1, -1, LE_AVC_ERR_NONE);
+                avcServer_UpdateStatus(LE_AVC_INSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
             }
             else
             {
@@ -338,13 +345,13 @@ static int PackageEventHandler
         case LWM2MCORE_EVENT_UPDATE_FAILED:
             if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
-                                        -1, -1, ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
+                avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
+                                       -1, -1, ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
-                avcServer_UpdateHandler(LE_AVC_INSTALL_FAILED, LE_AVC_APPLICATION_UPDATE,
-                                        -1, -1, ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
+                avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED, LE_AVC_APPLICATION_UPDATE,
+                                       -1, -1, ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else
             {
@@ -394,8 +401,8 @@ static int EventHandler
             // automatically initiated (session is not stopped)
             if (LE_AVC_BOOTSTRAP_SESSION == le_avc_GetSessionType())
             {
-                avcServer_UpdateHandler(LE_AVC_AUTH_FAILED, LE_AVC_UNKNOWN_UPDATE,
-                                        -1, -1, LE_AVC_ERR_NONE);
+                avcServer_UpdateStatus(LE_AVC_AUTH_FAILED, LE_AVC_UNKNOWN_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
                 LE_ERROR("Session failure on bootstrap server");
                 le_event_Report(BsFailureEventId, NULL, 0);
             }
@@ -403,8 +410,8 @@ static int EventHandler
 
         case LWM2MCORE_EVENT_SESSION_FINISHED:
             LE_DEBUG("Session finished");
-            avcServer_UpdateHandler(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
-                                    -1, -1, LE_AVC_ERR_NONE);
+            avcServer_UpdateStatus(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
+                                   -1, -1, LE_AVC_ERR_NONE);
 
             SessionStarted = false;
 
@@ -418,8 +425,8 @@ static int EventHandler
             else
             {
                 LE_DEBUG("Connected to DM");
-                avcServer_UpdateHandler(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
-                                        -1, -1, LE_AVC_ERR_NONE);
+                avcServer_UpdateStatus(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
 
                 SessionStarted = true;
             }
@@ -440,8 +447,8 @@ static int EventHandler
             // authenticates first with the BS then the DM server
             if (!authStartedSent)
             {
-                avcServer_UpdateHandler(LE_AVC_AUTH_STARTED, LE_AVC_UNKNOWN_UPDATE,
-                                        -1, -1, LE_AVC_ERR_NONE);
+                avcServer_UpdateStatus(LE_AVC_AUTH_STARTED, LE_AVC_UNKNOWN_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
                 authStartedSent = true;
             }
             if (status.u.session.type == LWM2MCORE_SESSION_BOOTSTRAP)
@@ -465,8 +472,8 @@ static int EventHandler
             {
                 LE_WARN("Authentication to DM failed");
             }
-            avcServer_UpdateHandler(LE_AVC_AUTH_FAILED, LE_AVC_UNKNOWN_UPDATE,
-                                    -1, -1, LE_AVC_ERR_NONE);
+            avcServer_UpdateStatus(LE_AVC_AUTH_FAILED, LE_AVC_UNKNOWN_UPDATE,
+                                   -1, -1, LE_AVC_ERR_NONE);
             break;
 
         default:
@@ -841,7 +848,7 @@ static void ActivityTimerHandler
 )
 {
     LE_DEBUG("Activity timer expired; reporting LE_AVC_NO_UPDATE");
-    avcServer_UpdateHandler(LE_AVC_NO_UPDATE, LE_AVC_UNKNOWN_UPDATE, -1, -1, LE_AVC_ERR_NONE);
+    avcServer_UpdateStatus(LE_AVC_NO_UPDATE, LE_AVC_UNKNOWN_UPDATE, -1, -1, LE_AVC_ERR_NONE);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -872,6 +879,8 @@ static void ToggleActivityTimerHandler
         LE_DEBUG("Starting activity timer.");
         le_timer_Start(ActivityTimerRef);
     }
+
+    le_mem_Release(param1Ptr);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -911,10 +920,14 @@ void avcClient_StartActivityTimer
     void
 )
 {
-    if ( LegatoThread != NULL )
+    if (NULL != LegatoThread)
     {
-        ToggleActivityTimerFlag = true;
-        le_event_QueueFunctionToThread(LegatoThread, ToggleActivityTimerHandler, &ToggleActivityTimerFlag, NULL);
+        bool* activityTimerFlag = le_mem_ForceAlloc(ActivityTimerEventsPool);
+        *activityTimerFlag = true;
+        le_event_QueueFunctionToThread(LegatoThread,
+                                       ToggleActivityTimerHandler,
+                                       activityTimerFlag,
+                                       NULL);
     }
 }
 
@@ -928,10 +941,14 @@ void avcClient_StopActivityTimer
     void
 )
 {
-    if ( LegatoThread != NULL )
+    if (NULL != LegatoThread)
     {
-        ToggleActivityTimerFlag = false;
-        le_event_QueueFunctionToThread(LegatoThread, ToggleActivityTimerHandler, &ToggleActivityTimerFlag, NULL);
+        bool* activityTimerFlag = le_mem_ForceAlloc(ActivityTimerEventsPool);
+        *activityTimerFlag = false;
+        le_event_QueueFunctionToThread(LegatoThread,
+                                       ToggleActivityTimerHandler,
+                                       activityTimerFlag,
+                                       NULL);
     }
 }
 
@@ -949,4 +966,8 @@ void avcClient_Init
     le_event_AddHandler("BsFailureHandler", BsFailureEventId, BsFailureHandler);
     RetryTimerRef = le_timer_Create("AvcRetryTimer");
     LegatoThread = le_thread_GetCurrent();
+
+    // Create pool to report activity timer events
+    ActivityTimerEventsPool = le_mem_CreatePool("ActivityTimerEventsPool", sizeof(bool));
+    le_mem_ExpandPool(ActivityTimerEventsPool, ACTIVITY_TIMER_EVENTS_POOL_SIZE);
 }

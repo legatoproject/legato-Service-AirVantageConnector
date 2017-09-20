@@ -972,8 +972,8 @@ static void AppUninstallHandler
         sync();
 
         LE_DEBUG("Uninstall of application completed.");
-        avcServer_UpdateHandler(LE_AVC_UNINSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
-                                -1, -1, LE_AVC_ERR_NONE);
+        avcServer_UpdateStatus(LE_AVC_UNINSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
+                               -1, -1, LE_AVC_ERR_NONE);
     }
     else
     {
@@ -1068,14 +1068,14 @@ static le_result_t StartUninstall
     if (result == LE_OK)
     {
         LE_DEBUG("Uninstall in progress");
-        avcServer_UpdateHandler(LE_AVC_UNINSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
-                                -1, -1, LE_AVC_ERR_NONE);
+        avcServer_UpdateStatus(LE_AVC_UNINSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
+                               -1, -1, LE_AVC_ERR_NONE);
     }
     else
     {
         LE_ERROR("Uninstall of application failed (%s).", LE_RESULT_TXT(result));
-        avcServer_UpdateHandler(LE_AVC_UNINSTALL_FAILED, LE_AVC_APPLICATION_UPDATE,
-                                -1, -1, LE_AVC_ERR_INTERNAL);
+        avcServer_UpdateStatus(LE_AVC_UNINSTALL_FAILED, LE_AVC_APPLICATION_UPDATE,
+                               -1, -1, LE_AVC_ERR_INTERNAL);
     }
 
     return result;
@@ -1143,22 +1143,22 @@ static void UpdateProgressHandler
             break;
 
         case LE_UPDATE_STATE_APPLYING:
-            avcServer_UpdateHandler(LE_AVC_INSTALL_IN_PROGRESS,
-                                    LE_AVC_APPLICATION_UPDATE,
-                                    -1,
-                                    percentDone,
-                                    LE_AVC_ERR_NONE);
+            avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS,
+                                   LE_AVC_APPLICATION_UPDATE,
+                                   -1,
+                                   percentDone,
+                                   LE_AVC_ERR_NONE);
 
             LE_INFO("Doing update.");
             break;
 
         case LE_UPDATE_STATE_SUCCESS:
             LE_INFO("Install completed.");
-            avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE,
-                                    LE_AVC_APPLICATION_UPDATE,
-                                    -1,
-                                    100,
-                                    LE_AVC_ERR_NONE);
+            avcServer_UpdateStatus(LE_AVC_INSTALL_COMPLETE,
+                                   LE_AVC_APPLICATION_UPDATE,
+                                   -1,
+                                   100,
+                                   LE_AVC_ERR_NONE);
             avcServer_RequestConnection(LE_AVC_APPLICATION_UPDATE);
             le_update_End();
             break;
@@ -1187,11 +1187,11 @@ static void UpdateProgressHandler
             }
 
             // Notify registered control app
-            avcServer_UpdateHandler(LE_AVC_INSTALL_FAILED,
-                                    LE_AVC_APPLICATION_UPDATE,
-                                    -1,
-                                    percentDone,
-                                    avcErrorCode);
+            avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED,
+                                   LE_AVC_APPLICATION_UPDATE,
+                                   -1,
+                                   percentDone,
+                                   avcErrorCode);
 
             // Now end the update and set the UpdateStarted flag false before calling SetObj9State()
             // function (otherwise, SetObj9State() may call le_update_End() again if it notices
@@ -1681,20 +1681,20 @@ static void StoreFdEventHandler
     short events            ///< [IN] FD events
 )
 {
-    if (true == packageDownloader_CheckDownloadToSuspend())
-    {
-        LE_WARN("Download suspended");
-        StopStoringPackage(LE_TERMINATED);
-        return;
-    }
-
+    // First check for POLLIN event in order to read data even if the file descriptor is closed
+    // by the other side and POLLHUP is set.
     if (events & POLLIN)
     {
         CopyBytesToFd();
     }
+    else if (events & POLLHUP)
+    {
+        LE_WARN("File descriptor closed");
+        StopStoringPackage(LE_TERMINATED);
+    }
     else
     {
-        LE_WARN("unexpected event received 0x%x", events & ~POLLIN);
+        LE_WARN("Unexpected event received 0x%x", events & ~POLLIN);
         StopStoringPackage(LE_FAULT);
     }
 }
@@ -1953,8 +1953,8 @@ static void SotaResume
     le_result_t result;
     lwm2mcore_UpdateType_t updateType;
 
-    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
-    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
+    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
+    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
 
     if ((LE_OK == GetSwUpdateState(&restoreState))
         && (LE_OK == GetSwUpdateResult(&restoreResult))
@@ -2036,18 +2036,7 @@ static void SotaResume
                     LE_INFO("Resuming unpack and install.");
 
                     // Query control app for permission to install.
-                    result = avcServer_QueryInstall(LaunchSwUpdate,
-                                                    LWM2MCORE_SW_UPDATE_TYPE,
-                                                    instanceId);
-
-                    LE_FATAL_IF(result == LE_FAULT,
-                              "Unexpected error in query install: %s",
-                              LE_RESULT_TXT(result));
-
-                    if (result != LE_BUSY)
-                    {
-                        LaunchSwUpdate(LWM2MCORE_SW_UPDATE_TYPE, instanceId);
-                    }
+                    avcServer_QueryInstall(LaunchSwUpdate, LWM2MCORE_SW_UPDATE_TYPE, instanceId);
                 }
                 else
                 {
@@ -2070,12 +2059,7 @@ static void SotaResume
                     CurrentObj9 = instanceRef;
                     LE_INFO("Resuming Uninstall.");
 
-                    result = avcServer_QueryUninstall(avcApp_PrepareUninstall, instanceId);
-
-                    if (result != LE_BUSY)
-                    {
-                        avcApp_PrepareUninstall(instanceId);
-                    }
+                    avcServer_QueryUninstall(avcApp_PrepareUninstall, instanceId);
                 }
                 break;
 

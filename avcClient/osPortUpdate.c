@@ -17,44 +17,81 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Launch update structure.
+ * After acknowledging the data received from the server, the action is delayed before being
+ * executed. This is useful if the action might take some take to execute.
+ */
+//--------------------------------------------------------------------------------------------------
+#define ACTION_DELAY    2
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Launch update context structure
  */
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    lwm2mcore_UpdateType_t  type;       ///< update type (firmware or software)
-    uint16_t                instanceId; ///< instance id (0 for firmware update)
+    lwm2mcore_UpdateType_t  type;       ///< Update type (firmware or software)
+    uint16_t                instanceId; ///< Instance id (0 for firmware update)
 }
 LaunchUpdateCtx_t;
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Start download context structure
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    uint8_t                 uri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];   ///< Update package URI
+    lwm2mcore_UpdateType_t  type;                                   ///< Update type (FW or SW)
+}
+StartDownloadCtx_t;
 
 //--------------------------------------------------------------------------------------------------
 /**
  * Timer used to launch the update
  */
 //--------------------------------------------------------------------------------------------------
-static le_timer_Ref_t LaunchUpdateTimer;
+static le_timer_Ref_t LaunchUpdateTimer = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Current update context.
+ * Timer used to start the download
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t StartDownloadTimer = NULL;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Current update context
  */
 //--------------------------------------------------------------------------------------------------
 static LaunchUpdateCtx_t UpdateCtx;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Current download context
+ */
+//--------------------------------------------------------------------------------------------------
+static StartDownloadCtx_t DownloadCtx;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Launch update
  */
 //--------------------------------------------------------------------------------------------------
-static void LaunchUpdate(lwm2mcore_UpdateType_t updateType, uint16_t instanceId)
+static void LaunchUpdate
+(
+    lwm2mcore_UpdateType_t updateType,  ///< Update type (FW or SW)
+    uint16_t instanceId                 ///< Instance Id (0 for FW, any value for SW)
+)
 {
     switch (updateType)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
             LE_DEBUG("Launch FW update");
-            avcServer_UpdateHandler(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
-                                    -1, -1, LE_AVC_ERR_NONE);
+            avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
+                                   -1, -1, LE_AVC_ERR_NONE);
             if (LE_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING))
             {
                 LE_ERROR("Unable to set FW update state to UPDATING");
@@ -71,8 +108,8 @@ static void LaunchUpdate(lwm2mcore_UpdateType_t updateType, uint16_t instanceId)
             // This function returns only if there was an error
             if (LE_OK != le_fwupdate_Install())
             {
-                 avcServer_UpdateHandler(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
-                                         -1, -1, LE_AVC_ERR_INTERNAL);
+                 avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
+                                        -1, -1, LE_AVC_ERR_INTERNAL);
                  packageDownloader_SetFwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_INSTALL_FAILURE);
             }
             break;
@@ -90,7 +127,7 @@ static void LaunchUpdate(lwm2mcore_UpdateType_t updateType, uint16_t instanceId)
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Called when the install defer timer expires.
+ * Called when the launch update timer expires.
  */
 //--------------------------------------------------------------------------------------------------
 static void LaunchUpdateTimerExpiryHandler
@@ -112,7 +149,41 @@ static void LaunchUpdateTimerExpiryHandler
 }
 
 //--------------------------------------------------------------------------------------------------
-/* Check if any SOTA/FOTA package download is in progress
+/**
+ * Called when the start download timer expires.
+ */
+//--------------------------------------------------------------------------------------------------
+static void StartDownloadTimerExpiryHandler
+(
+    le_timer_Ref_t timerRef    ///< Timer that expired
+)
+{
+    uint64_t packageSize;
+    StartDownloadCtx_t* startDwlCtxPtr = (StartDownloadCtx_t*)le_timer_GetContextPtr(timerRef);
+
+    if (!startDwlCtxPtr)
+    {
+        LE_ERROR("Start download context not available");
+        return;
+    }
+
+    // Retrieve update package size from server
+    if (LE_OK != pkgDwlCb_GetPackageSize(startDwlCtxPtr->uri, &packageSize))
+    {
+        LE_ERROR("Unable to retrieve package size, request user agreement anyway");
+        packageSize = 0;
+    }
+
+    // Request user agreement before proceeding with download
+    packageDownloader_GetDownloadAgreement(packageSize,
+                                           startDwlCtxPtr->type,
+                                           startDwlCtxPtr->uri,
+                                           false);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if any SOTA/FOTA package download is in progress
  *
  * @return
  *  true if package download is in progress, false otherwise
@@ -224,8 +295,8 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
     }
 
     // Package URI: LWM2MCORE_PACKAGE_URI_MAX_LEN+1 for null byte: string format
-    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
-    memset(downloadUri, 0, LWM2MCORE_PACKAGE_URI_MAX_LEN+1);
+    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
+    memset(downloadUri, 0, LWM2MCORE_PACKAGE_URI_MAX_BYTES);
     memcpy(downloadUri, bufferPtr, len);
     LE_DEBUG("Request to download update package from URL : %s, len %d", downloadUri, len);
 
@@ -267,8 +338,21 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
             return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    // Call API to launch the package download
-    if (LE_OK != packageDownloader_StartDownload(downloadUri, type, false))
+    // Acknowledge the update package URI notification and launch the download later
+    memset(DownloadCtx.uri, 0, LWM2MCORE_PACKAGE_URI_MAX_BYTES);
+    memcpy(DownloadCtx.uri, bufferPtr, len);
+    DownloadCtx.type = type;
+
+    le_clk_Time_t interval = {ACTION_DELAY, 0};
+    if (!StartDownloadTimer)
+    {
+        StartDownloadTimer = le_timer_Create("start download timer");
+    }
+    if (   (LE_OK != le_timer_SetHandler(StartDownloadTimer, StartDownloadTimerExpiryHandler))
+        || (LE_OK != le_timer_SetContextPtr(StartDownloadTimer, (StartDownloadCtx_t*)&DownloadCtx))
+        || (LE_OK != le_timer_SetInterval(StartDownloadTimer, interval))
+        || (LE_OK != le_timer_Start(StartDownloadTimer))
+       )
     {
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
@@ -340,8 +424,11 @@ lwm2mcore_Sid_t lwm2mcore_LaunchUpdate
                 UpdateCtx.type = type;
                 UpdateCtx.instanceId = instanceId;
 
-                le_clk_Time_t interval = {2, 0};
-                LaunchUpdateTimer = le_timer_Create("launch update timer");
+                le_clk_Time_t interval = {ACTION_DELAY, 0};
+                if (!LaunchUpdateTimer)
+                {
+                    LaunchUpdateTimer = le_timer_Create("launch update timer");
+                }
                 if (   (LE_OK != le_timer_SetHandler(LaunchUpdateTimer,
                                                      LaunchUpdateTimerExpiryHandler))
                     || (LE_OK != le_timer_SetContextPtr(LaunchUpdateTimer,
@@ -765,26 +852,7 @@ lwm2mcore_Sid_t lwm2mcore_LaunchSwUpdateUninstall
 
     // Here we are only delisting the app. The deletion of app will be called when deletion
     // of object 9 instance is requested. But get user agreement before delisting.
-    result = avcServer_QueryUninstall(avcApp_PrepareUninstall, instanceId);
-
-    if (LE_OK == result)
-    {
-        LE_DEBUG("uninstall accepted");
-
-        if (avcApp_PrepareUninstall(instanceId) != LE_OK)
-        {
-            return LWM2MCORE_ERR_GENERAL_ERROR;
-        }
-    }
-    else if (LE_BUSY == result)
-    {
-        LE_DEBUG("Wait for uninstall acceptance");
-    }
-    else
-    {
-        LE_ERROR("Unexpected error in Query uninstall.");
-        return LWM2MCORE_ERR_GENERAL_ERROR;
-    }
+    avcServer_QueryUninstall(avcApp_PrepareUninstall, instanceId);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
@@ -920,8 +988,8 @@ lwm2mcore_Sid_t lwm2mcore_GetFirmwareUpdateInstallResult
         if (LE_FWUPDATE_UPDATE_STATUS_OK == fwUpdateStatus)
         {
             newFwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL;
-            avcServer_UpdateHandler(LE_AVC_INSTALL_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
-                                    -1, -1, LE_AVC_ERR_NONE);
+            avcServer_UpdateStatus(LE_AVC_INSTALL_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
+                                   -1, -1, LE_AVC_ERR_NONE);
         }
         else
         {
@@ -936,8 +1004,8 @@ lwm2mcore_Sid_t lwm2mcore_GetFirmwareUpdateInstallResult
             {
                 errorCode = LE_AVC_ERR_INTERNAL;
             }
-            avcServer_UpdateHandler(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
-                                    -1, -1, errorCode);
+            avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
+                                   -1, -1, errorCode);
         }
         packageDownloader_SetFwUpdateNotification(true);
         LE_DEBUG("Set FW update result to %d", newFwUpdateResult);
@@ -970,10 +1038,11 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     void
 )
 {
-    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_LEN+1];
-    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN+1;
+    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
+    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
     lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
     bool downloadResume = false;
+    uint64_t numBytesToDownload = 0;
     memset(downloadUri, 0, uriLen);
 
     // Check if an update package URI is stored
@@ -985,7 +1054,7 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
 
     LE_DEBUG("Download to resume");
 
-    if (   (0 == strncmp(downloadUri, "", LWM2MCORE_PACKAGE_URI_MAX_LEN+1))
+    if (   (0 == strncmp(downloadUri, "", LWM2MCORE_PACKAGE_URI_MAX_BYTES))
         || (LWM2MCORE_MAX_UPDATE_TYPE == updateType)
        )
     {
@@ -994,18 +1063,23 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     }
 
     // Check if a download was started
-    if (IsPackageDownloading(updateType) || IsDownloadAccepted())
+    if (IsPackageDownloading(updateType))
     {
         downloadResume = true;
     }
-
     LE_INFO("downloadResume %d", downloadResume);
 
-    // Call API to launch the package download
-    if (LE_OK != packageDownloader_StartDownload(downloadUri, updateType, downloadResume))
+    if (LE_OK != packageDownloader_BytesLeftToDownload(&numBytesToDownload))
     {
+        LE_ERROR("Unable to retrieve bytes left to download");
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
+
+    // Request user agreement before proceeding with download
+    packageDownloader_GetDownloadAgreement(numBytesToDownload,
+                                           updateType,
+                                           downloadUri,
+                                           downloadResume);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
@@ -1037,22 +1111,7 @@ lwm2mcore_Sid_t ResumeFwInstall
 
     if (isFwInstallPending)
     {
-        result = avcServer_QueryInstall(LaunchUpdate, LWM2MCORE_FW_UPDATE_TYPE, 0);
-
-        if (LE_OK == result)
-        {
-            LE_DEBUG("install accepted");
-            LaunchUpdate(LWM2MCORE_FW_UPDATE_TYPE, 0);
-        }
-        else if (LE_BUSY == result)
-        {
-            LE_DEBUG("Wait for install acceptance");
-        }
-        else
-        {
-            LE_ERROR("Unexpected error in Query install %d", result);
-            return LWM2MCORE_ERR_GENERAL_ERROR;
-        }
+        avcServer_QueryInstall(LaunchUpdate, LWM2MCORE_FW_UPDATE_TYPE, 0);
     }
     else
     {
@@ -1081,5 +1140,6 @@ lwm2mcore_Sid_t lwm2mcore_SuspendPackageDownload
     {
         return LWM2MCORE_ERR_COMPLETED_OK;
     }
+
     return LWM2MCORE_ERR_GENERAL_ERROR;
 }

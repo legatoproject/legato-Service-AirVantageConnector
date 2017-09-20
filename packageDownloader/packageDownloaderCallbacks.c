@@ -123,38 +123,24 @@ static long HttpRespCode = LE_AVC_HTTP_STATUS_INVALID;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Write downloaded data to memory chunk
+ * Send downloaded data to the package downloader
+ *
+  * @return
+ *      Number of bytes processed by this callback
  */
 //--------------------------------------------------------------------------------------------------
 static size_t Write
 (
-    void*   contentsPtr,
-    size_t  size,
-    size_t  nmemb,
-    void*   contextPtr
+    void*   contentsPtr,    ///< [IN] Pointer to delivered data
+    size_t  size,           ///< [IN] Nominal size of the delivered data
+    size_t  nmemb,          ///< [IN] Number of nominal elements in the delivered data
+    void*   contextPtr      ///< [IN] Context pointer
 )
 {
     size_t count = size * nmemb;
-    Package_t *pkgPtr;
+    Package_t *pkgPtr = (Package_t *)contextPtr;
 
-
-    pkgPtr = (Package_t *)contextPtr;
     pkgPtr->result = DWL_FAULT;
-
-    // Check if the download should be aborted
-    if (true == packageDownloader_CurrentDownloadToAbort())
-    {
-        LE_ERROR("Download aborted");
-        return 0;
-    }
-
-    // Check if the download should be suspended
-    if (true == packageDownloader_CheckDownloadToSuspend())
-    {
-        LE_ERROR("Download suspended");
-        pkgPtr->result = DWL_OK;
-        return 0;
-    }
 
     // Process the downloaded data
     if (DWL_OK != lwm2mcore_PackageDownloaderReceiveData(contentsPtr, count))
@@ -175,12 +161,55 @@ static size_t Write
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Progress callback
+ *
+ * @return
+ *      - 0 if nothing to report
+ *      - non-zero value to abort the download
+ */
+//--------------------------------------------------------------------------------------------------
+static int Progress
+(
+    void* contextPtr,       ///< [IN] Context pointer
+    curl_off_t dlTotal,     ///< [IN] Total number of bytes to download
+    curl_off_t dlNow,       ///< [IN] Number of bytes downloaded so far
+    curl_off_t ulTotal,     ///< [IN] Total number of bytes to upload
+    curl_off_t ulNow        ///< [IN] Number of bytes uploaded so far
+)
+{
+    Package_t *pkgPtr = (Package_t *)contextPtr;
+
+    // Check if the download should be aborted
+    if (true == packageDownloader_CheckDownloadToAbort())
+    {
+        LE_INFO("Download aborted");
+        pkgPtr->result = DWL_OK;
+        return 1;
+    }
+
+    // Check if the download should be suspended
+    if (true == packageDownloader_CheckDownloadToSuspend())
+    {
+        LE_INFO("Download suspended");
+        pkgPtr->result = DWL_SUSPEND;
+        return 1;
+    }
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Check HTTP status codes
+ *
+ * @return
+ *      - 0 if the HTTP code doesn't indicates an error
+ *      - -1 otherwise
  */
 //--------------------------------------------------------------------------------------------------
 static int CheckHttpStatusCode
 (
-    long code
+    long code   ///< [IN] HTTP response code
 )
 {
     int ret = 0;
@@ -212,11 +241,15 @@ static int CheckHttpStatusCode
 //--------------------------------------------------------------------------------------------------
 /**
  * Get download information
+ *
+ * @return
+ *      - 0 if the function succeeded
+ *      - -1 if the function failed
  */
 //--------------------------------------------------------------------------------------------------
 static int GetDownloadInfo
 (
-    Package_t* pkgPtr
+    Package_t* pkgPtr   ///< [IN] Package data pointer
 )
 {
     CURLcode rc;
@@ -322,7 +355,7 @@ static void Wait
  * Get package download HTTP response code
  *
  * @return
- *      - HTTP response code            The function succeded
+ *      - HTTP response code            The function succeeded
  *      - LE_AVC_HTTP_STATUS_INVALID    The function failed
  */
 //--------------------------------------------------------------------------------------------------
@@ -336,13 +369,124 @@ uint16_t pkgDwlCb_GetHttpStatus
 
 //--------------------------------------------------------------------------------------------------
 /**
- * InitDownload callback function definition
+ * Get update package size
+ *
+ * @return
+ *      - LE_OK             The function succeeded
+ *      - LE_BAD_PARAMETER  A parameter is not correct
+ *      - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t pkgDwlCb_GetPackageSize
+(
+    char* packageUri,           ///< [IN]  Update package URI
+    uint64_t* packageSizePtr    ///< [OUT] Update package size
+)
+{
+    CURLcode rc;
+    CURL* curlPtr;
+    double packageSize;
+
+    if ((!packageUri) || ('\0' == packageUri[0]))
+    {
+        LE_ERROR("Incorrect package URI");
+        return LE_BAD_PARAMETER;
+    }
+
+    if (!packageSizePtr)
+    {
+        LE_ERROR("packageSizePtr is NULL");
+        return LE_BAD_PARAMETER;
+    }
+
+    *packageSizePtr = 0;
+
+    // Initialize everything possible
+    rc = curl_global_init(CURL_GLOBAL_ALL);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("Failed to initialize libcurl: %s", curl_easy_strerror(rc));
+        return LE_FAULT;
+    }
+
+    // Initialize the curl session
+    curlPtr = curl_easy_init();
+    if (!curlPtr)
+    {
+        LE_ERROR("Failed to initialize the curl session");
+        goto global_cleanup;
+    }
+
+    // Set the timeout for connection phase
+    rc = curl_easy_setopt(curlPtr, CURLOPT_CONNECTTIMEOUT, CURL_CONNECT_TIMEOUT_SECONDS);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("Failed to set curl connection timeout: %s", curl_easy_strerror(rc));
+        goto easy_cleanup;
+    }
+
+    // Set URL to get here
+    rc= curl_easy_setopt(curlPtr, CURLOPT_URL, packageUri);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("Failed to set URI: %s", curl_easy_strerror(rc));
+        goto easy_cleanup;
+    }
+
+    // Set the path to CA bundle
+    rc= curl_easy_setopt(curlPtr, CURLOPT_CAINFO, PEMCERT_PATH);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("Failed to set CA path: %s", curl_easy_strerror(rc));
+        goto easy_cleanup;
+    }
+
+    // Just get the header, will always succeed
+    curl_easy_setopt(curlPtr, CURLOPT_NOBODY, 1L);
+    curl_easy_setopt(curlPtr, CURLOPT_WRITEFUNCTION, NULL);
+
+    // Retrieve the header
+    rc = curl_easy_perform(curlPtr);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("Failed to perform curl request: %s", curl_easy_strerror(rc));
+        goto easy_cleanup;
+    }
+
+    rc = curl_easy_getinfo(curlPtr, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &packageSize);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("Failed to get file size: %s", curl_easy_strerror(rc));
+        goto easy_cleanup;
+    }
+
+    curl_easy_cleanup(curlPtr);
+    curl_global_cleanup();
+
+    *packageSizePtr = (uint64_t)packageSize;
+    packageDownloader_SetUpdatePackageSize(packageSize);
+    return LE_OK;
+
+easy_cleanup:
+    curl_easy_cleanup(curlPtr);
+global_cleanup:
+    curl_global_cleanup();
+    return LE_FAULT;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize download callback function
+ *
+ * @return
+ *      - DWL_OK        The function succeeded
+ *      - DWL_FAULT     The function failed
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
 (
-    char* uriPtr,
-    void* ctxPtr
+    char* uriPtr,   ///< [IN] Package URI
+    void* ctxPtr    ///< [IN] Context pointer
 )
 {
     static Package_t pkg;
@@ -356,12 +500,6 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
     dwlCtxPtr->ctxPtr = (void *)&pkg;
 
     LE_DEBUG("Initialize package downloader");
-
-    // Check if download is not already aborted by an error during the Store thread initialization
-    if (true == packageDownloader_CurrentDownloadToAbort())
-    {
-        return DWL_FAULT;
-    }
 
     // initialize everything possible
     rc = curl_global_init(CURL_GLOBAL_ALL);
@@ -439,13 +577,17 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
 
 //--------------------------------------------------------------------------------------------------
 /**
- * GetInfo callback function definition
+ * Get package information callback function
+ *
+ * @return
+ *      - DWL_OK        The function succeeded
+ *      - DWL_FAULT     The function failed
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
 (
-    lwm2mcore_PackageDownloaderData_t* dataPtr,
-    void*                              ctxPtr
+    lwm2mcore_PackageDownloaderData_t* dataPtr, ///< [IN] Package downloader data pointer
+    void*                              ctxPtr   ///< [IN] Context pointer
 )
 {
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
@@ -455,12 +597,6 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)ctxPtr;
     pkgPtr = (Package_t*)dwlCtxPtr->ctxPtr;
     pkgInfoPtr = &pkgPtr->pkgInfo;
-
-    // Check if download is not already aborted by an error during the Store thread initialization
-    if (true == packageDownloader_CurrentDownloadToAbort())
-    {
-        return DWL_FAULT;
-    }
 
     LE_DEBUG("using: %s", pkgInfoPtr->curlVersion);
     LE_DEBUG("connection status: %ld", pkgInfoPtr->httpRespCode);
@@ -488,88 +624,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
 
 //--------------------------------------------------------------------------------------------------
 /**
- * SetFwUpdateState callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateState
-(
-    lwm2mcore_FwUpdateState_t updateState
-)
-{
-    le_result_t result;
-
-    result = packageDownloader_SetFwUpdateState(updateState);
-    if (LE_OK != result)
-    {
-        return DWL_FAULT;
-    }
-
-    return DWL_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * SetFwUpdateResult callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_SetFwUpdateResult
-(
-    lwm2mcore_FwUpdateResult_t updateResult
-)
-{
-    le_result_t result;
-
-    result = packageDownloader_SetFwUpdateResult(updateResult);
-    if (LE_OK != result)
-    {
-        return DWL_FAULT;
-    }
-
-    return DWL_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Download user agreement callback function definition
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t pkgDwlCb_UserAgreement
-(
-    uint32_t pkgSize        ///< Package size
-)
-{
-    le_result_t result;
-    lwm2mcore_DwlResult_t dwlResult = DWL_OK;
-
-    // Check if download is not already aborted by an error during the Store thread initialization
-    if (true == packageDownloader_CurrentDownloadToAbort())
-    {
-        return DWL_FAULT;
-    }
-
-    result = avcServer_QueryDownload(lwm2mcore_PackageDownloaderAcceptDownload, pkgSize);
-
-    // Get user agreement before starting package download
-    if (LE_FAULT == result)
-    {
-        LE_ERROR("Unexpected error in Query Download.");
-        dwlResult = DWL_FAULT;
-    }
-    else if (LE_OK == result)
-    {
-        LE_DEBUG("Download accepted");
-    }
-    else
-    {
-        LE_DEBUG("Download deferred");
-    }
-
-    return dwlResult;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Download callback function definition
+ * Download callback function
  *
  * This implements a HTTP/S download starting at startOffset.
  *
@@ -583,19 +638,24 @@ lwm2mcore_DwlResult_t pkgDwlCb_UserAgreement
  * second attempt: it'll wait for 2^1 = 2 seconds
  * third attempt: it'll wait for 2^2 = 4 seconds
  * ...
- * In the case of a sucessful retry, the count is reinitialized.
- * eg:
+ * In the case of a successful retry, the count is reinitialized.
+ * e.g.:
  * first attempt: wait for 1 second, retry failed
  * second attempt: wait for 2 seconds, retry failed
- * third attempt: wait for 4 seconds, retry succeded
+ * third attempt: wait for 4 seconds, retry succeeded
  * sometime later the download fails again
  * first attempt: wait for 1 second ...
+ *
+ * @return
+ *      - DWL_OK        The function succeeded
+ *      - DWL_SUSPENDED The download is suspended
+ *      - DWL_FAULT     The function failed
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_Download
 (
-    uint64_t    startOffset,
-    void*       ctxPtr
+    uint64_t    startOffset,    ///< [IN] Start offset for the download
+    void*       ctxPtr          ///< [IN] Context pointer
 )
 {
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
@@ -614,6 +674,9 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOBODY, 0L);
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, Write);
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEDATA, (void *)pkgPtr);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_XFERINFOFUNCTION, Progress);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_XFERINFODATA, (void *)pkgPtr);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOPROGRESS, 0L);
 
     // Start download at offset given by startOffset
     if (startOffset)
@@ -624,12 +687,6 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
         pkgPtr->size = (size_t)startOffset;
     }
 
-    if (dwlCtxPtr->semRef)
-    {
-        // Indicate to store thread that the download really starts
-        le_sem_Post(dwlCtxPtr->semRef);
-    }
-
     while (retry < DWL_RETRIES)
     {
         LE_INFO("attempt %d", retry);
@@ -638,6 +695,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
         switch (rc)
         {
             case CURLE_OK:
+            case CURLE_ABORTED_BY_CALLBACK:
                 retry = DWL_RETRIES;
                 break;
             case CURLE_COULDNT_RESOLVE_PROXY:
@@ -682,14 +740,18 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
 
 //--------------------------------------------------------------------------------------------------
 /**
- * StoreRange callback function definition
+ * Store range callback function
+ *
+ * @return
+ *      - DWL_OK        The function succeeded
+ *      - DWL_FAULT     The function failed
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_StoreRange
 (
-    uint8_t* bufPtr,
-    size_t   bufSize,
-    void*    ctxPtr
+    uint8_t* bufPtr,    ///< [IN] Pointer on data to store
+    size_t   bufSize,   ///< [IN] Size of the data to store
+    void*    ctxPtr     ///< [IN] Context pointer
 )
 {
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
@@ -701,13 +763,25 @@ lwm2mcore_DwlResult_t pkgDwlCb_StoreRange
 
     if (-1 == count)
     {
-        LE_ERROR("failed to write to fifo: %m");
-        return DWL_FAULT;
+        // Check if the error is not caused by an error in the FW update process,
+        // which would have closed the pipe.
+        if ((errno == EPIPE) && (true == packageDownloader_CheckDownloadToAbort()))
+        {
+            LE_WARN("Download aborted by FW update process");
+            // No error returned, the package downloader will be stopped
+            // through the progress callback.
+            return DWL_OK;
+        }
+        else
+        {
+            LE_ERROR("Failed to write to fifo: %m");
+            return DWL_FAULT;
+        }
     }
 
     if (bufSize > count)
     {
-        LE_ERROR("failed to write data: size %zu, count %zd", bufSize, count);
+        LE_ERROR("Failed to write data: size %zu, count %zd", bufSize, count);
         return DWL_FAULT;
     }
 
@@ -716,24 +790,21 @@ lwm2mcore_DwlResult_t pkgDwlCb_StoreRange
 
 //--------------------------------------------------------------------------------------------------
 /**
- * EndDownload callback function definition
+ * End download callback function
+ *
+ * @return
+ *      - DWL_OK        The function succeeded
+ *      - DWL_FAULT     The function failed
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_EndDownload
 (
-    void* ctxPtr
+    void* ctxPtr    ///< [IN] Context pointer
 )
 {
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
 
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)ctxPtr;
-
-    if (dwlCtxPtr->semRef)
-    {
-        // Post the semaphore synchronizing download and store threads: if the download was aborted
-        // before it really started, it should not block the store thread.
-        le_sem_Post(dwlCtxPtr->semRef);
-    }
 
     // Clean up the curl context only if it was previously set
     if (NULL != dwlCtxPtr->ctxPtr)

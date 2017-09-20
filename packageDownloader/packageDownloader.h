@@ -25,12 +25,10 @@ typedef struct
     int              downloadFd;            ///< Download FIFO file descriptor
     void*            ctxPtr;                ///< Context pointer
     le_thread_Ref_t  mainRef;               ///< Main thread reference
-    le_thread_Ref_t  storeRef;              ///< Store thread reference
     const char*      certPtr;               ///< PEM certificate path
     void (*downloadPackage)(void *ctxPtr);  ///< Download package callback
     void (*storePackage)(void *ctxPtr);     ///< Store package callback
     bool             resume;                ///< Indicates if it is a download resume
-    le_sem_Ref_t     semRef;                ///< Semaphore synchronizing download and store for FOTA
 }
 packageDownloader_DownloadCtx_t;
 
@@ -194,27 +192,11 @@ le_result_t packageDownloader_GetSwUpdateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Download package thread function
- */
-//--------------------------------------------------------------------------------------------------
-void* packageDownloader_DownloadPackage
-(
-    void* ctxPtr    ///< Context pointer
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Store FW package thread function
- */
-//--------------------------------------------------------------------------------------------------
-void* packageDownloader_StoreFwPackage
-(
-    void* ctxPtr    ///< Context pointer
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Download and store a package
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_StartDownload
@@ -227,6 +209,10 @@ le_result_t packageDownloader_StartDownload
 //--------------------------------------------------------------------------------------------------
 /**
  * Abort a package download
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_AbortDownload
@@ -237,9 +223,13 @@ le_result_t packageDownloader_AbortDownload
 //--------------------------------------------------------------------------------------------------
 /**
  * Check if the current download should be aborted
+ *
+ * @return
+ *      True    Download abort is requested
+ *      False   Download can continue
  */
 //--------------------------------------------------------------------------------------------------
-bool packageDownloader_CurrentDownloadToAbort
+bool packageDownloader_CheckDownloadToAbort
 (
     void
 );
@@ -247,6 +237,10 @@ bool packageDownloader_CurrentDownloadToAbort
 //--------------------------------------------------------------------------------------------------
 /**
  * Check if the current download should be suspended
+ *
+ * @return
+ *      True    Download suspend is requested
+ *      False   Download can continue
  */
 //--------------------------------------------------------------------------------------------------
 bool packageDownloader_CheckDownloadToSuspend
@@ -370,6 +364,22 @@ le_result_t packageDownloader_BytesLeftToDownload
                                 ///<       data if suspend state was LE_AVC_DOWNLOAD_PENDING,
                                 ///<       LE_DOWNLOAD_IN_PROGRESS or LE_DOWNLOAD_COMPLETE.
                                 ///<       Otherwise undefined.
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Request user agreement before starting a download
+ *
+ * @return
+ *      None
+ */
+//--------------------------------------------------------------------------------------------------
+void packageDownloader_GetDownloadAgreement
+(
+    uint64_t               bytesToDownload,     ///< [IN] Number of bytes to download
+    lwm2mcore_UpdateType_t type,                ///< [IN] Update type (FW/SW)
+    const char*            uriPtr,              ///< [IN] Update package URI
+    bool                   resume               ///< [IN] Is it a download resume?
 );
 
 #endif /*_PACKAGEDOWNLOADER_H */
