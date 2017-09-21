@@ -20,6 +20,20 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Maximum number of bits an unsigned integer can hold
+ */
+//--------------------------------------------------------------------------------------------------
+#define UINT_MAX_BITS                   32
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Number of milliseconds in a second
+ */
+//--------------------------------------------------------------------------------------------------
+#define SECS_TO_MSECS                   1000
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Value of 1 mebibyte in bytes
  */
 //--------------------------------------------------------------------------------------------------
@@ -50,6 +64,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Number of download retries in case an error occurs
+ */
+//--------------------------------------------------------------------------------------------------
+#define DWL_RETRIES                     5
+
+//--------------------------------------------------------------------------------------------------
+/**
  * HTTP status codes
  */
 //--------------------------------------------------------------------------------------------------
@@ -63,7 +84,7 @@
  * Max string buffer size
  */
 //--------------------------------------------------------------------------------------------------
-#define BUF_SIZE  512
+#define BUF_SIZE                        512
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -85,9 +106,11 @@ PackageInfo_t;
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    CURL*           curlPtr;    ///< curl pointer
-    const char*     uriPtr;     ///< package URI pointer
-    PackageInfo_t   pkgInfo;    ///< package information
+    CURL*                   curlPtr;    ///< curl pointer
+    const char*             uriPtr;     ///< package URI pointer
+    PackageInfo_t           pkgInfo;    ///< package information
+    size_t                  size;       ///< package current size
+    lwm2mcore_DwlResult_t   result;     ///< download result
 }
 Package_t;
 
@@ -97,24 +120,6 @@ Package_t;
  */
 //--------------------------------------------------------------------------------------------------
 static long HttpRespCode = LE_AVC_HTTP_STATUS_INVALID;
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Dummy write callback
- */
-//--------------------------------------------------------------------------------------------------
-static size_t WriteDummy
-(
-    void*   contentsPtr,
-    size_t  size,
-    size_t  nmemb,
-    void*   streamPtr
-)
-{
-    size_t count = size * nmemb;
-
-    return count;
-}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -130,11 +135,11 @@ static size_t Write
 )
 {
     size_t count = size * nmemb;
-    lwm2mcore_DwlResult_t *result;
+    Package_t *pkgPtr;
 
 
-    result = (lwm2mcore_DwlResult_t *)contextPtr;
-    *result = DWL_FAULT;
+    pkgPtr = (Package_t *)contextPtr;
+    pkgPtr->result = DWL_FAULT;
 
     // Check if the download should be aborted
     if (true == packageDownloader_CurrentDownloadToAbort())
@@ -147,7 +152,7 @@ static size_t Write
     if (true == packageDownloader_CheckDownloadToSuspend())
     {
         LE_ERROR("Download suspended");
-        *result = DWL_OK;
+        pkgPtr->result = DWL_OK;
         return 0;
     }
 
@@ -160,8 +165,10 @@ static size_t Write
 
     if (count)
     {
-        *result = DWL_OK;
+        pkgPtr->result = DWL_OK;
     }
+
+    pkgPtr->size += count;
 
     return count;
 }
@@ -219,7 +226,7 @@ static int GetDownloadInfo
 
     // just get the header, will always succeed
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOBODY, 1L);
-    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, WriteDummy);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, NULL);
 
     // perform the download operation
     rc = curl_easy_perform(pkgPtr->curlPtr);
@@ -249,6 +256,65 @@ static int GetDownloadInfo
     memcpy(pkgInfoPtr->curlVersion, curl_version(), BUF_SIZE);
 
     return 0;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * A simple function to calculate the power of an unsigned integer to an unsigned integer
+ */
+//--------------------------------------------------------------------------------------------------
+static unsigned Power
+(
+    unsigned base,
+    unsigned exponent
+)
+{
+    unsigned result = 1;
+
+    if (UINT_MAX_BITS <= exponent)
+    {
+        return UINT_MAX;
+    }
+
+    while (exponent--)
+    {
+        result *= base;
+    }
+
+    return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * This function waits for s seconds before returning
+ */
+//--------------------------------------------------------------------------------------------------
+static void Wait
+(
+    unsigned s
+)
+{
+    int rc;
+    struct timespec req, rem;
+
+    req.tv_sec = s;
+    req.tv_nsec = 0;
+
+    do
+    {
+        LE_DEBUG("waiting for %zus, %ldns", req.tv_sec, req.tv_nsec);
+        rc = nanosleep(&req, &rem);
+        if (-1 == rc)
+        {
+            if (EINTR != errno)
+            {
+                LE_ERROR("nanosleep(): %m");
+                return;
+            }
+            LE_DEBUG("remaining time %zus, %ldns\n", rem.tv_sec, rem.tv_nsec);
+            req = rem;
+        }
+    } while (rc);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -504,6 +570,26 @@ lwm2mcore_DwlResult_t pkgDwlCb_UserAgreement
 //--------------------------------------------------------------------------------------------------
 /**
  * Download callback function definition
+ *
+ * This implements a HTTP/S download starting at startOffset.
+ *
+ * In case of a proxy resolving issue, a host resolving issue, a failure to connect, or an operation
+ * timeout it will retry for DWL_RETRIES and exit with DWL_FAIL in case of an unsuccessful retry
+ * otherwise it reinitializes the retry count, continues to download and returns DWL_OK when done.
+ *
+ * Each time an issue happens it will wait for 2^(retry-1) seconds before retrying to download
+ * e.g:
+ * first attempt: it'll wait for 2^0 = 1 second
+ * second attempt: it'll wait for 2^1 = 2 seconds
+ * third attempt: it'll wait for 2^2 = 4 seconds
+ * ...
+ * In the case of a sucessful retry, the count is reinitialized.
+ * eg:
+ * first attempt: wait for 1 second, retry failed
+ * second attempt: wait for 2 seconds, retry failed
+ * third attempt: wait for 4 seconds, retry succeded
+ * sometime later the download fails again
+ * first attempt: wait for 1 second ...
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_DwlResult_t pkgDwlCb_Download
@@ -515,21 +601,27 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
     Package_t* pkgPtr;
     CURLcode rc;
-    static lwm2mcore_DwlResult_t result;
+    int retry = 0;
+    long osErrno;
+    char buf[BUF_SIZE];
+    size_t size = 0;
 
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)ctxPtr;
     pkgPtr = (Package_t*)dwlCtxPtr->ctxPtr;
 
+    pkgPtr->size = 0;
+
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOBODY, 0L);
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, Write);
-    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEDATA, (void *)&result);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEDATA, (void *)pkgPtr);
 
     // Start download at offset given by startOffset
     if (startOffset)
     {
-        char buf[BUF_SIZE];
+        memset(buf, 0, BUF_SIZE);
         snprintf(buf, BUF_SIZE, "%llu-", (unsigned long long)startOffset);
         curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_RANGE, buf);
+        pkgPtr->size = (size_t)startOffset;
     }
 
     if (dwlCtxPtr->semRef)
@@ -538,29 +630,54 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
         le_sem_Post(dwlCtxPtr->semRef);
     }
 
-    // perform download operation
-    rc = curl_easy_perform(pkgPtr->curlPtr);
-    if (rc == CURLE_OPERATION_TIMEDOUT)
+    while (retry < DWL_RETRIES)
     {
-        LE_ERROR("Curl connection or download timeout : %s", curl_easy_strerror(rc));
-        LE_DEBUG("Curl connection timeout : %d (seconds)", CURL_CONNECT_TIMEOUT_SECONDS);
-        LE_DEBUG("Curl low speed limit : %d (bytes/second)", CURL_MINIMUM_SPEED);
-        LE_DEBUG("Curl low speed time : %d (seconds)", CURL_TIMEOUT_SECONDS);
-        return -1;
-    }
-    else if (CURLE_OK != rc)
-    {
-        LE_ERROR("failed to perform curl request: %s", curl_easy_strerror(rc));
-        return -1;
+        LE_INFO("attempt %d", retry);
+        // perform download operation
+        rc = curl_easy_perform(pkgPtr->curlPtr);
+        switch (rc)
+        {
+            case CURLE_OK:
+                retry = DWL_RETRIES;
+                break;
+            case CURLE_COULDNT_RESOLVE_PROXY:
+            case CURLE_COULDNT_RESOLVE_HOST:
+            case CURLE_OPERATION_TIMEDOUT:
+            case CURLE_RECV_ERROR:
+                retry++;
+                break;
+            case CURLE_COULDNT_CONNECT:
+                curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_OS_ERRNO, &osErrno);
+                (ECONNREFUSED == osErrno)?retry++:(retry = DWL_RETRIES);
+                break;
+            default:
+                LE_ERROR("failed to perform curl request: %s", curl_easy_strerror(rc));
+                retry = DWL_RETRIES;
+                break;
+        }
+
+        if (DWL_RETRIES > retry)
+        {
+            LE_ERROR("failed to perform curl request: %s", curl_easy_strerror(rc));
+            if (size != pkgPtr->size)
+            {
+                retry = 1;
+            }
+            size = pkgPtr->size;
+            memset(buf, 0, BUF_SIZE);
+            snprintf(buf, BUF_SIZE, "%zu-", pkgPtr->size);
+            curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_RANGE, buf);
+            Wait(Power(2, retry - 1));
+        }
+
+        rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_RESPONSE_CODE, &HttpRespCode);
+        if (CURLE_OK != rc)
+        {
+            LE_WARN("failed to get response code: %s", curl_easy_strerror(rc));
+        }
     }
 
-    rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_RESPONSE_CODE, &HttpRespCode);
-    if (CURLE_OK != rc)
-    {
-        LE_WARN("failed to get response code: %s", curl_easy_strerror(rc));
-    }
-
-    return result;
+    return pkgPtr->result;
 }
 
 //--------------------------------------------------------------------------------------------------
