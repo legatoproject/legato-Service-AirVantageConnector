@@ -1720,7 +1720,7 @@ static void PrepareDownloadDirectory
 
 //-------------------------------------------------------------------------------------------------
 /**
- * Stores update file to temporary location.
+ * Starts storing update file to temporary location.
  *
  * @return
  *      - LE_OK if accepted
@@ -1730,7 +1730,6 @@ static void PrepareDownloadDirectory
 //-------------------------------------------------------------------------------------------------
 static le_result_t StartStoringPackage
 (
-    int clientFd,   ///<[IN] Open file descriptor from which the update can be read.
     bool isResume   ///<[IN] Resume the previously interrupted operation.
 )
 {
@@ -1804,11 +1803,10 @@ static le_result_t StartStoringPackage
     // Total count should begin from the stored offset for resume.
     TotalCount = offset;
 
-    // Set fd as non blocking
-    fd_SetNonBlocking(clientFd);
+    // Set read fd as non blocking
+    fd_SetNonBlocking(UpdateReadFd);
 
     // Create FD monitor for the input FD
-    UpdateReadFd = clientFd;
     StoreFdMonitor = le_fdMonitor_Create("store", UpdateReadFd, StoreFdEventHandler, POLLIN);
 
     return LE_OK;
@@ -1857,17 +1855,17 @@ static void DownloadHandler
     }
 
     // Open read pipe
-    fd = open(dwlCtxPtr->fifoPtr, O_RDONLY, 0);
+    UpdateReadFd = open(dwlCtxPtr->fifoPtr, O_RDONLY, 0);
     LE_DEBUG("Opened fifo");
 
-    if (-1 == fd)
+    if (-1 == UpdateReadFd)
     {
         LE_ERROR("failed to open fifo %m");
         return;
     }
 
     LE_DEBUG("Start storing the downloaded package.");
-    result = StartStoringPackage(fd, dwlCtxPtr->resume);
+    result = StartStoringPackage(dwlCtxPtr->resume);
 
     if (LE_OK != result)
     {
@@ -1880,13 +1878,8 @@ static void DownloadHandler
         CurrentObj9 = NULL;
 
         StopStoringPackage(LE_FAULT);
-        // Close the fd
-        close(fd);
         return;
     }
-
-    // Close the fd
-    close(fd);
 
 }
 
