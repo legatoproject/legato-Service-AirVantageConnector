@@ -1589,9 +1589,13 @@ static void StopStoringPackage
 //--------------------------------------------------------------------------------------------------
 /**
  * Copy the downloaded bytes to Fd
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
-static void WriteBytesToFd
+static le_result_t WriteBytesToFd
 (
     int fd,                 ///< [IN] FD to write to
     uint8_t *bufferPtr,     ///< [IN] Buffer pointer to Downloaded bytes
@@ -1606,7 +1610,7 @@ static void WriteBytesToFd
     // Write the bytes that we read.
     do
     {
-        writeResult = write(UpdateStoreFd,
+        writeResult = write(fd,
                             bufferPtr + bytesWritten,
                             readCount - bytesWritten);
 
@@ -1624,50 +1628,81 @@ static void WriteBytesToFd
     // Check for errors.
     if (writeResult == -1)
     {
-        LE_ERROR("Failed to write bytes to fd: bytesWritten %d", bytesWritten);
-        StopStoringPackage(LE_FAULT);
+        LE_ERROR("Failed to write bytes to fd (%m). Requested: %d Bytes, Written: %d Bytes",
+                  readCount,
+                  bytesWritten);
+        return LE_FAULT;
     }
     else
     {
         TotalCount += bytesWritten;
+        LE_DEBUG("Bytes written: %zd. Total bytes stored in disk: %zd", bytesWritten, TotalCount);
+        return LE_OK;
     }
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Copy the downloaded bytes from UpdateReadFd to UpdateStoreFd.
+ * Copy the downloaded bytes from update pipe and store it to disk. This function should be called
+ * only when data is available on pipe (example: EPOLLIN event triggered).
+ *
+ * @return
+ *  - LE_OK if some bytes are copied.
+ *  - LE_TERMINATED write end of update pipe is closed.
+ *  - LE_WOULD_BLOCK if no data available on update pipe.
+ *  - LE_FAULT if there is an error.
  */
 //--------------------------------------------------------------------------------------------------
-static ssize_t CopyBytesToFd
+static le_result_t CopyBytesToFd
 (
-    void
+    int readFd,                ///< [IN] File descriptor to read.
+    int storeFd,               ///< [IN] File descriptor to store.
+    ssize_t* bytesCopied       ///< [OUT] Number of bytes copied on success. Undefined otherwise.
 )
 {
     uint8_t buffer[DWL_STORE_BUF_SIZE];
     ssize_t readCount;
 
+    if ((readFd < 0) || (storeFd < 0))
+    {
+        LE_CRIT("Bad file descriptor, readFd: %d, storeFd: %d", readFd, storeFd);
+        return LE_FAULT;
+    }
+
     // Read the bytes, retrying if interrupted by a signal.
     do
     {
-        readCount = read(UpdateReadFd, buffer, sizeof(buffer));
+        readCount = read(readFd, buffer, sizeof(buffer));
     }
     while ((-1 == readCount) && (EINTR == errno));
 
     // Write the bytes read to disk.
     if (0 == readCount)
     {
-        LE_DEBUG("Finished storing; %d bytes stored", TotalCount);
+        // Incurred end of file. Close the Read fd.
+        LE_INFO("Update pipe closed, finished storing; %d bytes stored", TotalCount);
+        return LE_TERMINATED;
     }
     else if (readCount > 0)
     {
-        WriteBytesToFd(UpdateStoreFd, buffer, readCount);
+        if (LE_OK != WriteBytesToFd(storeFd, buffer, readCount))
+        {
+            LE_ERROR("Failed to store downloaded data");
+            return LE_FAULT;
+        }
+        *bytesCopied = readCount;
+        return LE_OK;
     }
     else
-    {
-        // for sonar
+    {   // readCount is negative here. Check errno.
+        if ((EAGAIN == errno) || (EWOULDBLOCK == errno))
+        {
+            LE_DEBUG("No data available on update fd: %d", readFd);
+            return LE_WOULD_BLOCK;
+        }
+        LE_ERROR("Error while reading update fd: %d. %m", readFd);
+        return LE_FAULT;
     }
-
-    return readCount;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1685,7 +1720,15 @@ static void StoreFdEventHandler
     // by the other side and POLLHUP is set.
     if (events & POLLIN)
     {
-        CopyBytesToFd();
+        ssize_t bytesCopied = 0;
+        le_result_t result = CopyBytesToFd(UpdateReadFd, UpdateStoreFd, &bytesCopied);
+
+        if (LE_FAULT == result)
+        {
+            StopStoringPackage(LE_FAULT);
+            return;
+        }
+        LE_DEBUG("result: %s, bytes copied: %zd", LE_RESULT_TXT(result), bytesCopied);
     }
     else if (events & POLLHUP)
     {
@@ -1893,9 +1936,43 @@ static void UnpackStartHandler
      void* contextPtr
 )
 {
-    LE_DEBUG("Stop package store");
-    StopStoringPackage(LE_OK);
+    // Do check whether all data are read from pipe.
+    if (UpdateReadFd != -1)
+    {
+        // Still some data in the pipe. Finish reading it.
+        while (true)
+        {
+            ssize_t bytesCopied = 0;
+            le_result_t result = CopyBytesToFd(UpdateReadFd, UpdateStoreFd, &bytesCopied);
 
+            // This function is only called when download completes, however, there is chance that
+            // download thread still didn't close write end of the pipe. So, consider LE_WOULD_BLOCK
+            // as finished reading update package.
+            if ((LE_TERMINATED == result) || (LE_WOULD_BLOCK == result))
+            {
+                LE_INFO("Finished reading update package. Package size: %zd bytes", TotalCount);
+                StopStoringPackage(LE_OK);
+                break;
+            }
+            else if (LE_OK == result)
+            {
+                LE_DEBUG("Bytes copied: %zd", bytesCopied);
+            }
+            else
+            {
+                LE_ERROR("Failure in storing update package: %s", LE_RESULT_TXT(result));
+                StopStoringPackage(LE_FAULT);
+                return;
+            }
+        }
+    }
+    else
+    {
+        // Update pipe is closed before calling this function. This means POLLHUP is already
+        // received by the fdMonitor event handler function. In this case, there is a chance that
+        // SOTA state may not be updated properly. So, set it properly.
+        StopStoringPackage(LE_OK);
+    }
     LE_DEBUG("Start package unpack");
     avcApp_StartUpdate();
 }
