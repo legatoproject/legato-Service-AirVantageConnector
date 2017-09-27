@@ -655,7 +655,12 @@ static le_result_t AcceptDownloadPackage
         // Connect to the server.
         // When the device is connected, the package download will be launched.
         DownloadAgreement = true;
-        avcClient_Connect();
+        le_result_t result = avcServer_StartSession();
+        if (LE_OK != result)
+        {
+            LE_ERROR("Failed to start a new session");
+            return LE_FAULT;
+        }
     }
 
     return LE_OK;
@@ -2271,6 +2276,32 @@ le_result_t avcServer_RequestSession
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Start a session with the AirVantage server
+ *
+ * @return
+ *      - LE_OK if connection request has been sent.
+ *      - LE_FAULT on failure
+ *      - LE_DUPLICATE if already connected.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcServer_StartSession
+(
+    void
+)
+{
+    le_result_t result = avcClient_Connect();
+
+    if (LE_BUSY == result)  // Retry timer is active
+    {
+        avcClient_ResetRetryTimer();
+        return avcClient_Connect();
+    }
+
+    return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Request the avcServer to close a AV session.
  *
  * @return
@@ -2504,7 +2535,6 @@ void le_avc_RemoveSessionRequestEventHandler
  *      - LE_OK if connection request has been sent.
  *      - LE_FAULT on failure
  *      - LE_DUPLICATE if already connected.
- *      - LE_BUSY if currently retrying.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_StartSession
@@ -2513,7 +2543,7 @@ le_result_t le_avc_StartSession
 )
 {
     StopDeferTimer(LE_AVC_USER_AGREEMENT_CONNECTION);
-    return avcClient_Connect();
+    return avcServer_StartSession();
 }
 
 //--------------------------------------------------------------------------------------------------

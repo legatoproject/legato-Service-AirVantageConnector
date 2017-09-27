@@ -214,6 +214,21 @@ LE_SHARED void avcServer_UpdateHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Start a session with the AirVantage server
+ *
+ * @return
+ *      - LE_OK if connection request has been sent.
+ *      - LE_FAULT on failure
+ *      - LE_DUPLICATE if already connected.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcServer_StartSession
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Request the avcServer to open a AV session.
  *
  * @return
@@ -225,7 +240,6 @@ LE_SHARED le_result_t avcServer_RequestSession
 (
     void
 );
-
 
 //--------------------------------------------------------------------------------------------------
 /**

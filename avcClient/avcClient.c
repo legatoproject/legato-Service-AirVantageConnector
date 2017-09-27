@@ -954,6 +954,20 @@ void avcClient_StopActivityTimer
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Reset the retry timers by resetting the retrieved reset timer config, and stopping the current
+ * retry timer.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_ResetRetryTimer
+(
+    void
+)
+{
+    ResetRetryTimers();
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Initialization function avcClient. Should be called only once.
  */
 //--------------------------------------------------------------------------------------------------
