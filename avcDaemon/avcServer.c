@@ -3279,8 +3279,15 @@ le_result_t le_avc_GetPollingTimer
         return LE_FAULT;
     }
 
-    // lifetime is in seconds and polling timer is in minutes
-    pollingTimerCfg = lifetime / SECONDS_IN_A_MIN;
+    if (LWM2MCORE_LIFETIME_VALUE_DISABLED == lifetime)
+    {
+        pollingTimerCfg = POLLING_TIMER_DISABLED;
+    }
+    else
+    {
+        // lifetime is in seconds and polling timer is in minutes
+        pollingTimerCfg = lifetime / SECONDS_IN_A_MIN;
+    }
 
     // check if it this configuration is allowed
     if ((pollingTimerCfg < LE_AVC_POLLING_TIMER_MIN_VAL) ||
