@@ -102,20 +102,6 @@ sources:
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/transaction.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/uri.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/utils.c
-
-    // tinyDTLS
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/dtls.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/crypto.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/ccm.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/hmac.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/dtls_debug.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/netq.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/peer.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/dtls_time.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/session.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/sha2/sha2.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/aes/rijndael.c
-    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/ecc/ecc.c
 }
 
 cflags:
@@ -133,7 +119,6 @@ cflags:
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader
-    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/er-coap-13
     -DLWM2M_CLIENT_MODE
