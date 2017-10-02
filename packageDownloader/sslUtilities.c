@@ -142,16 +142,16 @@ static int ConvertDERToPEM
         goto bio_err;
     }
 
-    if (memPtr->num_write > pemKeyLen)
+    if (BIO_number_written(memPtr) > pemKeyLen)
     {
         LE_ERROR("not enough space to hold the key");
         goto bio_err;
     }
 
-    memset(pemKeyPtr, 0, memPtr->num_write + 1);
+    memset(pemKeyPtr, 0, BIO_number_written(memPtr) + 1);
 
-    count = BIO_read(memPtr, pemKeyPtr, memPtr->num_write);
-    if (count < memPtr->num_write)
+    count = BIO_read(memPtr, pemKeyPtr, BIO_number_written(memPtr));
+    if (count < BIO_number_written(memPtr))
     {
         LE_ERROR("failed to read certificate: count (%d): %d", count, ERR_get_error());
         goto pem_err;
@@ -163,7 +163,7 @@ static int ConvertDERToPEM
     return count;
 
 pem_err:
-    memset(pemKeyPtr, 0, memPtr->num_write + 1);
+    memset(pemKeyPtr, 0, BIO_number_written(memPtr) + 1);
 bio_err:
     BIO_free(memPtr);
 x509_err:
