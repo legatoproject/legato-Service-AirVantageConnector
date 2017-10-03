@@ -1159,7 +1159,7 @@ static void UpdateProgressHandler
                                    -1,
                                    100,
                                    LE_AVC_ERR_NONE);
-            avcServer_RequestConnection(LE_AVC_APPLICATION_UPDATE);
+            avcServer_QueryConnection(LE_AVC_APPLICATION_UPDATE);
             le_update_End();
             break;
 
@@ -1197,7 +1197,7 @@ static void UpdateProgressHandler
             // function (otherwise, SetObj9State() may call le_update_End() again if it notices
             // installation failure).
             UpdateStarted = false;
-            avcServer_RequestConnection(LE_AVC_APPLICATION_UPDATE);
+            avcServer_QueryConnection(LE_AVC_APPLICATION_UPDATE);
             le_update_End();
 
             SetObj9State(CurrentObj9,
@@ -2016,137 +2016,119 @@ static void InstallResumeHandler
  *  Restore the state of the AVC update process after reboot or session start
  */
 //--------------------------------------------------------------------------------------------------
-static void SotaResume
+static void SotaRestore
 (
     void
 )
 {
     int instanceId = -1;
-    char uri[MAX_FILE_PATH_BYTES];
     lwm2mcore_SwUpdateState_t restoreState;
     lwm2mcore_SwUpdateResult_t restoreResult;
     avcApp_InternalState_t internalState;
     assetData_InstanceDataRef_t instanceRef;
-    le_result_t result;
-    lwm2mcore_UpdateType_t updateType;
 
-    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
-    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
-
-    if ((LE_OK == GetSwUpdateState(&restoreState))
-        && (LE_OK == GetSwUpdateResult(&restoreResult))
-        && (LE_OK == GetSwUpdateInstanceId(&instanceId))
-        && (LE_OK == GetSwUpdateInternalState(&internalState)))
+    if (   (LE_OK != GetSwUpdateState(&restoreState))
+        || (LE_OK != GetSwUpdateResult(&restoreResult))
+        || (LE_OK != GetSwUpdateInstanceId(&instanceId))
+        || (LE_OK != GetSwUpdateInternalState(&internalState)))
     {
-        LE_PRINT_VALUE("%i", instanceId);
-        LE_PRINT_VALUE("%i", restoreState);
-        LE_PRINT_VALUE("%i", restoreResult);
+        LE_WARN("Unable to retrieve SW update data");
+        return;
+    }
 
-        if (instanceId == -1)
-        {
-            LE_DEBUG("Instance ID invalid");
-            return;
-        }
+    if (-1 == instanceId)
+    {
+        LE_WARN("Invalid Instance ID");
+        return;
+    }
 
-        if (assetData_GetInstanceRefById(LWM2M_NAME,
-                                         LWM2M_OBJ9,
-                                         instanceId,
-                                         &instanceRef) == LE_OK)
-        {
-            LE_DEBUG("Object 9 instance exists.");
-        }
-        else
-        {
-            LE_DEBUG("Create a new object 9 instance.");
-            LE_ASSERT_OK(assetData_CreateInstanceById(LWM2M_NAME,
-                                         LWM2M_OBJ9, instanceId, &instanceRef));
-        }
+    LE_PRINT_VALUE("%d", restoreState);
+    LE_PRINT_VALUE("%d", restoreResult);
+    LE_PRINT_VALUE("%i", instanceId);
+    LE_PRINT_VALUE("%d", internalState);
 
-        // Restore the state of Object9
-        SetObj9State(instanceRef, restoreState, restoreResult);
+    if (LE_OK == assetData_GetInstanceRefById(LWM2M_NAME, LWM2M_OBJ9, instanceId, &instanceRef))
+    {
+        LE_DEBUG("Object 9 instance exists.");
+    }
+    else
+    {
+        LE_DEBUG("Create a new object 9 instance.");
+        LE_ASSERT_OK(assetData_CreateInstanceById(LWM2M_NAME,
+                                                  LWM2M_OBJ9,
+                                                  instanceId,
+                                                  &instanceRef));
+    }
 
-        // Notify lwm2mcore that a new instance is created.
-        NotifyObj9List();
+    // Restore the state of Object9
+    SetObj9State(instanceRef, restoreState, restoreResult);
 
-        // Force the type of the install to application install.
-        avcServer_SetUpdateType(LE_AVC_APPLICATION_UPDATE);
+    // Notify lwm2mcore that a new instance is created.
+    NotifyObj9List();
 
-        switch (restoreState)
-        {
-            case LWM2MCORE_SW_UPDATE_STATE_INITIAL:
-                if (internalState == INTERNAL_STATE_DOWNLOAD_REQUESTED)
-                {
-                    // Download requested from server but was not accepted yet by user. So we
-                    // start a fresh download and wait for user agreement again.
-                    LE_INFO("Resuming Download");
-                    CurrentObj9 = instanceRef;
-                }
-                break;
-
-            case LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED:
-                // Download accepted by user and in progress. This case is handled
-                // by package downloader.
+    switch (restoreState)
+    {
+        case LWM2MCORE_SW_UPDATE_STATE_INITIAL:
+            if (INTERNAL_STATE_DOWNLOAD_REQUESTED == internalState)
+            {
+                // Download requested from server but was not accepted yet by user.
+                // Restore the object 9 reference, the download will be resumed by the check
+                // of pending notifications.
                 CurrentObj9 = instanceRef;
-                break;
+            }
+            break;
 
-            case LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED:
-                // Start unpacking the downloaded package and wait for install command from server
-                CurrentObj9 = instanceRef;
-                result = avcApp_StartUpdate();
+        case LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED:
+            // Download accepted by user and in progress.
+            // Restore the object 9 reference, the download will be resumed by the check
+            // of pending notifications.
+            CurrentObj9 = instanceRef;
+            break;
 
-                if (LE_OK != result)
+        case LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED:
+            // Start unpacking the downloaded package and wait for install command from server
+            CurrentObj9 = instanceRef;
+            if (LE_OK != avcApp_StartUpdate())
+            {
+                LE_ERROR("Failed to resume unpack");
+                DeletePackage();
+            }
+            break;
+
+        case LWM2MCORE_SW_UPDATE_STATE_DELIVERED:
+            // If we got interrupted after receiving the install command from the server,
+            // we will restart the install process, else we will wait for the server to
+            // send O9F_INSTALL
+            CurrentObj9 = instanceRef;
+
+            if (INTERNAL_STATE_INSTALL_REQUESTED != internalState)
+            {
+                // Upon reboot of the board, start program deletes all the apps/system
+                // installation intermediate directory. So SOTA package stored by avcDaemon
+                // should be streamed to updateDaemon again.
+                if (LE_OK != avcApp_StartUpdate())
                 {
                     LE_ERROR("Failed to resume unpack");
                     DeletePackage();
                 }
-                break;
+            }
+            break;
 
-            case LWM2MCORE_SW_UPDATE_STATE_DELIVERED:
-                // If we got interrupted after receiving the install command from the server,
-                // we will restart the install process, else we will wait for the server to
-                // send O9F_INSTALL
+        case LWM2MCORE_SW_UPDATE_STATE_INSTALLED:
+            if (INTERNAL_STATE_UNINSTALL_REQUESTED == internalState)
+            {
+                // Uninstall requested from server but was not accepted yet by user.
+                // Restore the object 9 reference, the uninstall will be resumed by the check
+                // of pending notifications.
                 CurrentObj9 = instanceRef;
+            }
+            break;
 
-                if (internalState == INTERNAL_STATE_INSTALL_REQUESTED)
-                {
-
-                    LE_INFO("Resuming unpack and install.");
-
-                    // Query control app for permission to install.
-                    avcServer_QueryInstall(LaunchSwUpdate, LWM2MCORE_SW_UPDATE_TYPE, instanceId);
-                }
-                else
-                {
-                    // Upon reboot of the board, start program deletes all the apps/system
-                    // installation intermediate directory. So SOTA package stored by avcDaemon
-                    // should be streamed to updateDaemon again.
-                    result = avcApp_StartUpdate();
-
-                    if (LE_OK != result)
-                    {
-                        LE_ERROR("Failed to resume unpack");
-                        DeletePackage();
-                    }
-                }
-                break;
-
-            case LWM2MCORE_SW_UPDATE_STATE_INSTALLED:
-                if (internalState == INTERNAL_STATE_UNINSTALL_REQUESTED)
-                {
-                    CurrentObj9 = instanceRef;
-                    LE_INFO("Resuming Uninstall.");
-
-                    avcServer_QueryUninstall(avcApp_PrepareUninstall, instanceId);
-                }
-                break;
-
-            default:
-                LE_ERROR("Invalid Object 9 state");
-                break;
-        }
+        default:
+            LE_ERROR("Invalid Object 9 state");
+            break;
     }
 }
-
 
 //--------------------------------------------------------------------------------------------------
 // Public functions
@@ -3205,8 +3187,8 @@ le_result_t avcApp_SaveSwUpdateStateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
- *  Send a list of object 9 instances currently managed by legato to lwm2mcore
-  */
+ * Send a list of object 9 instances currently managed by legato to lwm2mcore
+ */
 //--------------------------------------------------------------------------------------------------
 void avcApp_NotifyObj9List
 (
@@ -3214,6 +3196,71 @@ void avcApp_NotifyObj9List
 )
 {
     NotifyObj9List();
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if there is a software update related notification to send after a reboot
+ * or a service restart.
+ *
+ * @return
+ *      - LE_OK     No notification to send
+ *      - LE_BUSY   Notification sent
+ *      - LE_FAULT  An error occurred
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_CheckNotificationToSend
+(
+    void
+)
+{
+    int instanceId = -1;
+    lwm2mcore_SwUpdateState_t restoreState;
+    lwm2mcore_SwUpdateResult_t restoreResult;
+    avcApp_InternalState_t internalState;
+    assetData_InstanceDataRef_t instanceRef;
+
+    if (   (LE_OK != GetSwUpdateState(&restoreState))
+        || (LE_OK != GetSwUpdateResult(&restoreResult))
+        || (LE_OK != GetSwUpdateInstanceId(&instanceId))
+        || (LE_OK != GetSwUpdateInternalState(&internalState)))
+    {
+        LE_WARN("Unable to retrieve SW update data");
+        return LE_FAULT;
+    }
+
+    if (-1 == instanceId)
+    {
+        LE_WARN("Invalid Instance ID");
+        return LE_FAULT;
+    }
+
+    LE_PRINT_VALUE("%d", restoreState);
+    LE_PRINT_VALUE("%d", restoreResult);
+    LE_PRINT_VALUE("%i", instanceId);
+    LE_PRINT_VALUE("%d", internalState);
+
+    if (   (LWM2MCORE_SW_UPDATE_STATE_DELIVERED == restoreState)
+        && (INTERNAL_STATE_INSTALL_REQUESTED == internalState))
+    {
+        LE_INFO("Resuming application install");
+
+        // Query permission to install
+        avcServer_QueryInstall(LaunchSwUpdate, LWM2MCORE_SW_UPDATE_TYPE, instanceId);
+        return LE_BUSY;
+    }
+
+    if (   (LWM2MCORE_SW_UPDATE_STATE_INSTALLED == restoreState)
+        && (INTERNAL_STATE_UNINSTALL_REQUESTED == internalState))
+    {
+        LE_INFO("Resuming application uninstall");
+
+        // Query permission to uninstall
+        avcServer_QueryUninstall(avcApp_PrepareUninstall, instanceId);
+        return LE_BUSY;
+    }
+
+    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -3249,6 +3296,6 @@ void avcApp_Init
 
     PopulateAppInfoObjects();
 
-    // Resume SOTA
-    SotaResume();
+    // Restore SOTA data
+    SotaRestore();
 }

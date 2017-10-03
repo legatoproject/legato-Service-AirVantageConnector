@@ -175,10 +175,11 @@ static void StartDownloadTimerExpiryHandler
     }
 
     // Request user agreement before proceeding with download
-    packageDownloader_GetDownloadAgreement(packageSize,
-                                           startDwlCtxPtr->type,
-                                           startDwlCtxPtr->uri,
-                                           false);
+    avcServer_QueryDownload(packageDownloader_StartDownload,
+                            packageSize,
+                            startDwlCtxPtr->type,
+                            startDwlCtxPtr->uri,
+                            false);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -570,7 +571,7 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdateResult
                 // to true to notify control app that a connection to server is required to inform
                 // the firmware update result. Now set this flag to false as request from server to
                 // read firmware update result succeeds.
-                packageDownloader_SetFwUpdateNotification(false);
+                packageDownloader_SetFwUpdateNotification(false, LE_AVC_NO_UPDATE, LE_AVC_ERR_NONE);
                 LE_DEBUG("updateResult : %d", *updateResultPtr);
             }
             else
@@ -936,91 +937,6 @@ lwm2mcore_Sid_t lwm2mcore_SoftwareUpdateInstance
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Check if the update state/result should be changed after a FW install
- * and update them if necessary
- *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
- *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
- *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
- *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
- *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
- *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetFirmwareUpdateInstallResult
-(
-    void
-)
-{
-    lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
-    lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
-
-    // Check if a FW update was ongoing
-    if (   (LE_OK == packageDownloader_GetFwUpdateState(&fwUpdateState))
-        && (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
-        && (LWM2MCORE_FW_UPDATE_STATE_UPDATING == fwUpdateState)
-        && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult)
-       )
-    {
-        // Retrieve FW update result
-        le_fwupdate_UpdateStatus_t fwUpdateStatus;
-        lwm2mcore_FwUpdateResult_t newFwUpdateResult;
-        char statusStr[LE_FWUPDATE_STATUS_LABEL_LENGTH_MAX];
-
-        if (LE_OK != le_fwupdate_GetUpdateStatus(&fwUpdateStatus, statusStr, sizeof(statusStr)))
-        {
-            LE_ERROR("Error while reading the FW update status");
-            return LWM2MCORE_ERR_GENERAL_ERROR;
-        }
-
-        LE_DEBUG("Update status: %s (%d)", statusStr, fwUpdateStatus);
-
-        // Set the update state to IDLE in all cases
-        if (LE_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE))
-        {
-            LE_ERROR("Error while setting FW update state");
-            return LWM2MCORE_ERR_GENERAL_ERROR;
-        }
-
-        // Set the update result according to the FW update status
-        if (LE_FWUPDATE_UPDATE_STATUS_OK == fwUpdateStatus)
-        {
-            newFwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL;
-            avcServer_UpdateStatus(LE_AVC_INSTALL_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
-                                   -1, -1, LE_AVC_ERR_NONE);
-        }
-        else
-        {
-            le_avc_ErrorCode_t errorCode;
-
-            newFwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_INSTALL_FAILURE;
-            if (LE_FWUPDATE_UPDATE_STATUS_PARTITION_ERROR == fwUpdateStatus)
-            {
-                errorCode = LE_AVC_ERR_BAD_PACKAGE;
-            }
-            else
-            {
-                errorCode = LE_AVC_ERR_INTERNAL;
-            }
-            avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
-                                   -1, -1, errorCode);
-        }
-        packageDownloader_SetFwUpdateNotification(true);
-        LE_DEBUG("Set FW update result to %d", newFwUpdateResult);
-        if (LE_OK != packageDownloader_SetFwUpdateResult(newFwUpdateResult))
-        {
-            LE_ERROR("Error while setting FW update result");
-            return LWM2MCORE_ERR_GENERAL_ERROR;
-        }
-    }
-
-    return LWM2MCORE_ERR_COMPLETED_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Resume a package download if necessary
  *
  * @return
@@ -1076,49 +992,28 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     }
 
     // Request user agreement before proceeding with download
-    packageDownloader_GetDownloadAgreement(numBytesToDownload,
-                                           updateType,
-                                           downloadUri,
-                                           downloadResume);
+    avcServer_QueryDownload(packageDownloader_StartDownload,
+                            numBytesToDownload,
+                            updateType,
+                            downloadUri,
+                            downloadResume);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Resume firmware install if necessary
+ * Resume firmware install
  *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ * @return None
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t ResumeFwInstall
+void ResumeFwInstall
 (
     void
 )
 {
-    le_result_t result;
-    bool isFwInstallPending;
-
-    result = packageDownloader_GetFwUpdateInstallPending(&isFwInstallPending);
-
-    if (LE_OK != result)
-    {
-        LE_ERROR("Error reading FW update install pending status");
-        return LWM2MCORE_ERR_GENERAL_ERROR;
-    }
-
-    if (isFwInstallPending)
-    {
-        avcServer_QueryInstall(LaunchUpdate, LWM2MCORE_FW_UPDATE_TYPE, 0);
-    }
-    else
-    {
-        LE_DEBUG("No FW install to resume");
-    }
-
-    return LWM2MCORE_ERR_COMPLETED_OK;
+    avcServer_QueryInstall(LaunchUpdate, LWM2MCORE_FW_UPDATE_TYPE, 0);
 }
 
 //--------------------------------------------------------------------------------------------------

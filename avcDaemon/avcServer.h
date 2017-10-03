@@ -107,19 +107,6 @@ LE_SHARED void avcServer_QueryUninstall
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set the update type of the currently pending update, used only during restore
- *
- */
-//--------------------------------------------------------------------------------------------------
-LE_SHARED void avcServer_SetUpdateType
-(
-    le_avc_UpdateType_t updateType  ///< [IN]
-);
-
-
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Query the AVC Server if it's okay to proceed with a package download.
  *
  * If a download can't proceed right away, then the handlerRef function will be called when it is
@@ -257,12 +244,15 @@ LE_SHARED le_result_t avcServer_ReleaseSession
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Function to check if the agent needs to connect to the server. For FOTA it should be called
- * only after reboot, and for SOTA it should be called after update finishes. However, this function
- * will request connection to server only if there is no session going on.
+ * Query the AVC Server if it's okay to proceed with a server connection.
+ *
+ * For FOTA it should be called only after reboot, and for SOTA it should be called after the
+ * update finishes. However, this function will request a connection to the server only if there
+ * is no session going on.
+ * If the connection can proceed right away, it will be launched.
  */
 //--------------------------------------------------------------------------------------------------
-void avcServer_RequestConnection
+LE_SHARED void avcServer_QueryConnection
 (
     le_avc_UpdateType_t updateType
 );
