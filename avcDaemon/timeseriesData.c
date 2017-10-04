@@ -323,11 +323,9 @@ static void AddTimestamp
         {
             le_dls_Link_t* linkPtr = le_dls_Peek(&recRef->timestampList);
             le_dls_Link_t* nextLinkPtr = NULL;
-            TimestampData_t* currentTimestampPtr;
 
             while (linkPtr != NULL)
             {
-                currentTimestampPtr = CONTAINER_OF(linkPtr, TimestampData_t, link);
                 nextLinkPtr = le_dls_PeekNext(&recRef->timestampList, linkPtr);
 
                 if (nextLinkPtr != NULL)
@@ -993,7 +991,7 @@ static le_result_t Encode
         recRef->isEncoded = true;
     }
 
-    LE_DEBUG("Encoded size: %d", GetEncodedDataSize(recRef));
+    LE_DEBUG("Encoded size: %zd", GetEncodedDataSize(recRef));
     LE_DUMP(recRef->bufferPtr, GetEncodedDataSize(recRef));
 
     return result;

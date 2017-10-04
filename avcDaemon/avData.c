@@ -16,9 +16,11 @@
 #include "interfaces.h"
 #include "timeseriesData.h"
 #include "avcServer.h"
+#include "avcClient.h"
 #include "le_print.h"
 #include "limit.h"
-
+#include "push.h"
+#include "sessionManager.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -145,7 +147,7 @@ static lwm2mcore_Ref_t AVCClientSessionInstanceRef;
  * AV server request ref.
  */
 //--------------------------------------------------------------------------------------------------
-static lwm2mcore_CoapRequestRef_t AVServerReqRef;
+static lwm2mcore_CoapRequest_t* AVServerReqRef;
 
 
 //--------------------------------------------------------------------------------------------------
@@ -300,7 +302,7 @@ static void ClientCloseSessionHandler
 
     while (le_hashmap_NextNode(iter) == LE_OK)
     {
-        assetPathPtr = le_hashmap_GetKey(iter);
+        assetPathPtr = (char *)le_hashmap_GetKey(iter);
         assetDataPtr = le_hashmap_GetValue(iter);
         if (assetDataPtr->msgRef == sessionRef)
         {
@@ -543,60 +545,6 @@ static bool IsPathChild
 
     return false;
 }
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Dumping an argument list for debugging purposes.
- */
-//--------------------------------------------------------------------------------------------------
-static void DumpArgList
-(
-    le_dls_List_t* argListPtr
-)
-{
-    LE_INFO("#### DUMPING  ARUGMENT LIST ########################################################");
-
-    Argument_t* argPtr = NULL;
-    le_dls_Link_t* argLinkPtr = le_dls_Peek(argListPtr);
-
-    while (argLinkPtr != NULL)
-    {
-        argPtr = CONTAINER_OF(argLinkPtr, Argument_t, link);
-
-        LE_INFO("- arg name:       [%s]", argPtr->argumentName);
-
-        switch (argPtr->argValType)
-        {
-            case LE_AVDATA_DATA_TYPE_NONE:
-                LE_INFO("none");
-                break;
-
-            case LE_AVDATA_DATA_TYPE_INT:
-                LE_INFO("<int> arg val:    [%d]", argPtr->argValue.intValue);
-                break;
-
-            case LE_AVDATA_DATA_TYPE_FLOAT:
-                LE_INFO("<float> arg val:  [%g]", argPtr->argValue.floatValue);
-                break;
-
-            case LE_AVDATA_DATA_TYPE_BOOL:
-                LE_INFO("<bool> arg val:   [%d]", argPtr->argValue.boolValue);
-                break;
-
-            case LE_AVDATA_DATA_TYPE_STRING:
-                LE_INFO("<string> arg val: [%s]", argPtr->argValue.strValuePtr);
-                break;
-
-            default:
-                LE_INFO("invalid");
-        }
-
-        argLinkPtr = le_dls_PeekNext(argListPtr, argLinkPtr);
-    }
-    LE_INFO("#### END OF DUMPING  ARUGMENT LIST #################################################");
-}
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -944,7 +892,8 @@ static void InitResource
 )
 {
     // Convert access mode to access bitmasks.
-    le_avdata_AccessType_t serverAccess, clientAccess;
+    le_avdata_AccessType_t serverAccess = LE_AVDATA_ACCESS_READ;
+    le_avdata_AccessType_t clientAccess = LE_AVDATA_ACCESS_READ;
     if ((ConvertAccessModeToServerAccess(accessMode, &serverAccess) != LE_OK) ||
         (ConvertAccessModeToClientAccess(accessMode, &clientAccess) != LE_OK))
     {
@@ -1120,7 +1069,7 @@ static le_result_t EncodeAssetData
 
             if (strValLen > LE_AVDATA_STRING_VALUE_LEN)
             {
-                LE_ERROR("String len too big (%d). %d chars expected.",
+                LE_ERROR("String len too big (%zd). %d chars expected.",
                          strValLen, LE_AVDATA_STRING_VALUE_LEN);
                 return LE_FAULT;
             }
@@ -1163,7 +1112,7 @@ static le_result_t CheckCborStringLen
     // Need to reserve one byte for the null terminating byte.
     if (incomingStrSize > (strSize-1))
     {
-        LE_ERROR("Encoded string (%d bytes) too big. Max %d bytes expected.",
+        LE_ERROR("Encoded string (%zd bytes) too big. Max %zd bytes expected.",
                  incomingStrSize, (strSize-1));
         return LE_FAULT;
     }
@@ -1544,7 +1493,7 @@ static le_result_t DecodeMultiData
 
             if (maxPathBytes <= (pathLen + endingPathSegLen + 1))  // +1 for "/"
             {
-                LE_CRIT("Path size too big. Max allowed: %d, Actual: %d",
+                LE_CRIT("Path size too big. Max allowed: %zd, Actual: %zd",
                         maxPathBytes - 1,
                         (pathLen + endingPathSegLen + 1));
                 return LE_FAULT;
@@ -1568,7 +1517,7 @@ static le_result_t DecodeMultiData
 
                 if (strlen(path) < (endingPathSegLen + 1))
                 {
-                    LE_ERROR("Path length (%d) can't be smaller than its segment length (%d)",
+                    LE_ERROR("Path length (%zd) can't be smaller than its segment length (%zd)",
                              strlen(path),
                              endingPathSegLen + 1);
                     return LE_FAULT;
@@ -1607,7 +1556,7 @@ static le_result_t DecodeMultiData
 
             if (strlen(path) < (endingPathSegLen + 1))
             {
-                LE_ERROR("Path length (%d) can't be smaller than its segment length (%d)",
+                LE_ERROR("Path length (%zd) can't be smaller than its segment length (%zd)",
                          strlen(path),
                          endingPathSegLen + 1);
                 return LE_FAULT;
@@ -1837,7 +1786,7 @@ static void ProcessAvServerReadRequest
             int pathArrayIdx = 0;
 
             le_hashmap_It_Ref_t iter = le_hashmap_GetIterator(AssetDataMap);
-            char* currentPath;
+            const char* currentPath;
 
             while (le_hashmap_NextNode(iter) == LE_OK)
             {
@@ -1848,7 +1797,7 @@ static void ProcessAvServerReadRequest
                     ((assetDataPtr->serverAccess & LE_AVDATA_ACCESS_READ) == LE_AVDATA_ACCESS_READ))
                 {
                     // Put the currentPath in the path array.
-                    pathArray[pathArrayIdx] = currentPath;
+                    pathArray[pathArrayIdx] = (char*)currentPath;
                     pathArrayIdx++;
                 }
             }
@@ -2092,10 +2041,6 @@ static void ProcessAvServerExecRequest
 
                 if (result == LE_OK)
                 {
-                    // Dump argument list (for debug)
-                    #if 0
-                    DumpArgList(&assetDataPtr->arguments);
-                    #endif
 
                     // Create a safe ref with the argument list, and pass that to the handler.
                     le_avdata_ArgumentListRef_t argListRef =
@@ -2132,7 +2077,7 @@ static void ProcessAvServerExecRequest
 //--------------------------------------------------------------------------------------------------
 static void AvServerRequestHandler
 (
-    lwm2mcore_CoapRequestRef_t serverReqRef
+    lwm2mcore_CoapRequest_t* serverReqRef
 )
 {
     // Save the session context and server request ref, so when reply function such as
@@ -2150,11 +2095,10 @@ static void AvServerRequestHandler
     // Extract info from the server request.
     const char* path = lwm2mcore_GetRequestUri(AVServerReqRef); // cannot have trailing slash.
     coap_method_t method = lwm2mcore_GetRequestMethod(AVServerReqRef);
-    uint8_t* payload = lwm2mcore_GetRequestPayload(AVServerReqRef);
+    uint8_t* payload = (uint8_t *)lwm2mcore_GetRequestPayload(AVServerReqRef);
     size_t payloadLen = lwm2mcore_GetRequestPayloadLength(AVServerReqRef);
-    uint8_t* token = lwm2mcore_GetToken(AVServerReqRef);
+    uint8_t* token = (uint8_t *)lwm2mcore_GetToken(AVServerReqRef);
     size_t tokenLength = lwm2mcore_GetTokenLength(AVServerReqRef);
-    unsigned int contentType = lwm2mcore_GetContentType(AVServerReqRef);
 
     // Partially fill in the response.
     memcpy(AVServerResponse.token, token, tokenLength);
@@ -2838,9 +2782,6 @@ le_result_t le_avdata_Push
     void* contextPtr                           ///< [IN] Context pointer
 )
 {
-    AssetValue_t assetValue;
-    le_avdata_DataType_t type;
-
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
     GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
 
@@ -2875,7 +2816,7 @@ le_result_t le_avdata_Push
 
             while (le_hashmap_NextNode(iter) == LE_OK)
             {
-                currentPath = le_hashmap_GetKey(iter);
+                currentPath = (char *)le_hashmap_GetKey(iter);
                 assetDataPtr = le_hashmap_GetValue(iter);
 
                 if ((le_path_IsSubpath(namespacedPath, currentPath, "/")) &&
@@ -2987,12 +2928,12 @@ le_result_t le_avdata_PushStream
     uint8_t encodedBuf[bytesRead + strlen(path) + 5];
     CborEncoder encoder, mapEncoder;
     CborError err;
-    cbor_encoder_init(&encoder, &encodedBuf, sizeof(encodedBuf), 0);
+    cbor_encoder_init(&encoder, encodedBuf, sizeof(encodedBuf), 0);
     err = cbor_encoder_create_map(&encoder, &mapEncoder, 1);
     RETURN_IF_CBOR_ERROR(err);
     err = cbor_encode_text_stringz(&mapEncoder, path);
     RETURN_IF_CBOR_ERROR(err);
-    err = cbor_encode_text_string(&mapEncoder, (char *)buffer, strlen(buffer));
+    err = cbor_encode_text_string(&mapEncoder, (char *)buffer, strlen((const char *)buffer));
     RETURN_IF_CBOR_ERROR(err);
     cbor_encoder_close_container(&encoder, &mapEncoder);
     LE_DUMP(encodedBuf, cbor_encoder_get_buffer_size(&encoder, encodedBuf));
@@ -3434,8 +3375,6 @@ void le_avdata_ReleaseSession
     le_avdata_RequestSessionObjRef_t  sessionRequestRef
 )
 {
-    le_ref_IterRef_t iterRef;
-
     // Look up the reference.  If it is NULL, then the reference is not valid.
     // Otherwise, delete the reference and request avcServer to release session.
     void* sessionPtr = le_ref_Lookup(AvSessionRequestRefMap, sessionRequestRef);

@@ -20,6 +20,7 @@
 #include <avcFsConfig.h>
 #include "sslUtilities.h"
 #include "defaultDerKey.h"
+#include "avcFs.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -122,7 +123,7 @@ static int ConvertDERToPEM
         return -1;
     }
 
-    certPtr = d2i_X509(NULL, &derKeyPtr, derKeyLen);
+    certPtr = d2i_X509(NULL, (const unsigned char **)&derKeyPtr, derKeyLen);
     if (!certPtr)
     {
         LE_ERROR("unable to parse certificate: %lu", ERR_get_error());
@@ -153,7 +154,7 @@ static int ConvertDERToPEM
     count = BIO_read(memPtr, pemKeyPtr, BIO_number_written(memPtr));
     if (count < BIO_number_written(memPtr))
     {
-        LE_ERROR("failed to read certificate: count (%d): %d", count, ERR_get_error());
+        LE_ERROR("failed to read certificate: count (%d): %d", count, (int)ERR_get_error());
         goto pem_err;
     }
 
@@ -183,7 +184,6 @@ static le_result_t LoadDefaultCertificate
 {
     unsigned char cert[MAX_CERT_LEN] = {0};
     int len;
-    le_result_t result;
 
     len = ConvertDERToPEM(DefaultDerKey, DEFAULT_DER_KEY_LEN, cert, MAX_CERT_LEN);
     if (-1 == len)
@@ -292,7 +292,6 @@ le_result_t ssl_CheckCertificate
 {
     uint8_t buf[MAX_CERT_LEN] = {0};
     size_t size = MAX_CERT_LEN;
-    int fd;
     le_result_t result;
 
     if (LE_OK != ExistsFs(SSLCERT_PATH))

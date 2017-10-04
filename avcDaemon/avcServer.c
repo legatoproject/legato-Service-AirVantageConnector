@@ -25,6 +25,8 @@
 #include "packageDownloaderCallbacks.h"
 #include "avcFsConfig.h"
 #include "watchdogChain.h"
+#include "timeseriesData.h"
+#include "avcClient.h"
 
 //--------------------------------------------------------------------------------------------------
 // Definitions
@@ -707,9 +709,10 @@ static const char* UpdateTypeToStr
         case LE_AVC_APPLICATION_UPDATE:
             resultPtr = "LE_AVC_APPLICATION_UPDATE";
             break;
-        case LE_AVC_UNKNOWN_UPDATE:
+        default:
             resultPtr = "LE_AVC_UNKNOWN_UPDATE";
             break;
+
     }
     return resultPtr;
 }
@@ -1292,7 +1295,6 @@ static le_result_t ProcessUserAgreement
 )
 {
     le_result_t result = LE_BUSY;
-    bool isUserAgreementEnabled;
 
     // Depending on user agreement configuration either process the operation
     // within avcService or forward to control app for acceptance.
@@ -1676,6 +1678,7 @@ static le_result_t SetAvcConfig
 )
 {
     le_result_t result;
+    size_t size = sizeof(AvcConfigData_t);
 
     if (NULL == configPtr)
     {
@@ -1683,7 +1686,7 @@ static le_result_t SetAvcConfig
         return LE_FAULT;
     }
 
-    result = WriteFs(AVC_CONFIG_FILE, configPtr, sizeof(AvcConfigData_t));
+    result = WriteFs(AVC_CONFIG_FILE, (uint8_t*)configPtr, size);
 
     if (LE_OK == result)
     {
@@ -1719,7 +1722,7 @@ static le_result_t GetAvcConfig
     }
 
     size_t size = sizeof(AvcConfigData_t);
-    result = ReadFs(AVC_CONFIG_FILE, configPtr, &size);
+    result = ReadFs(AVC_CONFIG_FILE, (uint8_t*)configPtr, &size);
 
     if (LE_OK == result)
     {
@@ -1807,12 +1810,9 @@ static le_result_t SaveCurrentEpochTime
 //-------------------------------------------------------------------------------------------------
 static void PollingTimerExpiryHandler
 (
-    void
+      le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    le_result_t result;
-    AvcConfigData_t avcConfig;
-
     LE_INFO("Polling timer expired");
 
     SaveCurrentEpochTime();
@@ -1958,7 +1958,7 @@ static le_result_t CheckFwInstallResult
         LE_DEBUG("Update status: %s (%d)", statusStr, fwUpdateStatus);
 
         // Set the update state to IDLE in all cases
-        if (LE_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE))
+        if (DWL_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE))
         {
             LE_ERROR("Error while setting FW update state");
             return LE_FAULT;
@@ -1987,7 +1987,7 @@ static le_result_t CheckFwInstallResult
         avcServer_UpdateStatus(updateStatus, LE_AVC_FIRMWARE_UPDATE, -1, -1, errorCode);
         packageDownloader_SetFwUpdateNotification(true, updateStatus, errorCode);
         LE_DEBUG("Set FW update result to %d", newFwUpdateResult);
-        if (LE_OK != packageDownloader_SetFwUpdateResult(newFwUpdateResult))
+        if (DWL_OK != packageDownloader_SetFwUpdateResult(newFwUpdateResult))
         {
             LE_ERROR("Error while setting FW update result");
             return LE_FAULT;
@@ -2060,14 +2060,14 @@ static void CheckNotificationToSend
         // Retrieve resume information if download is not complete
         if (numBytesToDownload)
         {
-            packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType);
+            packageDownloader_GetResumeInfo((char*)downloadUri, &uriLen, &updateType);
         }
 
         // Request user agreement for download
         avcServer_QueryDownload(packageDownloader_StartDownload,
                                 numBytesToDownload,
                                 updateType,
-                                downloadUri,
+                                (char*)downloadUri,
                                 true);
         return;
     }
@@ -3217,7 +3217,7 @@ le_result_t le_avc_GetRetryTimers
 
     if (*numTimers < LE_AVC_NUM_RETRY_TIMERS)
     {
-        LE_ERROR("Supplied retry timer array too small (%d). Expected %d.",
+        LE_ERROR("Supplied retry timer array too small (%zd). Expected %d.",
                  *numTimers, LE_AVC_NUM_RETRY_TIMERS);
         return LE_FAULT;
     }
@@ -3279,7 +3279,7 @@ le_result_t le_avc_SetRetryTimers
 
     if (numTimers < LE_AVC_NUM_RETRY_TIMERS)
     {
-        LE_ERROR("Supplied retry timer array too small (%d). Expected %d.",
+        LE_ERROR("Supplied retry timer array too small (%zd). Expected %d.",
                  numTimers, LE_AVC_NUM_RETRY_TIMERS);
         return LE_FAULT;
     }

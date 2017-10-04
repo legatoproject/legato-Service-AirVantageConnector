@@ -48,11 +48,11 @@ le_result_t packageDownloader_Init
  * Set firmware update state
  *
  * @return
- *  - LE_OK     The function succeeded
- *  - LE_FAULT  The function failed
+ *  - DWL_OK     The function succeeded
+ *  - DWL_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_SetFwUpdateState
+lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateState
 (
     lwm2mcore_FwUpdateState_t fwUpdateState     ///< [IN] New FW update state
 );
@@ -62,11 +62,11 @@ le_result_t packageDownloader_SetFwUpdateState
  * Set firmware update result
  *
  * @return
- *  - LE_OK     The function succeeded
- *  - LE_FAULT  The function failed
+ *  - DWL_OK     The function succeeded
+ *  - DWL_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_SetFwUpdateResult
+lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResult
 (
     lwm2mcore_FwUpdateResult_t fwUpdateResult   ///< [IN] New FW update result
 );
@@ -202,12 +202,9 @@ le_result_t packageDownloader_GetSwUpdateResult
 /**
  * Download and store a package
  *
- * @return
- *  - LE_OK             The function succeeded
- *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_StartDownload
+void packageDownloader_StartDownload
 (
     const char*            uriPtr,  ///< Package URI
     lwm2mcore_UpdateType_t type,    ///< Update type (FW/SW)

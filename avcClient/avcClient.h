@@ -169,4 +169,35 @@ void avcClient_Init
    void
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Stop a timer to monitor the activity between device and server.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_StopActivityTimer
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Start a timer to monitor the activity between device and server.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_StartActivityTimer
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * This function sets up the activity timer. The timeout will default to 20 seconds if
+ * user defined value doesn't exist or if the defined value is less than 0.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_SetActivityTimeout
+(
+    int timeout               ///< [IN] Timeout for activity timer
+);
+
 #endif // LEGATO_AVC_CLIENT_INCLUDE_GUARD

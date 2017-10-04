@@ -335,7 +335,7 @@ static void Wait
 
     do
     {
-        LE_DEBUG("waiting for %zus, %ldns", req.tv_sec, req.tv_nsec);
+        LE_DEBUG("waiting for %lds, %ldns", req.tv_sec, req.tv_nsec);
         rc = nanosleep(&req, &rem);
         if (-1 == rc)
         {
@@ -344,7 +344,7 @@ static void Wait
                 LE_ERROR("nanosleep(): %m");
                 return;
             }
-            LE_DEBUG("remaining time %zus, %ldns\n", rem.tv_sec, rem.tv_nsec);
+            LE_DEBUG("remaining time %lds, %ldns\n", rem.tv_sec, rem.tv_nsec);
             req = rem;
         }
     } while (rc);

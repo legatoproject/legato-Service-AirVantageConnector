@@ -13,7 +13,7 @@
 #include "legato.h"
 #include "interfaces.h"
 #include "avcAppUpdate.h"
-
+#include "avcServer.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -92,7 +92,7 @@ static void LaunchUpdate
             LE_DEBUG("Launch FW update");
             avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
                                    -1, -1, LE_AVC_ERR_NONE);
-            if (LE_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING))
+            if (DWL_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING))
             {
                 LE_ERROR("Unable to set FW update state to UPDATING");
                 return;
@@ -168,7 +168,7 @@ static void StartDownloadTimerExpiryHandler
     }
 
     // Retrieve update package size from server
-    if (LE_OK != pkgDwlCb_GetPackageSize(startDwlCtxPtr->uri, &packageSize))
+    if (LE_OK != pkgDwlCb_GetPackageSize((char*)startDwlCtxPtr->uri, &packageSize))
     {
         LE_ERROR("Unable to retrieve package size, request user agreement anyway");
         packageSize = 0;
@@ -182,7 +182,7 @@ static void StartDownloadTimerExpiryHandler
     avcServer_QueryDownload(packageDownloader_StartDownload,
                             packageSize,
                             startDwlCtxPtr->type,
-                            startDwlCtxPtr->uri,
+                            (char*)startDwlCtxPtr->uri,
                             false);
 }
 
@@ -263,7 +263,7 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
     size_t len                      ///< [IN] Length of input buffer
 )
 {
-    LE_DEBUG("URI: len %d", len);
+    LE_DEBUG("URI: len %zd", len);
 
     if (0 == len)
     {
@@ -293,11 +293,11 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
     uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
     memset(downloadUri, 0, LWM2MCORE_PACKAGE_URI_MAX_BYTES);
     memcpy(downloadUri, bufferPtr, len);
-    LE_DEBUG("Request to download update package from URL : %s, len %d", downloadUri, len);
+    LE_DEBUG("Request to download update package from URL : %s, len %zd", downloadUri, len);
 
     // Store URI and update type to be able to resume the download if necessary. This should be
     // the very first step to reduce the window between receiving uri and storing it flash storage.
-    if (LE_OK != packageDownloader_SetResumeInfo(downloadUri, type))
+    if (LE_OK != packageDownloader_SetResumeInfo((char *)downloadUri, type))
     {
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
@@ -310,7 +310,7 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
             avcApp_DeletePackage();
 
             // Now reset the state
-            if (LE_OK != packageDownloader_SetFwUpdateResult(
+            if (DWL_OK != packageDownloader_SetFwUpdateResult(
                                                     LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL))
             {
                 return LWM2MCORE_ERR_GENERAL_ERROR;
@@ -322,7 +322,7 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
             // SOTA suspend resume activity.
             packageDownloader_DeleteFwUpdateInfo();
 
-            if (LE_OK != avcApp_SetSwUpdateResult(LWM2MCORE_SW_UPDATE_RESULT_INITIAL))
+            if (DWL_OK != avcApp_SetSwUpdateResult(LWM2MCORE_SW_UPDATE_RESULT_INITIAL))
             {
                 return LWM2MCORE_ERR_GENERAL_ERROR;
             }
@@ -494,7 +494,7 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdateState
 
         case LWM2MCORE_SW_UPDATE_TYPE:
             if (LE_OK == avcApp_GetSwUpdateState(instanceId,
-                                                (lwm2mcore_SwUpdateState_t*)updateStatePtr))
+                                                 updateStatePtr))
             {
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
                 LE_DEBUG("updateState : %d", *updateStatePtr);
@@ -559,7 +559,7 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdateResult
 
         case LWM2MCORE_SW_UPDATE_TYPE:
             if (LE_OK == avcApp_GetSwUpdateResult(instanceId,
-                                                 (lwm2mcore_SwUpdateResult_t*)updateResultPtr))
+                                                  updateResultPtr))
             {
                 sid = LWM2MCORE_ERR_COMPLETED_OK;
                 LE_DEBUG("updateResult : %d", *updateResultPtr);
@@ -772,7 +772,6 @@ lwm2mcore_Sid_t lwm2mcore_LaunchSwUpdateUninstall
     size_t len                      ///< [IN] length of input buffer
 )
 {
-    le_result_t result;
     uint8_t updateState;
     uint8_t updateResult;
 
@@ -809,7 +808,8 @@ lwm2mcore_Sid_t lwm2mcore_LaunchSwUpdateUninstall
 
     // Here we are only delisting the app. The deletion of app will be called when deletion
     // of object 9 instance is requested. But get user agreement before delisting.
-    avcServer_QueryUninstall(avcApp_PrepareUninstall, instanceId);
+    avcServer_QueryUninstall(avcApp_PrepareUninstall,
+                             instanceId);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
@@ -896,7 +896,7 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     void
 )
 {
-    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
+    char downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
     size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
     lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
     bool downloadResume = false;

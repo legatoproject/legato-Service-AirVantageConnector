@@ -14,6 +14,7 @@
 #include "assetData.h"
 #include <sys/utsname.h>
 #include "avcAppUpdate.h"
+#include "avcServer.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -201,14 +202,14 @@ static size_t GetModemVersion
             }
             else
             {
-                returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+                returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
             }
         }
         else
         {
-            returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
-        LE_INFO("Modem version = %s, returnedLen %d", versionBufferPtr, returnedLen);
+        LE_INFO("Modem version = %s, returnedLen %zd", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
@@ -247,8 +248,8 @@ static size_t GetLkVersion
                 {
                     returnedLen = snprintf(versionBufferPtr,
                                            len,
-                                           UNKNOWN_VERSION,
-                                           strlen(UNKNOWN_VERSION));
+                                           "%s",
+                                           UNKNOWN_VERSION);
                     break;
                 }
                 if (0 == strncmp(tokenPtr, LK_STRING_FILE, LK_VERSION_LENGTH))
@@ -261,14 +262,14 @@ static size_t GetLkVersion
         }
         else
         {
-            returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
 
         if (NULL != fpPtr)
         {
             fclose(fpPtr);
         }
-        LE_INFO("lkVersion %s, len %d", versionBufferPtr, returnedLen);
+        LE_INFO("lkVersion %s, len %zd", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
@@ -298,9 +299,9 @@ static size_t GetOsVersion
         }
         else
         {
-            returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
-        LE_INFO("OsVersion %s, len %d", versionBufferPtr, returnedLen);
+        LE_INFO("OsVersion %s, len %zd", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
@@ -336,19 +337,19 @@ static size_t GetRfsVersion
             }
             else
             {
-                returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+                returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
             }
         }
         else
         {
-            returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
 
         if (NULL != fpPtr)
         {
             fclose(fpPtr);
         }
-        LE_INFO("RfsVersion %s, len %d", versionBufferPtr, returnedLen);
+        LE_INFO("RfsVersion %s, len %zd", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
@@ -384,19 +385,19 @@ static size_t GetUfsVersion
             }
             else
             {
-                returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+                returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
             }
         }
         else
         {
-            returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
 
         if (NULL != fpPtr)
         {
             fclose(fpPtr);
         }
-        LE_INFO("UfsVersion %s, len %d", versionBufferPtr, returnedLen);
+        LE_INFO("UfsVersion %s, len %zd", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
@@ -422,7 +423,7 @@ static size_t GetLegatoVersion
         if (NULL == versionFilePtr)
         {
             LE_INFO("Could not open Legato version file.");
-            returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
             return returnedLen;
         }
 
@@ -433,22 +434,20 @@ static size_t GetLegatoVersion
             char* tmpBufferPtr = strtok_r(tmpLegatoVersionBuffer, "-_", &savePtr);
             if (NULL != tmpBufferPtr)
             {
-                snprintf(versionBufferPtr, len, "%s", tmpBufferPtr);
-                returnedLen = strlen(versionBufferPtr);
+                returnedLen = snprintf(versionBufferPtr, len, "%s", tmpBufferPtr);
             }
             else
             {
-                snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
-                returnedLen = strlen(versionBufferPtr);
+                returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
             }
         }
         else
         {
             LE_INFO("Could not read Legato version.");
-            returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
         fclose(versionFilePtr);
-        LE_INFO("Legato version = %s, len %d", versionBufferPtr, returnedLen);
+        LE_INFO("Legato version = %s, len %zd", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
@@ -482,14 +481,14 @@ static size_t GetCustomerPriVersion
             }
             else
             {
-                returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+                returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
             }
         }
         else
         {
-            returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
-        LE_INFO("PriVersion %s, len %d", versionBufferPtr, returnedLen);
+        LE_INFO("PriVersion %s, len %zd", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
@@ -523,14 +522,14 @@ static size_t GetCarrierPriVersion
             }
             else
             {
-                returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+                returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
             }
         }
         else
         {
-            returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
-        LE_INFO("Carrier PRI Version %s, len %d", versionBufferPtr, returnedLen);
+        LE_INFO("Carrier PRI Version %s, len %zd", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
@@ -563,15 +562,15 @@ static size_t GetMcuVersion
             }
             else
             {
-                returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+                returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
             }
         }
         else
         {
             LE_ERROR("Failed to retrieve MCU version");
-            returnedLen = snprintf(versionBufferPtr, len, UNKNOWN_VERSION, strlen(UNKNOWN_VERSION));
+            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
-        LE_INFO("MCU version %s, len %d", versionBufferPtr, returnedLen);
+        LE_INFO("MCU version %s, len %zd", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
@@ -801,7 +800,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
         if (NULL != versionInfo[i].funcPtr)
         {
             len = versionInfo[i].funcPtr(tmpBufferPtr, FW_BUFFER_LENGTH);
-            LE_DEBUG("len %d - remainingLen %d", len, remainingLen);
+            LE_DEBUG("len %zd - remainingLen %d", len, remainingLen);
             /* len doesn't contain the final \0
              * remainingLen contains the final \0
              * So we have to keep one byte for \0
@@ -901,7 +900,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceCurrentTime
 
     t = le_clk_GetAbsoluteTime();
     *valuePtr = t.sec;
-    LE_DEBUG("time %d", t.sec);
+    LE_DEBUG("time %ld", (long)t.sec);
 
     if (0 == t.sec)
     {

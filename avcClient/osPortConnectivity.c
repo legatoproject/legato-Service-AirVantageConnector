@@ -807,7 +807,8 @@ lwm2mcore_Sid_t lwm2mcore_GetIpAddresses
     }
 
     *ipAddrNbPtr = 0;
-    memset(ipAddrList, 0, sizeof(ipAddrList));
+    memset(ipAddrList, 0,
+           ((CONN_MONITOR_IP_ADDRESSES_MAX_NB)*(CONN_MONITOR_IP_ADDR_MAX_BYTES)*sizeof(char)));
     currentTech = le_data_GetTechnology();
 
     switch (currentTech)
@@ -857,7 +858,8 @@ lwm2mcore_Sid_t lwm2mcore_GetRouterIpAddresses
     }
 
     *ipAddrNbPtr = 0;
-    memset(ipAddrList, 0, sizeof(ipAddrList));
+    memset(ipAddrList, 0,
+           ((CONN_MONITOR_IP_ADDRESSES_MAX_NB)*(CONN_MONITOR_IP_ADDR_MAX_BYTES)*sizeof(char)));
     currentTech = le_data_GetTechnology();
 
     switch (currentTech)
@@ -936,7 +938,7 @@ lwm2mcore_Sid_t lwm2mcore_GetAccessPointNames
     }
 
     *apnNbPtr = 0;
-    memset(apnList, 0, sizeof(apnList));
+    memset(apnList, 0, ((CONN_MONITOR_APN_MAX_NB)*(CONN_MONITOR_APN_MAX_BYTES)*sizeof(char)));
     currentTech = le_data_GetTechnology();
 
     switch (currentTech)
@@ -1254,7 +1256,6 @@ lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
-    lwm2mcore_Sid_t sID;
     le_result_t result;
     char cellularTech[MAX_TECH_LEN];
     int cellularTechLen;
@@ -1436,7 +1437,6 @@ lwm2mcore_Sid_t lwm2mcore_GetEcIo
     int32_t  ecio    = 0;
     int32_t  rscp    = 0;
     int32_t  sinr    = 0;
-    int32_t  snr     = 0;
     int32_t  io      = 0;
     le_mrc_MetricsRef_t metricsRef;
 
@@ -1764,7 +1764,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSmsTxCount
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )
 {
-    uint32_t smsTxCount;
+    int32_t smsTxCount;
 
     if (!valuePtr)
     {
@@ -1797,7 +1797,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSmsRxCount
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )
 {
-    uint32_t smsRxCount;
+    int32_t smsRxCount;
 
     if (!valuePtr)
     {

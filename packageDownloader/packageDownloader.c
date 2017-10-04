@@ -18,6 +18,8 @@
 #include "avcFs.h"
 #include "avcFsConfig.h"
 #include "sslUtilities.h"
+#include "avcClient.h"
+#include "avcServer.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -374,27 +376,27 @@ le_result_t packageDownloader_Init
  * Set firmware update state
  *
  * @return
- *  - LE_OK     The function succeeded
- *  - LE_FAULT  The function failed
+ *  - DWL_OK     The function succeeded
+ *  - DWL_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_SetFwUpdateState
+lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateState
 (
     lwm2mcore_FwUpdateState_t fwUpdateState     ///< [IN] New FW update state
 )
 {
-    le_result_t result;
+    lwm2mcore_DwlResult_t result;
 
     result = WriteFs(FW_UPDATE_STATE_PATH,
                      (uint8_t*)&fwUpdateState,
                      sizeof(lwm2mcore_FwUpdateState_t));
-    if (LE_OK != result)
+    if (DWL_OK != result)
     {
         LE_ERROR("Failed to write %s: %s", FW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
-        return LE_FAULT;
+        return DWL_FAULT;
     }
 
-    return LE_OK;
+    return DWL_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -402,27 +404,27 @@ le_result_t packageDownloader_SetFwUpdateState
  * Set firmware update result
  *
  * @return
- *  - LE_OK     The function succeeded
- *  - LE_FAULT  The function failed
+ *  - DWL_OK     The function succeeded
+ *  - DWL_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_SetFwUpdateResult
+lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResult
 (
     lwm2mcore_FwUpdateResult_t fwUpdateResult   ///< [IN] New FW update result
 )
 {
-    le_result_t result;
+    lwm2mcore_DwlResult_t result;
 
     result = WriteFs(FW_UPDATE_RESULT_PATH,
                      (uint8_t*)&fwUpdateResult,
                      sizeof(lwm2mcore_FwUpdateResult_t));
-    if (LE_OK != result)
+    if (DWL_OK != result)
     {
         LE_ERROR("Failed to write %s: %s", FW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
-        return LE_FAULT;
+        return DWL_FAULT;
     }
 
-    return LE_OK;
+    return DWL_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -604,7 +606,7 @@ le_result_t packageDownloader_SetUpdatePackageSize
 {
     le_result_t result;
 
-    result = WriteFs(PACKAGE_SIZE_FILENAME, (uint64_t*)&size, sizeof(uint64_t));
+    result = WriteFs(PACKAGE_SIZE_FILENAME, (uint8_t*)&size, sizeof(uint64_t));
     if (LE_OK != result)
     {
         LE_ERROR("Failed to write %s: %s", PACKAGE_SIZE_FILENAME, LE_RESULT_TXT(result));
@@ -638,7 +640,7 @@ le_result_t packageDownloader_GetUpdatePackageSize
         return LE_FAULT;
     }
 
-    result = ReadFs(PACKAGE_SIZE_FILENAME, (uint64_t*)&packageSize, &size);
+    result = ReadFs(PACKAGE_SIZE_FILENAME, (uint8_t*)&packageSize, &size);
     if (LE_OK != result)
     {
         LE_ERROR("Failed to read %s: %s", PACKAGE_SIZE_FILENAME, LE_RESULT_TXT(result));
@@ -1159,12 +1161,9 @@ thread_end:
 /**
  * Download and store a package
  *
- * @return
- *  - LE_OK             The function succeeded
- *  - LE_FAULT          The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_StartDownload
+void packageDownloader_StartDownload
 (
     const char*            uriPtr,  ///< Package URI
     lwm2mcore_UpdateType_t type,    ///< Update type (FW/SW)
@@ -1183,7 +1182,7 @@ le_result_t packageDownloader_StartDownload
     if ((DownloadRef) || (StoreFwRef))
     {
         LE_WARN("A download is still in progress, wait for its end");
-        return LE_OK;
+        return;
     }
 
     LE_DEBUG("downloading a `%s'", dwlType[type]);
@@ -1222,7 +1221,7 @@ le_result_t packageDownloader_StartDownload
             {
                 // Get fwupdate offset before launching the download
                 // and the blocking call to le_fwupdate_Download()
-                le_fwupdate_GetResumePosition(&PkgDwl.data.updateOffset);
+                le_fwupdate_GetResumePosition((size_t *)&PkgDwl.data.updateOffset);
                 LE_DEBUG("updateOffset: %llu", PkgDwl.data.updateOffset);
             }
             dwlCtx.storePackage = (void*)StoreFwThread;
@@ -1232,7 +1231,7 @@ le_result_t packageDownloader_StartDownload
             if (resume)
             {
                 // Get swupdate offset before launching the download
-                avcApp_GetResumePosition(&PkgDwl.data.updateOffset);
+                avcApp_GetResumePosition((size_t *)&PkgDwl.data.updateOffset);
                 LE_DEBUG("updateOffset: %llu", PkgDwl.data.updateOffset);
             }
             dwlCtx.storePackage = NULL;
@@ -1240,7 +1239,7 @@ le_result_t packageDownloader_StartDownload
 
         default:
             LE_ERROR("unknown download type");
-            return LE_FAULT;
+            return;
     }
     dwlCtx.resume = resume;
     PkgDwl.ctxPtr = (void*)&dwlCtx;
@@ -1257,7 +1256,8 @@ le_result_t packageDownloader_StartDownload
         // UpdateDaemon requires all its API to be called from same thread. If we spawn thread,
         // both download and installation has to be done from the same thread which will bring
         // unwanted complexity.
-        return avcApp_StoreSwPackage((void*)&PkgDwl);
+        avcApp_StoreSwPackage((void*)&PkgDwl);
+        return;
     }
 
     // Start the Store thread for a FOTA update
@@ -1265,7 +1265,7 @@ le_result_t packageDownloader_StartDownload
     le_thread_SetJoinable(StoreFwRef);
     le_thread_Start(StoreFwRef);
 
-    return LE_OK;
+    return;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1282,7 +1282,7 @@ le_result_t packageDownloader_AbortDownload
     lwm2mcore_UpdateType_t type     ///< Update type (FW/SW)
 )
 {
-    le_result_t result;
+    lwm2mcore_DwlResult_t dwlResult;
 
     LE_DEBUG("Download abort requested");
 
@@ -1299,16 +1299,16 @@ le_result_t packageDownloader_AbortDownload
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
-            result = packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
-            if (LE_OK != result)
+            dwlResult = packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
+            if (DWL_OK != dwlResult)
             {
                 return LE_FAULT;
             }
             break;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
-            result = avcApp_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
-            if (LE_OK != result)
+            dwlResult = avcApp_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
+            if (DWL_OK != dwlResult)
             {
                 return LE_FAULT;
             }
@@ -1384,7 +1384,7 @@ le_result_t packageDownloader_BytesLeftToDownload
         return LE_FAULT;
     }
 
-    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
+    char downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
     size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
     lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
     avcApp_InternalState_t internalState;
@@ -1515,7 +1515,8 @@ le_result_t packageDownloader_BytesLeftToDownload
                   swUpdateResult,
                   fwUpdateState,
                   fwUpdateResult);
-
         return LE_FAULT;
     }
+
+    return LE_FAULT;
 }

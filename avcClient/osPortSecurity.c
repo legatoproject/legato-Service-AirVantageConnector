@@ -636,7 +636,7 @@ lwm2mcore_Sid_t lwm2mcore_CancelSha1
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_UpdateSslCertificate
 (
-    unsigned char*  certPtr,    ///< [IN] Certificate
+    char*           certPtr,    ///< [IN] Certificate
     int             len         ///< [IN] Certificate len
 )
 {
@@ -675,7 +675,7 @@ lwm2mcore_Sid_t lwm2mcore_UpdateSslCertificate
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    result = WriteFs(SSLCERT_PATH, cert, len);
+    result = WriteFs(SSLCERT_PATH, (uint8_t *)cert, len);
     if (LE_OK != result)
     {
         LE_ERROR("Failed to update certificate file");

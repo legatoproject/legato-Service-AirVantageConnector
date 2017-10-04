@@ -74,14 +74,9 @@ le_result_t avcApp_StartInstall
  *  uninstall operation the app will be removed after the client receives the object9 delete
  *  command.
  *
- *  @return
- *      - LE_OK if successful
- *      - LE_NOT_FOUND if instanceId/appName not found
- *      - LE_FAULT if there is any other error.
- *
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcApp_PrepareUninstall
+void avcApp_PrepareUninstall
 (
     uint16_t instanceId     ///< [IN] Instance id of the app to be removed.
 );
@@ -327,12 +322,12 @@ le_result_t avcApp_GetPackageVersion
  * Set software update state in asset data and SW update workspace for ongoing update.
  *
  * @return:
- *      - LE_OK on success
- *      - LE_NOT_FOUND if no ongoing update.
- *      - LE_FAULT on any other error
+ *      - DWL_OK on success
+ *      - DWL_SUSPEND if no ongoing update.
+ *      - DWL_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t  avcApp_SetSwUpdateState
+lwm2mcore_DwlResult_t  avcApp_SetSwUpdateState
 (
     lwm2mcore_SwUpdateState_t updateState
 );
@@ -343,12 +338,12 @@ le_result_t  avcApp_SetSwUpdateState
  * Set software update result in asset data and SW update workspace for ongoing update.
  *
  * @return:
- *      - LE_OK on success
- *      - LE_NOT_FOUND if no ongoing update.
- *      - LE_FAULT on any other error
+ *      - DWL_OK on success
+ *      - DWL_SUSPEND if no ongoing update.
+ *      - DWL_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t  avcApp_SetSwUpdateResult
+lwm2mcore_DwlResult_t  avcApp_SetSwUpdateResult
 (
     lwm2mcore_SwUpdateResult_t updateResult
 );
@@ -420,6 +415,46 @@ le_result_t avcApp_CheckNotificationToSend
 void avcApp_Init
 (
    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete SOTA workspace
+ */
+//--------------------------------------------------------------------------------------------------
+void avcApp_DeletePackage
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function called to unpack the downloaded package
+ *
+ * @return
+ *      - LE_OK if installation started.
+ *      - LE_UNSUPPORTED if not supported
+ *      - LE_FAULT if there is an error.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_StartUpdate
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Return the offset of the downloaded package.
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_BAD_PARAMETER Invalid parameter
+ *      - LE_FAULT on failure
+ */;
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_GetResumePosition
+(
+    size_t* positionPtr
 );
 
 #endif

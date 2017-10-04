@@ -17,6 +17,7 @@
 #include "legato.h"
 #include "interfaces.h"
 #include "avcClient.h"
+#include "avcServer.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -662,12 +663,31 @@ static void StopBearer
         Lwm2mInstanceRef = NULL;
     }
 }
+//--------------------------------------------------------------------------------------------------
+/**
+ * Connection is retried according to the configured retry timers.
+ *
+ * @return none
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_RetryTimer
+(
+    le_timer_Ref_t timerRef
+)
+{
+    le_result_t res = avcClient_Connect();
+
+    if (LE_OK == res)
+    {
+        LE_ERROR("Cannot able to establish Connection to Server");
+    }
+}
+
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Connect to the server. Connection is retried according to the configured retry timers, if session
- * isn't started. If this function is called while one of the retry timers is running, retry isn't
- * performed and LE_BUSY is returned.
+ * Connect to the server. If this function is called while one of the retry timers is running,
+ * retry isn't performed and LE_BUSY is returned.
  *
  * @return
  *      - LE_OK if connection request has been sent.
@@ -766,7 +786,7 @@ le_result_t avcClient_Connect
             le_clk_Time_t interval = {RetryTimers[RetryTimersIndex] * 60, 0};
 
             LE_ASSERT(LE_OK == le_timer_SetInterval(RetryTimerRef, interval));
-            LE_ASSERT(LE_OK == le_timer_SetHandler(RetryTimerRef, avcClient_Connect));
+            LE_ASSERT(LE_OK == le_timer_SetHandler(RetryTimerRef,avcClient_RetryTimer));
             LE_ASSERT(LE_OK == le_timer_Start(RetryTimerRef));
         }
 

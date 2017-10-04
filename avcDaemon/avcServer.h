@@ -16,6 +16,7 @@
 #include "assetData.h"
 #include "lwm2mcore/update.h"
 #include "lwm2mcorePackageDownloader.h"
+#include "avcFs.h"
 
 //--------------------------------------------------------------------------------------------------
 // Definitions.
@@ -190,7 +191,7 @@ LE_SHARED le_result_t avcServer_ReleaseSession
  * Handler to receive update status notifications from PA
  */
 //--------------------------------------------------------------------------------------------------
-LE_SHARED void avcServer_UpdateHandler
+LE_SHARED void avcServer_UpdateStatus
 (
     le_avc_Status_t updateStatus,
     le_avc_UpdateType_t updateType,
@@ -279,6 +280,66 @@ LE_SHARED void avcServer_QueryReboot
  */
 //--------------------------------------------------------------------------------------------------
 LE_SHARED void avcServer_ResetDownloadAgreement
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Resume firmware install if necessary
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+void ResumeFwInstall
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if the update state/result should be changed after a FW install
+ * and update them if necessary
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
+ *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetFirmwareUpdateInstallResult
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Handler to receive update status notifications
+ */
+//--------------------------------------------------------------------------------------------------
+void avcServer_UpdateHandler
+(
+    le_avc_Status_t updateStatus,    ///< [IN] Update status
+    le_avc_UpdateType_t updateType,  ///< [IN] AirVantageConnector update type
+    int32_t totalNumBytes,           ///< [IN] Total number of bytes to download
+    int32_t dloadProgress,           ///< [IN] Download Progress in %
+    le_avc_ErrorCode_t errorCode     ///< [IN]  Error code if installation failed.
+                                     ///        Applicable only when le_avc_Status_t is
+                                     ///        LE_AVC_INSTALL_FAILED.
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to check the user agreement for download
+ */
+//--------------------------------------------------------------------------------------------------
+bool IsDownloadAccepted
 (
     void
 );

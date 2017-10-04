@@ -249,9 +249,6 @@ static le_result_t ResolveServerIp
     char * ipStrPtr     ///< [OUT] Resolved server IP address
 )
 {
-    le_result_t result;
-    char *serverNamePtr;
-
     if ((NULL == urlStrPtr)
      || (NULL == ipStrPtr) )
     {

@@ -18,6 +18,10 @@
 #include "packageDownloader.h"
 #include "avcAppUpdate.h"
 #include "avcFsConfig.h"
+#include "avcFs.h"
+#include "avcClient.h"
+#include "file.h"
+#include "fileDescriptor.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -465,7 +469,6 @@ static void SetObj9State_
 )
 {
     int instanceId;
-    le_result_t rc;
 
     if (instanceRef == NULL)
     {
@@ -674,9 +677,9 @@ static void NotifyObj9List
     int numObjInstances = 0;
     le_result_t result;
 
-    result = assetData_GetObj9InstanceList(&obj9List,
+    result = assetData_GetObj9InstanceList(obj9List,
                                            sizeof(obj9List),
-                                           &obj9ListLen,
+                                           (int *)&obj9ListLen,
                                            &numObjInstances);
 
     // If no object 9 instance exists, send the empty list down to lwm2mcore
@@ -1121,7 +1124,6 @@ static void UpdateProgressHandler
 )
 {
     le_avc_ErrorCode_t avcErrorCode = LE_AVC_ERR_NONE;
-    le_result_t result;
 
     switch (updateState)
     {
@@ -1297,7 +1299,7 @@ static le_result_t GetSwUpdateBytesDownloaded
     }
 
     size = sizeof(size_t);
-    result = ReadFs(SW_UPDATE_BYTES_DOWNLOADED_PATH, (size_t*)&bytesDownloaded, &size);
+    result = ReadFs(SW_UPDATE_BYTES_DOWNLOADED_PATH, (uint8_t *)&bytesDownloaded, &size);
     if (LE_OK != result)
     {
         if (LE_NOT_FOUND == result)
@@ -1368,7 +1370,7 @@ static le_result_t GetSwUpdateInstanceId
     }
 
     size = sizeof(int);
-    result = ReadFs(SW_UPDATE_INSTANCE_PATH, (int*)&instanceId, &size);
+    result = ReadFs(SW_UPDATE_INSTANCE_PATH, (uint8_t *)&instanceId, &size);
     if (LE_OK != result)
     {
         if (LE_NOT_FOUND == result)
@@ -1412,7 +1414,7 @@ static le_result_t GetSwUpdateInternalState
     }
 
     size = sizeof(int);
-    result = ReadFs(SW_UPDATE_INTERNAL_STATE_PATH, (int*)&internalState, &size);
+    result = ReadFs(SW_UPDATE_INTERNAL_STATE_PATH, (uint8_t *)&internalState, &size);
     if (LE_OK != result)
     {
         if (LE_NOT_FOUND == result)
@@ -1628,7 +1630,7 @@ static le_result_t WriteBytesToFd
     // Check for errors.
     if (writeResult == -1)
     {
-        LE_ERROR("Failed to write bytes to fd (%m). Requested: %d Bytes, Written: %d Bytes",
+        LE_ERROR("Failed to write bytes to fd (%m). Requested: %zd Bytes, Written: %d Bytes",
                   readCount,
                   bytesWritten);
         return LE_FAULT;
@@ -1680,7 +1682,7 @@ static le_result_t CopyBytesToFd
     if (0 == readCount)
     {
         // Incurred end of file. Close the Read fd.
-        LE_INFO("Update pipe closed, finished storing; %d bytes stored", TotalCount);
+        LE_INFO("Update pipe closed, finished storing; %zd bytes stored", TotalCount);
         return LE_TERMINATED;
     }
     else if (readCount > 0)
@@ -1819,12 +1821,12 @@ static le_result_t StartStoringPackage
         }
 
         // Seek to the resume offset
-        LE_DEBUG("Seek to offset %d", offset);
+        LE_DEBUG("Seek to offset %zd", offset);
         size_t fileOffset = lseek(UpdateStoreFd, offset, SEEK_SET);
 
         if (fileOffset == -1)
         {
-            LE_ERROR("Seek file to offset %d failed.", offset);
+            LE_ERROR("Seek file to offset %zd failed.", offset);
             fd_Close(UpdateStoreFd);
             return LE_FAULT;
         }
@@ -1832,7 +1834,7 @@ static le_result_t StartStoringPackage
     else
     {
         // Make a directory
-        PrepareDownloadDirectory(AppDownloadPath);
+        PrepareDownloadDirectory((char *)AppDownloadPath);
 
         // Create new download file
         UpdateStoreFd = open(downloadFile, O_WRONLY | O_TRUNC | O_CREAT, 0);
@@ -1868,7 +1870,6 @@ static void DownloadHandler
     lwm2mcore_PackageDownloader_t* pkgDwlPtr;
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
     le_result_t result;
-    int fd;
 
     pkgDwlPtr = (lwm2mcore_PackageDownloader_t*)contextPtr;
     dwlCtxPtr = pkgDwlPtr->ctxPtr;
@@ -1987,7 +1988,6 @@ static void InstallResumeHandler
     void *ctxPtr
 )
 {
-    le_result_t result;
     int instanceId = -1;
 
     // Continue installation if install resume is requested
@@ -2208,7 +2208,7 @@ le_result_t avcApp_StartUpdate
 )
 {
     le_result_t result;
-    uint16_t instanceId = -1;
+    int instanceId = -1;
     assetData_GetInstanceId(CurrentObj9, &instanceId);
     LE_DEBUG("unpack object instance %d", instanceId);
 
@@ -2266,14 +2266,9 @@ le_result_t avcApp_StartUpdate
  *  operation. During an uninstall operation the app will be removed after the client receives the
  *  object9 delete command.
  *
- *  @return
- *      - LE_OK if successful
- *      - LE_NOT_FOUND if instanceId/appName not found
- *      - LE_FAULT if there is any other error.
- *
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcApp_PrepareUninstall
+void avcApp_PrepareUninstall
 (
     uint16_t instanceId     ///< [IN] Instance id of the app to be removed.
 )
@@ -2288,7 +2283,7 @@ le_result_t avcApp_PrepareUninstall
 
     if (result != LE_OK)
     {
-        return result;
+        return;
     }
 
     LE_DEBUG("Application '%s' uninstall requested, instanceID: %d", appName, instanceId);
@@ -2304,7 +2299,7 @@ le_result_t avcApp_PrepareUninstall
     //Delete SW update workspace
     DeletePackage();
 
-    return LE_OK;
+    return;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2754,7 +2749,7 @@ le_result_t avcApp_GetResumePosition
     {
         LE_WARN("update file doesn't exist, create one");
 
-        PrepareDownloadDirectory(AppDownloadPath);
+        PrepareDownloadDirectory((char *)AppDownloadPath);
 
         storeFd = open(downloadFile, O_WRONLY | O_TRUNC | O_CREAT, 0);
 
@@ -2768,7 +2763,7 @@ le_result_t avcApp_GetResumePosition
     }
     else
     {
-        int32_t offset;
+        size_t offset;
         result = GetSwUpdateBytesDownloaded(&offset);
 
         if(result != LE_OK)
@@ -2782,7 +2777,7 @@ le_result_t avcApp_GetResumePosition
     }
 
     // Create a new object 9 instance for application resume.
-    uint16_t instanceId;
+    int instanceId;
     if (LE_OK == GetSwUpdateInstanceId(&instanceId))
     {
         LE_DEBUG("Restoring application update process.");
@@ -2818,12 +2813,12 @@ le_result_t avcApp_GetResumePosition
  * Set software update result in asset data and SW update workspace for ongoing update.
  *
  * @return:
- *      - LE_OK on success
- *      - LE_NOT_FOUND if no ongoing update.
- *      - LE_FAULT on any other error
+ *      - DWL_OK on success
+ *      - DWL_SUSPEND if no ongoing update.
+ *      - DWL_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcApp_SetSwUpdateResult
+lwm2mcore_DwlResult_t avcApp_SetSwUpdateResult
 (
     lwm2mcore_SwUpdateResult_t updateResult
 )
@@ -2833,7 +2828,7 @@ le_result_t avcApp_SetSwUpdateResult
     if (CurrentObj9 == NULL)
     {
         LE_ERROR("No update is going on. CurrentObj9 = null");
-        return LE_NOT_FOUND;
+        return DWL_SUSPEND;
     }
 
     switch (updateResult)
@@ -2871,12 +2866,12 @@ le_result_t avcApp_SetSwUpdateResult
     if (LE_OK != result)
     {
         LE_ERROR("Error (%s) while setting object 9 update result", LE_RESULT_TXT(result));
-        return LE_FAULT;
+        return DWL_FAULT;
     }
 
     // Save result in workspace for resume operation
     SetSwUpdateResult(updateResult);
-    return LE_OK;
+    return DWL_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2884,12 +2879,12 @@ le_result_t avcApp_SetSwUpdateResult
  * Set software update state in asset data and SW update workspace for ongoing update.
  *
  * @return:
- *      - LE_OK on success
- *      - LE_NOT_FOUND if no ongoing update.
- *      - LE_FAULT on any other error
+ *      - DWL_OK on success
+ *      - DWL_SUSPEND if no ongoing update.
+ *      - DWL_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcApp_SetSwUpdateState
+lwm2mcore_DwlResult_t avcApp_SetSwUpdateState
 (
     lwm2mcore_SwUpdateState_t updateState
 )
@@ -2899,7 +2894,7 @@ le_result_t avcApp_SetSwUpdateState
     if (CurrentObj9 == NULL)
     {
         LE_ERROR("No update is going on. CurrentObj9 = null");
-        return LE_NOT_FOUND;
+        return DWL_SUSPEND;
     }
 
     le_result_t result = assetData_client_SetInt(CurrentObj9, O9F_UPDATE_STATE, updateState);
@@ -2907,13 +2902,13 @@ le_result_t avcApp_SetSwUpdateState
     if (LE_OK != result)
     {
         LE_ERROR("Error (%s) while setting object 9 update state", LE_RESULT_TXT(result));
-        return LE_FAULT;
+        return DWL_FAULT;
     }
 
     // Save state in workspace for resume operation
     SetSwUpdateState(updateState);
 
-    return LE_OK;
+    return DWL_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -3218,7 +3213,6 @@ le_result_t avcApp_CheckNotificationToSend
     lwm2mcore_SwUpdateState_t restoreState;
     lwm2mcore_SwUpdateResult_t restoreResult;
     avcApp_InternalState_t internalState;
-    assetData_InstanceDataRef_t instanceRef;
 
     if (   (LE_OK != GetSwUpdateState(&restoreState))
         || (LE_OK != GetSwUpdateResult(&restoreResult))
@@ -3256,7 +3250,8 @@ le_result_t avcApp_CheckNotificationToSend
         LE_INFO("Resuming application uninstall");
 
         // Query permission to uninstall
-        avcServer_QueryUninstall(avcApp_PrepareUninstall, instanceId);
+        avcServer_QueryUninstall(avcApp_PrepareUninstall,
+                                 instanceId);
         return LE_BUSY;
     }
 

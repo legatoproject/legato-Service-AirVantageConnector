@@ -19,6 +19,26 @@ static le_timer_Ref_t Lwm2mStepTimerRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Called when the lwm2m step timer expires.
+ */
+//--------------------------------------------------------------------------------------------------
+static void TimerHandler
+(
+    le_timer_Ref_t timerRef
+)
+{
+    lwm2mcore_TimerCallback_t timerCallbackPtr = le_timer_GetContextPtr(timerRef) ;
+    if (timerCallbackPtr)
+    {
+        timerCallbackPtr();
+    }
+    else
+    {
+        LE_ERROR("timerCallbackPtr unable to get Timer context pointer");
+    }
+}
+//--------------------------------------------------------------------------------------------------
+/**
  * Adaptation function for timer launch
  *
  * @return
@@ -49,9 +69,20 @@ bool lwm2mcore_TimerSet
                     timerInterval.sec = time;
                     timerInterval.usec = 0;
                     Lwm2mStepTimerRef = le_timer_Create ("lwm2mStepTimer");
-                    start = le_timer_SetInterval (Lwm2mStepTimerRef, timerInterval);
-                    start = le_timer_SetHandler (Lwm2mStepTimerRef, cb);
-                    start = le_timer_Start (Lwm2mStepTimerRef);
+                    if (Lwm2mStepTimerRef)
+                    {
+                        if ((LE_OK != le_timer_SetInterval (Lwm2mStepTimerRef, timerInterval))
+                            || (LE_OK != le_timer_SetHandler (Lwm2mStepTimerRef, TimerHandler))
+                            || (LE_OK != le_timer_SetContextPtr(Lwm2mStepTimerRef, (void*) cb))
+                            || (LE_OK != le_timer_Start (Lwm2mStepTimerRef)))
+                        {
+                            start = LE_FAULT;
+                        }
+                        else
+                        {
+                            start = LE_OK;
+                        }
+                    }
                 }
                 else
                 {

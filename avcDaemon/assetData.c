@@ -287,21 +287,6 @@ static ActionHandlerData_t AllAssetActionHandlerData = { .assetActionHandlerPtr 
 
 
 //--------------------------------------------------------------------------------------------------
-/**
- * Declare this function here, until the QMI functions are moved out of this file.
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t WriteNotifyObjectToTLV
-(
-    assetData_AssetDataRef_t assetRef,          ///< [IN] Asset to use
-    int instanceId,                             ///< [IN] Instance that has a changed resource
-    int fieldId,                                ///< [IN] The resource which changed
-    uint8_t* bufPtr,                            ///< [OUT] Buffer for writing the TLV list
-    size_t bufNumBytes,                         ///< [IN] Size of buffer
-    size_t* numBytesWrittenPtr                  ///< [OUT] # bytes written to buffer.
-);
-
-//--------------------------------------------------------------------------------------------------
 // Local functions
 //--------------------------------------------------------------------------------------------------
 
@@ -1537,7 +1522,6 @@ le_result_t static SetInt
 {
     le_result_t result;
     FieldData_t* fieldDataPtr;
-    int prevValue;
 
     result = GetFieldFromInstance(instanceRef, fieldId, &fieldDataPtr);
 
@@ -1552,8 +1536,6 @@ le_result_t static SetInt
         return LE_FAULT;
     }
 
-    // Remember current value and set new value.
-    prevValue = fieldDataPtr->intValue;
     fieldDataPtr->intValue = value;
 
     // Call any registered handlers to be notified of write.
@@ -1583,7 +1565,6 @@ le_result_t static SetFloat
 {
     le_result_t result;
     FieldData_t* fieldDataPtr;
-    float prevValue;
 
     result = GetFieldFromInstance(instanceRef, fieldId, &fieldDataPtr);
     if ( result != LE_OK )
@@ -1597,8 +1578,6 @@ le_result_t static SetFloat
         return LE_FAULT;
     }
 
-    // Remember current value and set new value.
-    prevValue = fieldDataPtr->floatValue;
     fieldDataPtr->floatValue = value;
 
     // Call any registered handlers to be notified of write.
@@ -1669,7 +1648,6 @@ le_result_t static SetBool
 {
     le_result_t result;
     FieldData_t* fieldDataPtr;
-    bool prevValue;
 
     result = GetFieldFromInstance(instanceRef, fieldId, &fieldDataPtr);
     if ( result != LE_OK )
@@ -1683,8 +1661,6 @@ le_result_t static SetBool
         return LE_FAULT;
     }
 
-    // Remember current value and set new value.
-    prevValue = fieldDataPtr->boolValue;
     fieldDataPtr->boolValue = value;
 
     // Call any registered handlers to be notified of write.
@@ -1880,122 +1856,6 @@ le_result_t assetData_GetObj9InstanceList
     // Set return values
     *listNumBytesPtr = startBufPtr - strBufPtr;
     *numInstancePtr = instanceCount;
-
-    return LE_OK;
-}
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get a list of the defined assets and asset instances.
- *
- * The list is returned as a string formatted for QMI_LWM2M_REG_UPDATE_REQ
- *
- * @return:
- *      - LE_OK on success
- *      - LE_OVERFLOW if string value was truncated when copied to strBufPtr
- *      - LE_FAULT on any other error
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t GetAssetList
-(
-    char* strBufPtr,                            ///< [OUT] The returned list
-    size_t strBufNumBytes,                      ///< [IN] Size of strBuf
-    int* listNumBytesPtr,                       ///< [OUT] Size of returned list
-    int* numAssetsPtr                           ///< [OUT] Number of assets + instances
-)
-{
-    const char* nameIdPtr;
-    const AssetData_t* assetDataPtr;
-    InstanceData_t* assetInstancePtr;
-
-    le_hashmap_It_Ref_t iterRef;
-    le_dls_Link_t* linkPtr;
-    size_t bytesWritten;
-    char tempStr[100];
-    char nameStr[100];
-    char* namePrefixPtr;
-
-    int assetCount=0;
-
-    // These two pointers are used to determine the writable part of the strBuf:
-    //  - startBufPtr points to the next writable character
-    //  - endBufPtr points past the last character in strBuf
-    // The number of characters left is always (endBufPtr-startBufPtr)
-    char* startBufPtr = strBufPtr;
-    char* endBufPtr = strBufPtr + strBufNumBytes;
-
-    // Write all the asset instances, and if an asset has no instances, then write the asset
-    iterRef = le_hashmap_GetIterator(AssetMap);
-
-    while ( le_hashmap_NextNode(iterRef) == LE_OK )
-    {
-        nameIdPtr = le_hashmap_GetKey(iterRef);
-        assetDataPtr = le_hashmap_GetValue(iterRef);
-
-        // Server expects app names to have "le_" prefix.  The app name is the first part of
-        // nameIdPtr, up to the first '/', unless it is "lwm2m" or "legato", which are not apps.
-        // TODO: Should the "le_" prefix instead be added to the app name when stored?
-        le_utf8_CopyUpToSubStr(nameStr, nameIdPtr, "/", sizeof(nameStr), NULL);
-        if ( (strcmp(nameStr, "lwm2m") == 0) || (strcmp(nameStr, "legato") == 0) )
-        {
-            namePrefixPtr = "";
-        }
-        else
-        {
-            namePrefixPtr = "le_";
-        }
-
-        // Get the start of the instance list
-        linkPtr = le_dls_Peek(&assetDataPtr->instanceList);
-
-        // If the asset has no instances, then just write the asset
-        if ( linkPtr == NULL )
-        {
-            FormatString(tempStr, sizeof(tempStr), "</%s%s>,", namePrefixPtr, nameIdPtr);
-            LE_PRINT_VALUE("%s", tempStr);
-
-            if ( le_utf8_Copy(startBufPtr, tempStr, endBufPtr-startBufPtr, &bytesWritten) != LE_OK )
-            {
-                return LE_OVERFLOW;
-            }
-
-            assetCount++;
-
-            // Point to the character after the last one written
-            startBufPtr += bytesWritten;
-        }
-
-        // Otherwise, loop through the asset instances
-        else while ( linkPtr != NULL )
-        {
-            assetInstancePtr = CONTAINER_OF(linkPtr, InstanceData_t, link);
-
-            FormatString(tempStr,
-                         sizeof(tempStr),
-                         "</%s%s/%i>,",
-                         namePrefixPtr,
-                         nameIdPtr,
-                         assetInstancePtr->instanceId);
-            LE_PRINT_VALUE("%s", tempStr);
-
-            if ( le_utf8_Copy(startBufPtr, tempStr, endBufPtr-startBufPtr, &bytesWritten) != LE_OK )
-            {
-                return LE_OVERFLOW;
-            }
-
-            assetCount++;
-
-            // Point to the character after the last one written
-            startBufPtr += bytesWritten;
-
-            linkPtr = le_dls_PeekNext(&assetDataPtr->instanceList, linkPtr);
-        }
-    }
-
-    // Set return values
-    *listNumBytesPtr = startBufPtr - strBufPtr;
-    *numAssetsPtr = assetCount;
 
     return LE_OK;
 }
@@ -3655,7 +3515,7 @@ static le_result_t WriteFieldTLV
 )
 {
     le_result_t result = LE_OK;
-    size_t numBytesWritten;
+    size_t numBytesWritten = 0;
     int strLength;
 
     // Provide enough space for max field size, which is 256 bytes for a string, plus max header
@@ -3949,56 +3809,6 @@ le_result_t assetData_WriteObjectToTLV
     }
 
     *numBytesWrittenPtr = bufPtr-startBufPtr;
-    return LE_OK;
-}
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- *  Write TLV for an object but include only the instance/resource which changed. This type of
- *  response is needed as the server sends notify on entire object, but we need to notify changes
- *  at resource level.
- *
- *  @return:
- *      - LE_OK on success
- *      - LE_FAULT on error
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t WriteNotifyObjectToTLV
-(
-    assetData_AssetDataRef_t assetRef,          ///< [IN] Asset to use
-    int instanceId,                             ///< [IN] Instance that has a changed resource
-    int fieldId,                                ///< [IN] The resource which changed
-    uint8_t* bufPtr,                            ///< [OUT] Buffer for writing the TLV list
-    size_t bufNumBytes,                         ///< [IN] Size of buffer
-    size_t* numBytesWrittenPtr                  ///< [OUT] # bytes written to buffer.
-)
-{
-    le_result_t result = LE_OK;
-    InstanceData_t* instancePtr;
-
-    LE_DEBUG("instanceId = %d", instanceId);
-    LE_DEBUG("fieldId = %d", fieldId);
-
-    result = GetInstanceFromAssetData(assetRef, instanceId, &instancePtr);
-
-    if (result != LE_OK)
-    {
-        LE_ERROR("Error reading instance reference result = %d.", result);
-        return LE_FAULT;
-    }
-
-    result = WriteInstanceToTLV(instancePtr,
-                                fieldId,
-                                bufPtr,
-                                bufNumBytes,
-                                numBytesWrittenPtr);
-    if (result != LE_OK)
-    {
-        LE_ERROR("Error while setting asset instance result = %d.", result);
-        return LE_FAULT;
-    }
-
     return LE_OK;
 }
 

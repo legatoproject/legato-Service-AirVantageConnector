@@ -10,6 +10,7 @@
 #include "legato.h"
 #include "interfaces.h"
 #include "push.h"
+#include "avcClient.h"
 
 #include <lwm2mcore/lwm2mcore.h>
 

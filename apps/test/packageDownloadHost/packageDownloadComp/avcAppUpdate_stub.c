@@ -65,20 +65,14 @@ le_result_t avcApp_StartUpdate
  *  operation. During an uninstall operation the app will be removed after the client receives the
  *  object9 delete command.
  *
- *  @return
- *      - LE_OK if successful
- *      - LE_NOT_FOUND if instanceId/appName not found
- *      - LE_FAULT if there is any other error.
- *
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcApp_PrepareUninstall
+void avcApp_PrepareUninstall
 (
     uint16_t instanceId     ///< [IN] Instance id of the app to be removed.
 )
 {
     LE_DEBUG("Stub");
-    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -262,18 +256,18 @@ le_result_t avcApp_GetResumePosition
  * Set software update result in asset data and SW update workspace for ongoing update.
  *
  * @return:
- *      - LE_OK on success
- *      - LE_NOT_FOUND if no ongoing update.
- *      - LE_FAULT on any other error
+ *      - DWL_OK on success
+ *      - DWL_SUSPEND if no ongoing update.
+ *      - DWL_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcApp_SetSwUpdateResult
+lwm2mcore_DwlResult_t avcApp_SetSwUpdateResult
 (
     lwm2mcore_SwUpdateResult_t updateResult
 )
 {
     LE_DEBUG("Stub");
-    return LE_OK;
+    return DWL_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -281,18 +275,18 @@ le_result_t avcApp_SetSwUpdateResult
  * Set software update state in asset data and SW update workspace for ongoing update.
  *
  * @return:
- *      - LE_OK on success
- *      - LE_NOT_FOUND if no ongoing update.
- *      - LE_FAULT on any other error
+ *      - DWL_OK on success
+ *      - DWL_SUSPEND if no ongoing update.
+ *      - DWL_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t avcApp_SetSwUpdateState
+lwm2mcore_DwlResult_t avcApp_SetSwUpdateState
 (
     lwm2mcore_SwUpdateState_t updateState
 )
 {
     LE_DEBUG("Stub");
-    return LE_OK;
+    return DWL_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
