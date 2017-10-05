@@ -87,6 +87,7 @@ sources:
 
     // Wakaama
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/er-coap-13/er-coap-13.c
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/acl.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/bootstrap.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/block1.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/data.c
