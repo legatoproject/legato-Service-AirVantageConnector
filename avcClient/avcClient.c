@@ -20,6 +20,27 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Length of date/time buffer, including NULL-terminator
+ */
+//--------------------------------------------------------------------------------------------------
+#define DATE_TIME_LENGTH            200
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Year used to determine if date is correctly set
+ */
+//--------------------------------------------------------------------------------------------------
+#define MINIMAL_YEAR                2017
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Define value for the base used in strtoul
+ */
+//--------------------------------------------------------------------------------------------------
+#define BASE10                      10
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Static instance reference for LWM2MCore
  */
 //--------------------------------------------------------------------------------------------------
@@ -140,6 +161,53 @@ static le_avc_ErrorCode_t ConvertFumoErrorCode
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Check if the date/time is valid and synchronize it if necessary.
+ */
+//--------------------------------------------------------------------------------------------------
+static void CheckDateTimeValidity
+(
+    void
+)
+{
+    char dateTimeBuf[DATE_TIME_LENGTH] = {0};
+    uint32_t deviceYear;
+
+    if (LE_OK != le_clk_GetUTCDateTimeString("%Y", dateTimeBuf, sizeof(dateTimeBuf), NULL))
+    {
+        LE_ERROR("Unable to retrieve current date/time");
+        return;
+    }
+
+    deviceYear = (uint32_t) strtoul(dateTimeBuf, NULL, BASE10);
+
+    // The date is considered as incorrect if the year is before 2017
+    if (deviceYear < MINIMAL_YEAR)
+    {
+        uint16_t year, month, day, hour, minute, second, millisecond;
+
+        // Retrieve the date and time from a server
+        if (   (LE_OK != le_data_GetDate(&year, &month, &day))
+            || (LE_OK != le_data_GetTime(&hour, &minute, &second, &millisecond)))
+        {
+            LE_ERROR("Unable to retrieve date or time from server");
+            return;
+        }
+
+        // Set the date and time
+        memset(dateTimeBuf, 0, sizeof(dateTimeBuf));
+        snprintf(dateTimeBuf, sizeof(dateTimeBuf), "%04d-%02d-%02d %02d:%02d:%02d",
+                 year, month, day, hour, minute, second);
+        LE_DEBUG("Set date/time: %s", dateTimeBuf);
+        if (LE_OK != le_clk_SetUTCDateTimeString("%Y-%m-%d %H:%M:%S", dateTimeBuf))
+        {
+            LE_ERROR("Unable to retrieve date or time from server");
+            return;
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  *  Call back registered in LWM2M client for bearer related events
  */
 //--------------------------------------------------------------------------------------------------
@@ -210,6 +278,10 @@ static void ConnectionStateHandler
     {
         LE_DEBUG("Connected through interface '%s'", intfNamePtr);
         DataConnected = true;
+
+        /* Check if date/time is valid when connected */
+        CheckDateTimeValidity();
+
         /* Call the callback */
         BearerEventCb(connected, contextPtr);
     }
