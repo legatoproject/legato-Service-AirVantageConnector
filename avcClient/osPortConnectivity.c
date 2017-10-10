@@ -678,17 +678,12 @@ lwm2mcore_Sid_t lwm2mcore_GetSignalStrength
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
- *      - LWM2MCORE_ERR_INCORRECT_RANGE if the provided parameters (WRITE operation) is incorrect
  *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
- *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED  if the resource is not supported
- *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
- *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
- *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetLinkQuality
 (
-    uint16_t* valuePtr  ///< [INOUT] data buffer
+    int* valuePtr  ///< [INOUT] data buffer
 )
 {
     lwm2mcore_Sid_t sID;
@@ -705,23 +700,90 @@ lwm2mcore_Sid_t lwm2mcore_GetLinkQuality
     {
         case LE_DATA_CELLULAR:
         {
-            le_result_t result = le_mrc_GetSignalQual(valuePtr);
+            le_mrc_Rat_t rat;
+            int32_t  rxLevel = 0;
+            uint32_t er      = 0;
+            int32_t  ecio    = 0;
+            int32_t  rscp    = 0;
+            int32_t  sinr    = 0;
+            int32_t  rsrq    = 0;
+            int32_t  rsrp    = 0;
+            int32_t  snr     = 0;
+            int32_t  io      = 0;
+            le_mrc_MetricsRef_t metricsRef = le_mrc_MeasureSignalMetrics();
 
-            switch (result)
+            if (!metricsRef)
             {
-                case LE_OK:
+                return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+
+            rat = le_mrc_GetRatOfSignalMetrics(metricsRef);
+
+            switch (rat)
+            {
+                case LE_MRC_RAT_GSM:
+                    if (LE_OK != le_mrc_GetGsmSignalMetrics(metricsRef, &rxLevel, &er))
+                    {
+                        return LWM2MCORE_ERR_GENERAL_ERROR;
+                    }
+                    if (UINT32_MAX == er)
+                    {
+                        /*
+                         *TODO This needs to be changed to LWM2MCORE_ERR_INVALID_STATE:
+                         * LWM2MCORE_ERR_INVALID_STATE returns coap 503 but the
+                         * airvantage server doesn't recognize this response code.
+                         * The response code handling in lwm2mcore is buggy
+                         * it doesn't handle reponse codes properly
+                         * in case we return a different response code other than
+                         * LWM2MCORE_ERR_NOT_YET_IMPLEMENTED it treats the whole object
+                         * as erroneous and doesn't update the functional resources
+                         */
+                        sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+                    }
+                    else
+                    {
+                        *valuePtr = (int)er;
+                        sID = LWM2MCORE_ERR_COMPLETED_OK;
+                    }
+                    break;
+
+                case LE_MRC_RAT_UMTS:
+                case LE_MRC_RAT_TDSCDMA:
+                    if (LE_OK != le_mrc_GetUmtsSignalMetrics(metricsRef, &rxLevel, &er,
+                                                             &ecio, &rscp, &sinr))
+                    {
+                        return LWM2MCORE_ERR_GENERAL_ERROR;
+                    }
+                    *valuePtr = (int)ecio/10;
                     sID = LWM2MCORE_ERR_COMPLETED_OK;
                     break;
 
-                case LE_BAD_PARAMETER:
-                    sID = LWM2MCORE_ERR_INVALID_ARG;
+                case LE_MRC_RAT_LTE:
+                    if (LE_OK != le_mrc_GetLteSignalMetrics(metricsRef, &rxLevel, &er,
+                                                            &rsrq, &rsrp, &snr))
+                    {
+                        return LWM2MCORE_ERR_GENERAL_ERROR;
+                    }
+                    *valuePtr = (int)rsrq/10;
+                    sID = LWM2MCORE_ERR_COMPLETED_OK;
                     break;
 
-                case LE_FAULT:
+                case LE_MRC_RAT_CDMA:
+                    if (LE_OK != le_mrc_GetCdmaSignalMetrics(metricsRef, &rxLevel, &er,
+                                                             &ecio, &sinr, &io))
+                    {
+                        return LWM2MCORE_ERR_GENERAL_ERROR;
+                    }
+                    *valuePtr = (int)ecio/10;
+                    sID = LWM2MCORE_ERR_COMPLETED_OK;
+                    break;
+
                 default:
                     sID = LWM2MCORE_ERR_GENERAL_ERROR;
                     break;
             }
+
+            le_mrc_DeleteSignalMetrics(metricsRef);
         }
         break;
 
@@ -735,6 +797,7 @@ lwm2mcore_Sid_t lwm2mcore_GetLinkQuality
     }
 
     LE_DEBUG("os_portConnectivityLinkQuality result: %d", sID);
+
     return sID;
 }
 
