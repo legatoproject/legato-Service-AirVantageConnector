@@ -388,26 +388,10 @@ le_result_t avcApp_DeleteObj9Instance
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Send a list of object 9 instances currently managed by legato to lwm2mcore
+ *  Send a list of object 9 instances currently managed by legato to lwm2mcore
  */
 //--------------------------------------------------------------------------------------------------
 void avcApp_NotifyObj9List
-(
-    void
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Check if there is a software update related notification to send after a reboot
- * or a service restart.
- *
- * @return
- *      - LE_OK     No notification to send
- *      - LE_BUSY   Notification sent
- *      - LE_FAULT  An error occurred
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t avcApp_CheckNotificationToSend
 (
     void
 );

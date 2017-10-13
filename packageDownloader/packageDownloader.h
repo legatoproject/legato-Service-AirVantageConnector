@@ -13,7 +13,6 @@
 #include <lwm2mcore/update.h>
 #include <lwm2mcorePackageDownloader.h>
 #include <legato.h>
-#include <interfaces.h>
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -133,9 +132,7 @@ le_result_t packageDownloader_SetFwUpdateInstallPending
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set firmware update notification.
- * This is used to indicate if the FOTA result needs to be notified to the application and sent to
- * the server after an install.
+ * Set firmware update notification
  *
  * @return
  *  - LE_OK     The function succeeded
@@ -144,16 +141,12 @@ le_result_t packageDownloader_SetFwUpdateInstallPending
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_SetFwUpdateNotification
 (
-    bool                notifRequested,     ///< [IN] Indicates if a notification is requested
-    le_avc_Status_t     updateStatus,       ///< [IN] Update status
-    le_avc_ErrorCode_t  errorCode           ///< [IN] Error code
+    bool notificationRequest                    ///< [IN] Notification requested
 );
 
 //--------------------------------------------------------------------------------------------------
 /**
  * Get firmware update notification
- * This is used to check if the FOTA result needs to be notified to the application and sent to
- * the server after an install.
  *
  * @return
  *  - LE_OK             The function succeeded
@@ -163,9 +156,8 @@ le_result_t packageDownloader_SetFwUpdateNotification
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetFwUpdateNotification
 (
-    bool*               notifRequestedPtr,  ///< [OUT] Indicates if a notification is requested
-    le_avc_Status_t*    updateStatusPtr,    ///< [OUT] Update status
-    le_avc_ErrorCode_t* errorCodePtr        ///< [OUT] Error code
+    bool* isNotificationRequestPtr              ///< [IN] is a FOTA result needed to be sent to the
+                                                ///< server ?
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -372,6 +364,22 @@ le_result_t packageDownloader_BytesLeftToDownload
                                 ///<       data if suspend state was LE_AVC_DOWNLOAD_PENDING,
                                 ///<       LE_DOWNLOAD_IN_PROGRESS or LE_DOWNLOAD_COMPLETE.
                                 ///<       Otherwise undefined.
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Request user agreement before starting a download
+ *
+ * @return
+ *      None
+ */
+//--------------------------------------------------------------------------------------------------
+void packageDownloader_GetDownloadAgreement
+(
+    uint64_t               bytesToDownload,     ///< [IN] Number of bytes to download
+    lwm2mcore_UpdateType_t type,                ///< [IN] Update type (FW/SW)
+    const char*            uriPtr,              ///< [IN] Update package URI
+    bool                   resume               ///< [IN] Is it a download resume?
 );
 
 #endif /*_PACKAGEDOWNLOADER_H */

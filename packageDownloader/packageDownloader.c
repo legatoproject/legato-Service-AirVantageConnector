@@ -76,19 +76,6 @@ static pthread_mutex_t DownloadStatusMutex = PTHREAD_MUTEX_INITIALIZER;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Firmware update notification structure
- */
-//--------------------------------------------------------------------------------------------------
-typedef struct
-{
-    bool                notifRequested;     ///< Indicates if a notification is requested
-    le_avc_Status_t     updateStatus;       ///< Update status
-    le_avc_ErrorCode_t  errorCode;          ///< Error code
-}
-FwUpdateNotif_t;
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Send a registration update to the server in order to follow the update treatment
  */
 //--------------------------------------------------------------------------------------------------
@@ -651,9 +638,7 @@ le_result_t packageDownloader_GetUpdatePackageSize
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set firmware update notification.
- * This is used to indicate if the FOTA result needs to be notified to the application and sent to
- * the server after an install.
+ * Set firmware update notification
  *
  * @return
  *  - LE_OK     The function succeeded
@@ -662,19 +647,12 @@ le_result_t packageDownloader_GetUpdatePackageSize
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_SetFwUpdateNotification
 (
-    bool                notifRequested,     ///< [IN] Indicates if a notification is requested
-    le_avc_Status_t     updateStatus,       ///< [IN] Update status
-    le_avc_ErrorCode_t  errorCode           ///< [IN] Error code
+    bool notificationRequest                    ///< [IN] Notification requested
 )
 {
-    FwUpdateNotif_t notification;
-    notification.notifRequested = notifRequested;
-    notification.updateStatus = updateStatus;
-    notification.errorCode = errorCode;
-
     le_result_t result = WriteFs(FW_UPDATE_NOTIFICATION_PATH,
-                                 (uint8_t*)&notification,
-                                 sizeof(FwUpdateNotif_t));
+                                 (bool*)&notificationRequest,
+                                 sizeof(bool));
     if (LE_OK != result)
     {
         LE_ERROR("Failed to write %s: %s", FW_UPDATE_NOTIFICATION_PATH, LE_RESULT_TXT(result));
@@ -687,8 +665,6 @@ le_result_t packageDownloader_SetFwUpdateNotification
 //--------------------------------------------------------------------------------------------------
 /**
  * Get firmware update notification
- * This is used to check if the FOTA result needs to be notified to the application and sent to
- * the server after an install.
  *
  * @return
  *  - LE_OK             The function succeeded
@@ -698,31 +674,27 @@ le_result_t packageDownloader_SetFwUpdateNotification
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetFwUpdateNotification
 (
-    bool*               notifRequestedPtr,  ///< [OUT] Indicates if a notification is requested
-    le_avc_Status_t*    updateStatusPtr,    ///< [OUT] Update status
-    le_avc_ErrorCode_t* errorCodePtr        ///< [OUT] Error code
+    bool* isNotificationRequestPtr              ///< [IN] is a FOTA result needed to be sent to the
+                                                ///< server ?
 )
 {
     le_result_t result;
-    FwUpdateNotif_t notification;
-    size_t size = sizeof(FwUpdateNotif_t);
+    bool isNotificationRequest;
+    size_t size = sizeof(bool);
 
-    if ((!notifRequestedPtr) || (!updateStatusPtr) || (!errorCodePtr))
+    if (!isNotificationRequestPtr)
     {
         LE_ERROR("Invalid input parameter");
         return LE_FAULT;
     }
 
-    result = ReadFs(FW_UPDATE_NOTIFICATION_PATH, (uint8_t*)&notification, &size);
+    result = ReadFs(FW_UPDATE_NOTIFICATION_PATH, (bool*)&isNotificationRequest, &size);
     if (LE_OK != result)
     {
         LE_ERROR("Failed to read %s: %s", FW_UPDATE_NOTIFICATION_PATH, LE_RESULT_TXT(result));
         return LE_FAULT;
     }
-
-    *notifRequestedPtr = notification.notifRequested;
-    *updateStatusPtr = notification.updateStatus;
-    *errorCodePtr = notification.errorCode;
+    *isNotificationRequestPtr = isNotificationRequest;
 
     return LE_OK;
 }
@@ -985,11 +957,10 @@ static void* DownloadThread
             }
 
             // Indicate that a download is pending
-            avcServer_QueryDownload(packageDownloader_StartDownload,
-                                    numBytesToDownload,
-                                    pkgDwlPtr->data.updateType,
-                                    pkgDwlPtr->data.packageUri,
-                                    true);
+            packageDownloader_GetDownloadAgreement(numBytesToDownload,
+                                                   pkgDwlPtr->data.updateType,
+                                                   pkgDwlPtr->data.packageUri,
+                                                   true);
 
             le_fwupdate_DisconnectService();
         }
@@ -1478,4 +1449,31 @@ le_result_t packageDownloader_BytesLeftToDownload
 
         return LE_FAULT;
     }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Request user agreement before starting a download
+ *
+ * @return
+ *      None
+ */
+//--------------------------------------------------------------------------------------------------
+void packageDownloader_GetDownloadAgreement
+(
+    uint64_t               bytesToDownload,     ///< [IN] Number of bytes to download
+    lwm2mcore_UpdateType_t type,                ///< [IN] Update type (FW/SW)
+    const char*            uriPtr,              ///< [IN] Update package URI
+    bool                   resume               ///< [IN] Is it a download resume?
+)
+{
+    // Initialize user agreement
+    avcServer_InitUserAgreement();
+
+    // Request user agreement for download
+    avcServer_QueryDownload(packageDownloader_StartDownload,
+                            bytesToDownload,
+                            type,
+                            uriPtr,
+                            resume);
 }
