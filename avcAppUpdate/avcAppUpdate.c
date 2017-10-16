@@ -1781,7 +1781,7 @@ static le_result_t StartStoringPackage
     size_t offset = 0;
 
     // Make sure legato is NOT a read only system
-    if ((0 == access("/mnt/legato/systems/current/read-only", R_OK)))
+    if (le_framework_IsReadOnly())
     {
         LE_ERROR("Legato is R/O");
         return LE_UNSUPPORTED;
@@ -2214,7 +2214,7 @@ le_result_t avcApp_StartUpdate
 
     char downloadFile[MAX_FILE_PATH_BYTES];
 
-    if ((0 == access("/mnt/legato/systems/current/read-only", R_OK)))
+    if (le_framework_IsReadOnly())
     {
         LE_ERROR("Legato is R/O");
         return LE_UNSUPPORTED;
