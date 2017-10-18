@@ -431,6 +431,40 @@ static int PackageEventHandler
             }
             break;
 
+        case LWM2MCORE_EVENT_PACKAGE_CERTIFICATION_OK:
+            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateStatus(LE_AVC_CERTIFICATION_OK, LE_AVC_FIRMWARE_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
+            }
+            else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateStatus(LE_AVC_CERTIFICATION_OK, LE_AVC_APPLICATION_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
+            }
+            else
+            {
+                LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
+            }
+            break;
+
+        case LWM2MCORE_EVENT_PACKAGE_CERTIFICATION_NOT_OK:
+            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateStatus(LE_AVC_CERTIFICATION_KO, LE_AVC_FIRMWARE_UPDATE,
+                                       -1, -1, LE_AVC_ERR_BAD_PACKAGE);
+            }
+            else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateStatus(LE_AVC_CERTIFICATION_KO, LE_AVC_APPLICATION_UPDATE,
+                                       -1, -1, LE_AVC_ERR_BAD_PACKAGE);
+            }
+            else
+            {
+                LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
+            }
+            break;
+
         default:
             if (LWM2MCORE_EVENT_LAST <= status.event)
             {
@@ -511,6 +545,8 @@ static int EventHandler
         case LWM2MCORE_EVENT_UPDATE_STARTED:
         case LWM2MCORE_EVENT_UPDATE_FINISHED:
         case LWM2MCORE_EVENT_UPDATE_FAILED:
+        case LWM2MCORE_EVENT_PACKAGE_CERTIFICATION_OK:
+        case LWM2MCORE_EVENT_PACKAGE_CERTIFICATION_NOT_OK:
             result = PackageEventHandler(status);
             break;
 
