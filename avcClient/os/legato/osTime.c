@@ -9,7 +9,6 @@
  *
  */
 
-
 #include <liblwm2m.h>
 #include "legato.h"
 #include "interfaces.h"
@@ -27,19 +26,9 @@ time_t lwm2m_gettime
     void
 )
 {
-    le_result_t res = LE_FAULT;
-    uint64_t   millisecondsPastGpsEpoch = 0;
-    struct timeval tv;
+    le_clk_Time_t deviceTime = le_clk_GetAbsoluteTime();
 
-    res = le_rtc_GetUserTime (&millisecondsPastGpsEpoch);
-    LE_DEBUG ("lwm2m_gettime le_rtc_GetUserTime res %d, millisecondsPastGpsEpoch %d",
-            res, millisecondsPastGpsEpoch);
+    LE_DEBUG("Device time: %ld", deviceTime.sec);
 
-    if (0 != gettimeofday(&tv, NULL))
-    {
-        return -1;
-    }
-    LE_DEBUG ("tv.tv_sec %d", tv.tv_sec);
-
-    return tv.tv_sec;
+    return deviceTime.sec;
 }

@@ -62,7 +62,6 @@ bindings:
     avcDaemon.avcDaemon.le_ips  -> modemService.le_ips
     avcDaemon.avcDaemon.le_mdc  -> modemService.le_mdc
     avcDaemon.avcDaemon.le_mrc  -> modemService.le_mrc
-    avcDaemon.avcDaemon.le_rtc  -> modemService.le_rtc
     avcDaemon.avcDaemon.le_sim  -> modemService.le_sim
     avcDaemon.avcDaemon.le_sms  -> modemService.le_sms
     avcDaemon.avcDaemon.le_temp -> modemService.le_temp
