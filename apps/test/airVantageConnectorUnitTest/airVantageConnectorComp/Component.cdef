@@ -1,0 +1,32 @@
+requires:
+{
+    api:
+    {
+        airVantage/le_avc.api                               [types-only]
+        airVantage/le_avdata.api                            [types-only]
+        le_cfg.api                                          [types-only]
+        le_data.api                                         [types-only]
+    }
+
+}
+
+sources:
+{
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcServer.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcFs.c
+    // AVC
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/avcClient.c
+
+    airVantageConnector_stub.c
+    lwm2mcore_stub.c
+}
+
+cflags:
+{
+    -w
+    -std=gnu99
+    -DWITH_SHA256
+    -fvisibility=default
+    -Dle_msg_AddServiceCloseHandler=MyAddServiceCloseHandler
+}
+

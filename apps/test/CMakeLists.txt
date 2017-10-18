@@ -31,3 +31,6 @@ if((LEGATO_TARGET MATCHES "ar7") OR (LEGATO_TARGET MATCHES "ar86"))
 else()
     add_subdirectory(packageDownloadHost)
 endif()
+
+# AirVantageConnector unitary test
+add_subdirectory(airVantageConnectorUnitTest)
