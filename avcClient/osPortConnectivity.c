@@ -1847,7 +1847,7 @@ lwm2mcore_Sid_t lwm2mcore_GetTxData
     }
     else
     {
-        sID= LWM2MCORE_ERR_GENERAL_ERROR;
+        sID = LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
     LE_DEBUG("lwm2mcore_GetTxData result: %d", sID);
@@ -1887,7 +1887,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRxData
     }
     else
     {
-        sID= LWM2MCORE_ERR_GENERAL_ERROR;
+        sID = LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
     LE_DEBUG("lwm2mcore_GetRxData result: %d", sID);
@@ -1909,12 +1909,18 @@ lwm2mcore_Sid_t lwm2mcore_StartConnectivityCounters
     void
 )
 {
-    if (LE_OK == le_mdc_ResetBytesCounter())
+    // Reset and start SMS counters
+    le_sms_ResetCount();
+    le_sms_StartCount();
+
+    // Reset and start data counters
+    if (   (LE_OK != le_mdc_ResetBytesCounter())
+        || (LE_OK != le_mdc_StartBytesCounter()))
     {
-        return LWM2MCORE_ERR_COMPLETED_OK;
+        return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    return LWM2MCORE_ERR_GENERAL_ERROR;
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1923,7 +1929,8 @@ lwm2mcore_Sid_t lwm2mcore_StartConnectivityCounters
  * This API treatment needs to have a procedural treatment
  *
  * @return
- *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_StopConnectivityCounters
@@ -1931,5 +1938,14 @@ lwm2mcore_Sid_t lwm2mcore_StopConnectivityCounters
     void
 )
 {
-    return LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+    // Stop SMS counters without resetting the counters
+    le_sms_StopCount();
+
+    // Stop data counters without resetting the counters
+    if (LE_OK != le_mdc_StopBytesCounter())
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
