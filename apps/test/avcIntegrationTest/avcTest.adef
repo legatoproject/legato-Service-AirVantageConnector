@@ -1,0 +1,30 @@
+sandboxed: false
+
+executables:
+{
+    avcTest = ( avcTestComp )
+}
+
+processes:
+{
+    envVars:
+    {
+        LE_LOG_LEVEL = DEBUG
+    }
+
+    run:
+    {
+        ( avcTest )
+    }
+}
+
+start: manual
+
+bindings:
+{
+    avcTest.avcTestComp.le_avc -> avcService.le_avc
+    avcTest.avcTestComp.le_fwupdate -> fwupdateService.le_fwupdate
+    avcTest.avcTestComp.le_mrc -> modemService.le_mrc
+    avcTest.avcTestComp.le_sim -> modemService.le_sim
+    avcTest.avcTestComp.secStoreGlobal -> <root>.secStoreGlobal
+}

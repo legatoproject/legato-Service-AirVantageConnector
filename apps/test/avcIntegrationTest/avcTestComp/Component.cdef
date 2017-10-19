@@ -1,0 +1,16 @@
+requires:
+{
+    api:
+    {
+        airVantage/le_avc.api
+        le_fwupdate.api
+        modemServices/le_mrc.api
+        modemServices/le_sim.api
+        secStoreGlobal = le_secStore.api
+    }
+}
+
+sources:
+{
+    avcTest.c
+}
