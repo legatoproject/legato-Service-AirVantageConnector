@@ -2233,11 +2233,11 @@ void avcServer_QueryReboot
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Initializes user agreement queries of download, install and uninstall. Used after a session
- * start for SOTA resume.
+ * Resets user agreement query handlers of download, install and uninstall. This also stops
+ * corresponding defer timers.
  */
 //--------------------------------------------------------------------------------------------------
-void avcServer_InitUserAgreement
+void avcServer_ResetQueryHandlers
 (
     void
 )
@@ -2269,9 +2269,6 @@ void avcServer_QueryUninstall
     uint16_t instanceId                           ///< Instance Id (0 for FW, any value for SW)
 )
 {
-    // Return busy, if user tries to uninstall multiple apps together
-    // As the query is already in progress, both the apps will be removed after we get permission
-    // for a single uninstall
     if (NULL != QueryUninstallHandlerRef)
     {
         LE_ERROR("Duplicate uninstall attempt");
@@ -3651,7 +3648,7 @@ COMPONENT_INIT
     }
 
     // Initialize user agreement.
-    avcServer_InitUserAgreement();
+    avcServer_ResetQueryHandlers();
 
     // Clear resume data if necessary
     if (fsSys_IsNewSys())

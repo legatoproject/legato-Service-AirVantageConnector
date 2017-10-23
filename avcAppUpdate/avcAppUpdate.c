@@ -2664,7 +2664,7 @@ le_result_t avcApp_DeleteObj9Instance
                 packageDownloader_SuspendDownload();
                 packageDownloader_DeleteResumeInfo();
                 DeletePackage();
-                avcServer_InitUserAgreement();
+                avcServer_ResetQueryHandlers();
                 assetData_DeleteInstance(instanceRef);
                 CurrentObj9 = NULL;
             }

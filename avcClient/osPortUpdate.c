@@ -799,6 +799,10 @@ lwm2mcore_Sid_t lwm2mcore_LaunchSwUpdateUninstall
 
     avcApp_SetSwUpdateInternalState(INTERNAL_STATE_UNINSTALL_REQUESTED);
 
+    // Received new uninstallation request. Clear all query handler references. This is specially
+    // needed to clear any stale query handler references of aborted stale FOTA/SOTA job.
+    avcServer_ResetQueryHandlers();
+
     // Here we are only delisting the app. The deletion of app will be called when deletion
     // of object 9 instance is requested. But get user agreement before delisting.
     avcServer_QueryUninstall(avcApp_PrepareUninstall, instanceId);
