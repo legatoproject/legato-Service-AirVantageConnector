@@ -174,6 +174,10 @@ static void StartDownloadTimerExpiryHandler
         packageSize = 0;
     }
 
+    // Received a new download request: clear all query handler references which might be left by
+    // previous aborted or stale SOTA/FOTA jobs.
+    avcServer_ResetQueryHandlers();
+
     // Request user agreement before proceeding with download
     avcServer_QueryDownload(packageDownloader_StartDownload,
                             packageSize,
@@ -928,6 +932,10 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
         LE_ERROR("Unable to retrieve bytes left to download");
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
+
+    // Resuming a download: clear all query handler references which might be left by
+    // previous SOTA/FOTA jobs interrupted by a session stop.
+    avcServer_ResetQueryHandlers();
 
     // Request user agreement before proceeding with download
     avcServer_QueryDownload(packageDownloader_StartDownload,
