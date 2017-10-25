@@ -183,7 +183,7 @@ static int Progress
     if (true == packageDownloader_CheckDownloadToAbort())
     {
         LE_INFO("Download aborted");
-        pkgPtr->result = DWL_OK;
+        pkgPtr->result = DWL_ABORTED;
         return 1;
     }
 
@@ -501,6 +501,13 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
 
     LE_DEBUG("Initialize package downloader");
 
+    // Check as soon as possible if download should be aborted
+    if (true == packageDownloader_CheckDownloadToAbort())
+    {
+        LE_INFO("Download aborted");
+        return DWL_ABORTED;
+    }
+
     // initialize everything possible
     rc = curl_global_init(CURL_GLOBAL_ALL);
     if (CURLE_OK != rc)
@@ -602,6 +609,13 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
     LE_DEBUG("connection status: %ld", pkgInfoPtr->httpRespCode);
     LE_DEBUG("package full size: %g MiB", pkgInfoPtr->totalSize / MEBIBYTE);
     LE_DEBUG("updateType: %d", dataPtr->updateType);
+
+    // Check as soon as possible if download should be aborted
+    if (true == packageDownloader_CheckDownloadToAbort())
+    {
+        LE_INFO("Download aborted");
+        return DWL_ABORTED;
+    }
 
     dataPtr->packageSize = (uint64_t)pkgInfoPtr->totalSize;
     if(LWM2MCORE_FW_UPDATE_TYPE == dataPtr->updateType)

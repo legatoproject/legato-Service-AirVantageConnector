@@ -904,13 +904,6 @@ static void* DownloadThread
         }
     }
 
-    // If package download is finished or aborted: delete stored URI and update type
-    if (   (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus())
-        && (LE_OK != packageDownloader_DeleteResumeInfo()))
-    {
-        ret = -1;
-    }
-
     // Wait for the end of the store thread used for FOTA
     if (LWM2MCORE_FW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
     {
@@ -942,14 +935,19 @@ static void* DownloadThread
             }
             else
             {
-                // Send download complete event.
-                // Not setting the downloaded number of bytes and percentage
-                // allows using the last stored values.
-                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_COMPLETE,
-                                       LE_AVC_FIRMWARE_UPDATE,
-                                       -1,
-                                       -1,
-                                       LE_AVC_ERR_NONE);
+                // Package download is aborted and no error: the download end is expected in this
+                // case, no need to send a notification.
+                if (DOWNLOAD_STATUS_ABORT != GetDownloadStatus())
+                {
+                    // Send download complete event.
+                    // Not setting the downloaded number of bytes and percentage
+                    // allows using the last stored values.
+                    avcServer_UpdateStatus(LE_AVC_DOWNLOAD_COMPLETE,
+                                           LE_AVC_FIRMWARE_UPDATE,
+                                           -1,
+                                           -1,
+                                           LE_AVC_ERR_NONE);
+                }
             }
         }
     }
@@ -965,7 +963,9 @@ static void* DownloadThread
     switch (GetDownloadStatus())
     {
         case DOWNLOAD_STATUS_ACTIVE:
-        case DOWNLOAD_STATUS_ABORT:
+            // Package download is finished: delete stored information
+            packageDownloader_DeleteResumeInfo();
+
             // Trigger a connection to the server: the update state and result will be read
             // to determine if the download was successful
             le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
@@ -994,6 +994,39 @@ static void* DownloadThread
             le_fwupdate_DisconnectService();
         }
         break;
+
+        case DOWNLOAD_STATUS_ABORT:
+            if (ret < 0)
+            {
+                // The abort was caused by an error during the firmware update process:
+                // - Delete stored information
+                packageDownloader_DeleteResumeInfo();
+                // - Trigger a connection to the server to indicate the download failure
+                le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
+            }
+            else
+            {
+                // The abort was requested by the server:
+                // - Do not delete the stored information: it was already done when receiving the
+                //   abort command from the server and a new download URI might have been sent
+                //   by the server in the meantime.
+                // - Set update state to the default value
+                switch (pkgDwlPtr->data.updateType)
+                {
+                    case LWM2MCORE_FW_UPDATE_TYPE:
+                        packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
+                        break;
+
+                    case LWM2MCORE_SW_UPDATE_TYPE:
+                        avcApp_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
+                        break;
+
+                    default:
+                        LE_ERROR("Unknown download type");
+                        break;
+                }
+            }
+            break;
 
         default:
             LE_ERROR("Unexpected download status %d", GetDownloadStatus());
@@ -1053,7 +1086,7 @@ static void* StoreFwThread
             default:
                 LE_ERROR("Failed to initialize FW update download: %s", LE_RESULT_TXT(result));
                 // Indicate that the download should be aborted
-                SetDownloadStatus(DOWNLOAD_STATUS_ABORT);
+                AbortDownload();
                 // Set the update state and update result
                 packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
                 packageDownloader_SetFwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_COMMUNICATION_ERROR);
@@ -1082,15 +1115,15 @@ static void* StoreFwThread
     result = le_fwupdate_Download(fd);
     if (LE_OK != result)
     {
-        LE_ERROR("Failed to update firmware: %s", LE_RESULT_TXT(result));
-        ret = -1;
-
         // No further action required if the download is aborted or suspended:
         // the fwupdate error is expected in this case.
         if (   (DOWNLOAD_STATUS_ABORT != GetDownloadStatus())
             && (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus()))
         {
             lwm2mcore_FwUpdateResult_t fwUpdateResult;
+
+            LE_ERROR("Failed to update firmware: %s", LE_RESULT_TXT(result));
+            ret = -1;
 
             // Abort active download
             AbortDownload();
@@ -1109,6 +1142,10 @@ static void* StoreFwThread
                 fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_UNSUPPORTED_PKG_TYPE;
             }
             packageDownloader_SetFwUpdateResult(fwUpdateResult);
+        }
+        else
+        {
+            LE_DEBUG("Firmware update stopped for download abort/suspend");
         }
     }
 
@@ -1255,7 +1292,10 @@ le_result_t packageDownloader_AbortDownload
     // Delete resume information if the files are still present
     packageDownloader_DeleteResumeInfo();
 
-    // Set update state and result to the default values
+    // Reset stored download agreement as it was only valid for the download which is being aborted
+    avcServer_ResetDownloadAgreement();
+
+    // Set update state to the default value
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:

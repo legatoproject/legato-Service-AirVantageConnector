@@ -273,4 +273,14 @@ LE_SHARED void avcServer_QueryReboot
     avcServer_RebootHandlerFunc_t handlerFunc   ///< [IN] Reboot handler function.
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Reset the stored download agreement
+ */
+//--------------------------------------------------------------------------------------------------
+LE_SHARED void avcServer_ResetDownloadAgreement
+(
+    void
+);
+
 #endif // LEGATO_AVC_SERVER_INCLUDE_GUARD

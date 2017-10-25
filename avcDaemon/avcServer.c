@@ -485,6 +485,8 @@ static char* AvcSessionStateToStr
         case LE_AVC_CONNECTION_PENDING:     result = "Connection pending";      break;
         case LE_AVC_AUTH_STARTED:           result = "Authentication started";  break;
         case LE_AVC_AUTH_FAILED:            result = "Authentication failed";   break;
+        case LE_AVC_CERTIFICATION_OK:       result = "Package certified";       break;
+        case LE_AVC_CERTIFICATION_KO:       result = "Package not certified";   break;
         default:                            result = "Unknown";                 break;
 
     }
@@ -2375,6 +2377,19 @@ le_result_t avcServer_ReleaseSession
     }
 
     return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Reset the stored download agreement
+ */
+//--------------------------------------------------------------------------------------------------
+void avcServer_ResetDownloadAgreement
+(
+    void
+)
+{
+    DownloadAgreement = false;
 }
 
 //--------------------------------------------------------------------------------------------------
