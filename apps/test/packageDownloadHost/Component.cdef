@@ -1,0 +1,17 @@
+requires:
+{
+    api:
+    {
+        airVantage/le_avc.api               [types-only]
+    }
+}
+
+sources:
+{
+    main.c
+}
+
+cflags:
+{
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader
+}

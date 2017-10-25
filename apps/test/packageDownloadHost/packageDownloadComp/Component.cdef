@@ -1,0 +1,71 @@
+requires:
+{
+    api:
+    {
+        le_secStore.api                     [types-only]
+        le_fwupdate.api                     [types-only]
+        airVantage/le_avc.api               [types-only]
+        secureStorage/secStoreAdmin.api     [types-only]
+        le_limit.api                        [types-only]
+    }
+    component:
+    {
+        ${LEGATO_ROOT}/components/3rdParty/tinydtls
+    }
+}
+
+sources:
+{
+    // Package downloader: AVC side
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloader.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloaderCallbacks.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/sslUtilities.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortParamStorage.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortUpdate.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcFs.c
+
+    // Package downloader: Lwm2mCore side
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader/lwm2mcorePackageDownloader.c
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader/workspace.c
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/examples/linux/debug.c
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/examples/linux/security.c
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/examples/linux/clientConfig.c
+
+
+    // Stubbed files in the AVC
+    avcAppUpdate_stub.c
+    avcClient_stub.c
+    avcServer_stub.c
+    curl_stub.c
+    fwupdateServer_stub.c
+    secStorage_stub.c
+    lwm2mcoreSession_stub.c
+}
+
+ldflags:
+{
+    -lz
+    -lssl
+    -lcrypto
+}
+
+cflags:
+{
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcAppUpdate
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/lwm2mcore/
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/platform-specific/linux
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/er-coap-13/
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader/
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/tinydtls/
+    -DWITH_LOGS
+    -DLWM2M_WITH_LOGS
+    -DCURL_DISABLE_TYPECHECK
+    -DWITH_TINYDTLS
+}
