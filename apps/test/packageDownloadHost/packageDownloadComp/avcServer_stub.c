@@ -43,11 +43,11 @@ void avcServer_UpdateStatus
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Initializes user agreement queries of download, install and uninstall. Used after a session
- * start for SOTA resume.
+ * Resets user agreement query handlers of download, install and uninstall. This also stops
+ * corresponding defer timers.
  */
 //--------------------------------------------------------------------------------------------------
-void avcServer_InitUserAgreement
+void avcServer_ResetQueryHandlers
 (
     void
 )
