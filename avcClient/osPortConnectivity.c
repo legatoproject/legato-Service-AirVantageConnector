@@ -1284,24 +1284,16 @@ lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
     // most of the AVC use cases (FOTA, SOTA)
     switch (downlinkTech)
     {
-        case LE_MDC_DATA_BEARER_TECHNOLOGY_GSM:
-            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "GSM");
-            break;
-
-        case LE_MDC_DATA_BEARER_TECHNOLOGY_GPRS:
-            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "GPRS");
-            break;
-
-        case LE_MDC_DATA_BEARER_TECHNOLOGY_EGPRS:
-            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "EDGE");
-            break;
-
         case LE_MDC_DATA_BEARER_TECHNOLOGY_WCDMA:
             cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "WCDMA");
             break;
 
-        case LE_MDC_DATA_BEARER_TECHNOLOGY_HSPA:
-            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "HSPA");
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HSDPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "HSDPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HSUPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "HSUPA");
             break;
 
         case LE_MDC_DATA_BEARER_TECHNOLOGY_HSPA_PLUS:
@@ -1312,12 +1304,64 @@ lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
             cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "DC-HSPA+");
             break;
 
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_64_QAM:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "64 QAM");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HSPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "HSPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_GPRS:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "GPRS");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_EGPRS:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "EDGE");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_GSM:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "GSM");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_S2B:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "S2B");
+            break;
+
         case LE_MDC_DATA_BEARER_TECHNOLOGY_LTE:
             cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "LTE");
             break;
 
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_LTE_FDD:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "LTE FDD");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_LTE_TDD:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "LTE TDD");
+            break;
+
         case LE_MDC_DATA_BEARER_TECHNOLOGY_TD_SCDMA:
             cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "TD-SCDMA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_DC_HSUPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "DC HSUPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_DC_HSPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "DC HSPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_LTE_CA_DL:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "LTE CA DL");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_LTE_CA_UL:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "LTE CA UL");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_IS95_1X:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "IS95 1X");
             break;
 
         case LE_MDC_DATA_BEARER_TECHNOLOGY_CDMA2000_1X:
@@ -1334,6 +1378,42 @@ lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
 
         case LE_MDC_DATA_BEARER_TECHNOLOGY_CDMA2000_EHRPD:
             cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "CDMA eHRPD");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HDR_REV0_DPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "REV0 DPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HDR_REVA_DPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "REVA DPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HDR_REVB_DPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "RREVB DPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HDR_REVA_MPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "REVA MPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HDR_REVB_MPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "REVB MPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HDR_REVA_EMPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "REVA EMPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HDR_REVB_EMPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "REVB EMPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HDR_REVB_MMPA:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "REVB MMPA");
+            break;
+
+        case LE_MDC_DATA_BEARER_TECHNOLOGY_HDR_EVDO_FMC:
+            cellularTechLen = snprintf(cellularTech, MAX_TECH_LEN, "EVDO FMC");
             break;
 
         case LE_MDC_DATA_BEARER_TECHNOLOGY_UNKNOWN:
