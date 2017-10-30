@@ -273,14 +273,30 @@ CommandDesc_t Commands[] =
     {"deferReboot",      "Defer device reboot.(1 arg: [x] min)",         DEFER_REBOOT           },
     {"deferConnection",  "Defer a connection",                           DEFER_CNX              },
     {"blockInstall",     "Block/Unblock app install",                    BLOCK_UNBLOCK          },
-    {"quit",             "Quit the client gracefully",                   QUIT                   },
-    {"^C",               "Quit the client abruptly",                     MAX_CMD                },
+    {"quit",             "Quit the server gracefully",                   QUIT                   },
+    {"^C",               "Quit the client",                              MAX_CMD                },
     {NULL,               NULL,                                           MAX_CMD                }
 };
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Create a socket and start listening on the specified port
+ * Close a socket
+ */
+//--------------------------------------------------------------------------------------------------
+static void CloseSocket
+(
+    int socketfd
+)
+{
+    if (!close(socketfd))
+    {
+        LE_ERROR("Error in close(): %d %m", errno);
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Create a socket in blocking mode and start listening on the specified port
  */
 //--------------------------------------------------------------------------------------------------
 static le_result_t RunSocket
@@ -294,7 +310,7 @@ static le_result_t RunSocket
     int enable = 1;
     int sock;
 
-    sock = socket(PF_INET, SOCK_STREAM, 0);
+    sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0)
     {
         LE_ERROR("Unable to create a socket");
@@ -305,6 +321,7 @@ static le_result_t RunSocket
     if (result < 0)
     {
         LE_ERROR("setsockopt(SO_REUSEADDR) failed");
+        CloseSocket(sock);
         return LE_FAULT;
     }
 
@@ -315,6 +332,7 @@ static le_result_t RunSocket
     if (result < 0)
     {
         LE_ERROR("Unable to bind the socket");
+        CloseSocket(sock);
         return LE_FAULT;
     }
 
@@ -322,6 +340,7 @@ static le_result_t RunSocket
     if (result < 0)
     {
         LE_ERROR("Unable to listen to the socket");
+        CloseSocket(sock);
         return LE_FAULT;
     }
 
@@ -350,7 +369,10 @@ static void SendSocket
 
     if (SocketFd >= 0)
     {
-        send(SocketFd, buffer, length, 0);
+        if (send(SocketFd, buffer, length, 0) < 0)
+        {
+            LE_ERROR("Error in send(): %d %m", errno);
+        }
     }
 }
 
@@ -906,6 +928,22 @@ static void HandleCommand
     {
         CommandDesc_t* cmdPtr;
         int length;
+        int cmdLen;
+
+        // Find and check full command length
+        cmdLen = strlen(bufferPtr);
+        if (cmdLen > MAX_PACKET_SIZE)
+        {
+            LE_ERROR("Command size exceeds the maximum allowed size");
+            return;
+        }
+
+        // Check if carriage return is received
+        if ((1 == cmdLen) && (0x0A == bufferPtr[0]))
+        {
+            SendSocket("\n> ");
+            return;
+        }
 
         // Find end of command name
         length = 0;
@@ -931,8 +969,8 @@ static void HandleCommand
             {
                 AvcCmdEvent_t AvcCmdevent;
                 AvcCmdevent.commandId = cmdPtr->cmdId;
-                memset((char*)AvcCmdevent.rawCmd, 0x00, sizeof(AvcCmdevent.rawCmd));
-                memcpy((char*)AvcCmdevent.rawCmd, bufferPtr, strlen(bufferPtr));
+                memset((char*)AvcCmdevent.rawCmd, 0x00, MAX_PACKET_SIZE);
+                memcpy((char*)AvcCmdevent.rawCmd, bufferPtr, cmdLen);
 
                 le_event_Report(UserCommandEventId, &AvcCmdevent, sizeof(AvcCmdEvent_t));
             }
@@ -956,6 +994,7 @@ static void HandleCommand
                 SendSocket(UNKNOWN_CMD_MSG"\r\n");
             }
         }
+        SendSocket("\n> ");
     }
 }
 
@@ -972,81 +1011,89 @@ static void Client
     void* param2Ptr
 )
 {
-    fd_set readfds;
     int numBytes;
-    int result;
     uint8_t buffer[MAX_PACKET_SIZE];
     struct sockaddr_in clientname;
+    socklen_t size = sizeof(clientname);
     int sock;
-    fd_set activeReadfds;
 
-    // Create a socket and start listening
-    RunSocket(SocketPort, &sock);
-
-    FD_ZERO(&activeReadfds);
-    FD_SET(sock, &activeReadfds);
+    // Create a socket in blocking mode and start listening
+    if (LE_OK != RunSocket(SocketPort, &sock))
+    {
+        LE_ERROR("Unable to start socket on specified port");
+        le_thread_Exit(NULL);
+    }
 
     while (false == Quit)
     {
-        readfds = activeReadfds;
-
-        result = select(FD_SETSIZE, &readfds, NULL, NULL, NULL);
-
-        if (result < 0)
+        // Accept connection from an incoming client. Note that only a client is served at a time.
+        SocketFd = accept(sock, (struct sockaddr*)&clientname, (socklen_t*)&size);
+        if (SocketFd < 0)
         {
-            if (errno != EINTR)
+            LE_ERROR("Accept failed: %d %m", errno);
+
+            if ((EBADF == errno) || (ENOTSOCK == errno) || (EFAULT == errno) || (EINVAL == errno))
             {
-                LE_ERROR("Error in select(): %d %s", errno, strerror(errno));
+                // These errors are not recoverable
+                Quit = true;
             }
-            else
-            {
-                LE_INFO("le_avc_RemoveStatusEventHandler");
-                le_avc_RemoveStatusEventHandler(AvcEventHandlerRef);
-            }
+
+            // Restart the main loop
+            continue;
         }
-        else if (result > 0)
+
+        // At this point, a client is connected
+        DisplayCommandHelp(Commands, (char*)buffer);
+        SendSocket("> ");
+
+        // Receive a message from client
+        do
         {
-            if (FD_ISSET(sock, &readfds))
+            numBytes = recv(SocketFd, buffer, MAX_PACKET_SIZE - 1, 0);
+            if (-1 == numBytes)
             {
-                // Connection request on the original socket
-                socklen_t size = sizeof(clientname);
-                SocketFd = accept(sock, (struct sockaddr*)&clientname, &size);
-                FD_SET(SocketFd, &activeReadfds);
-                DisplayCommandHelp(Commands, (char*)buffer);
-                SendSocket("> ");
-            }
-            else if (FD_ISSET(SocketFd, &readfds))
-            {
-                // Data arriving on an already-connected socket
-                numBytes = read(SocketFd, buffer, MAX_PACKET_SIZE - 1);
-                if (numBytes > 1)
+                LE_ERROR("Recv failed: %d %m", errno);
+
+                if ((EBADF == errno) || (ENOTSOCK == errno) || (EFAULT == errno) ||
+                    (EINVAL == errno) || (ECONNREFUSED == errno) || (ENOTCONN == errno))
                 {
-                    buffer[numBytes] = 0;
-                    // Call the corresponding callback of the typed command passing it the
-                    // buffer for further arguments
-                    HandleCommand(Commands, (char*)buffer);
-                }
-                if ((false == Quit) && (numBytes > 0))
-                {
-                    SendSocket("\n> ");
+                    // Connection lost, go back to the main loop
+                    CloseSocket(SocketFd);
+                    break;
                 }
                 else
                 {
-                    int value = 0;
-                    SendSocket("\n");
-                    le_thread_Exit((void*)&value);
+                    continue;
                 }
             }
-            else
+            else if (0 == numBytes)
             {
-                // None of the socket FDs is set
+                LE_DEBUG("Client disconnected");
+                CloseSocket(SocketFd);
+                break;
+            }
+            else if (numBytes > 0)
+            {
+                buffer[numBytes] = 0;
+                // Call the corresponding callback of the typed command passing it the
+                // buffer for further arguments
+                HandleCommand(Commands, (char*)buffer);
+
+                // Check if client asked to shutdown the server
+                if (true == Quit)
+                {
+                    break;
+                }
             }
         }
-        else
-        {
-            // Timeout never happens since the timeout parameter in select is set to NULL
-        }
+        while(1);
     }
+
+    // Close client socket if already connected and the original socket
+    CloseSocket(sock);
+    CloseSocket(SocketFd);
+
+    le_thread_Exit(NULL);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1056,7 +1103,6 @@ static void Client
 //--------------------------------------------------------------------------------------------------
 COMPONENT_INIT
 {
-    int value;
     int i;
     int nbArguments;
     const char* argPtr;
@@ -1071,9 +1117,9 @@ COMPONENT_INIT
         {
             AutoMode = true;
         }
-        else if ( (!strcmp(argPtr, "help")) ||
-                  (!strcmp(argPtr, "--help")) ||
-                  (!strcmp(argPtr, "-h")) )
+        else if ((!strcmp(argPtr, "help")) ||
+                 (!strcmp(argPtr, "--help")) ||
+                 (!strcmp(argPtr, "-h")))
         {
             DisplayExecHelp();
             exit(EXIT_SUCCESS);
@@ -1105,7 +1151,7 @@ COMPONENT_INIT
     RegisterToAvcEvent();
 
     le_event_QueueFunctionToThread(UserCommandThreadRef, Client, NULL, NULL);
-    le_thread_Join(UserCommandThreadRef, (void*)&value);
+    le_thread_Join(UserCommandThreadRef, NULL);
 
     le_avc_RemoveStatusEventHandler(AvcEventHandlerRef);
 
