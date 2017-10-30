@@ -58,6 +58,20 @@ void avcServer_ResetQueryHandlers
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Reset the stored download agreement
+ */
+//--------------------------------------------------------------------------------------------------
+void avcServer_ResetDownloadAgreement
+(
+    void
+)
+{
+    LE_DEBUG("Stub");
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Query the AVC Server if it's okay to proceed with an application uninstall
  *
  * If an uninstall can't proceed right away, then the handlerRef function will be called when it is
