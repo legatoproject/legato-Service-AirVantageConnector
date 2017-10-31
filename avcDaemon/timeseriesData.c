@@ -733,13 +733,6 @@ static le_result_t EncodeResourceDeltaValue
     if (prevTimestampPtr != NULL)
     {
         prevDataPtr = (Data_t*)GetTimestampData(resourceDataPtr, prevTimestampPtr->timestamp);
-
-        if (!prevDataPtr)
-        {
-           LE_ERROR("prevDataPtr is NULL");
-           return LE_FAULT;
-        }
-
     }
 
     // delta value is only applicable to int and floats
@@ -752,7 +745,7 @@ static le_result_t EncodeResourceDeltaValue
             }
             else
             {
-                if (GetTimestampData(resourceDataPtr, prevTimestampPtr->timestamp) == NULL)
+                if (prevDataPtr == NULL)
                 {
                     prevIntValue = resourceDataPtr->lastIntValue;
                 }
@@ -776,7 +769,7 @@ static le_result_t EncodeResourceDeltaValue
             }
             else
             {
-                if (GetTimestampData(resourceDataPtr, prevTimestampPtr->timestamp) == NULL)
+                if (prevDataPtr == NULL)
                 {
                     prevFloatValue = resourceDataPtr->lastFloatValue;
                 }
