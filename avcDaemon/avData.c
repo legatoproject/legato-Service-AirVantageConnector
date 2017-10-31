@@ -711,6 +711,30 @@ static void GetNamespacedPath
     LE_ASSERT(le_utf8_Copy(namespacedPathPtr, namespacedPath, namespacedSize, NULL) == LE_OK);
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if the path exists in the hashmap
+ *
+ * @return:
+ *      - LE_NOT_FOUND - if the path does not exist in asset data map
+ *      - LE_OK - if path exists
+ */
+//--------------------------------------------------------------------------------------------------
+static bool IsPathFound
+(
+    const char* path                  ///< [IN] Asset data path
+)
+{
+    AssetData_t* assetDataPtr = GetAssetData(path);
+
+    if (assetDataPtr == NULL)
+    {
+        return LE_NOT_FOUND;
+    }
+
+    return LE_OK;
+}
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -727,12 +751,14 @@ static le_result_t GetVal
     const char* path,                  ///< [IN] Asset data path
     AssetValue_t* valuePtr,            ///< [OUT] Asset value
     le_avdata_DataType_t* dataTypePtr, ///< [OUT] Asset value data type
-    bool isClient                      ///< [IN] Is it client or server access
+    bool isClient,                     ///< [IN] Is it client or server access
+    bool isNameSpaced                  ///< [IN] Is the path name spaced
 )
 {
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
 
-    if (isClient)
+
+    if (!isNameSpaced)
     {
         GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
     }
@@ -1307,7 +1333,9 @@ static le_result_t EncodeMultiData
     CborEncoder* parentCborEncoder, ///< [OUT] Parent CBOR encoder
     int minIndex, ///< [IN] Min index of the list to start with in the current recursion
     int maxIndex, ///< [IN] Max index of the list to end with in the current recursion
-    int level     ///< [IN] Path depth for the current recursion
+    int level,    ///< [IN] Path depth for the current recursion
+    bool isClient,   ///< [IN] Is client access
+    bool isNameSpaced ///< [IN] Is name spaced
 )
 {
     // Each range of paths is enclosed in a CBOR map.
@@ -1348,7 +1376,8 @@ static le_result_t EncodeMultiData
 
                 // Encoding the map name of the next recursion first.
                 if ((CborNoError != cbor_encode_text_stringz(&mapNode, savedToken)) ||
-                    (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange, level+1)))
+                    (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange,
+                                              level+1, isClient, isNameSpaced)))
                 {
                     return LE_FAULT;
                 }
@@ -1370,7 +1399,7 @@ static le_result_t EncodeMultiData
             // Use the path to look up its asset data, and do the corresponding encoding.
             AssetValue_t assetValue;
             le_avdata_DataType_t type;
-            le_result_t getValresult = GetVal(list[i], &assetValue, &type, false);
+            le_result_t getValresult = GetVal(list[i], &assetValue, &type, isClient, isNameSpaced);
 
             if (getValresult != LE_OK)
             {
@@ -1401,7 +1430,8 @@ static le_result_t EncodeMultiData
 
                 // Encoding the map name of the next recursion first.
                 if ((CborNoError != cbor_encode_text_stringz(&mapNode, savedToken)) ||
-                    (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange, level+1)))
+                    (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange,
+                                              level+1, isClient, isNameSpaced)))
                 {
                     return LE_FAULT;
                 }
@@ -1438,7 +1468,8 @@ static le_result_t EncodeMultiData
 
         // Encoding the map name of the next recursion first.
         if ((CborNoError != cbor_encode_text_stringz(&mapNode, savedToken)) ||
-            (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange, level+1)))
+            (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange,
+                                      level+1, isClient, isNameSpaced)))
         {
             return LE_FAULT;
         }
@@ -1764,7 +1795,7 @@ static void ProcessAvServerReadRequest
     AssetValue_t assetValue;
     le_avdata_DataType_t type;
 
-    le_result_t getValResult = GetVal(path, &assetValue, &type, false);
+    le_result_t getValResult = GetVal(path, &assetValue, &type, false, true);
 
     if (getValResult == LE_OK)
     {
@@ -1842,8 +1873,8 @@ static void ProcessAvServerReadRequest
 
             cbor_encoder_init(&rootNode, (uint8_t*)&buf, sizeof(buf), 0); // no error check needed.
 
-            if (LE_OK ==
-                EncodeMultiData(pathArray, &rootNode, 0, (pathArrayIdx - 1), (levelCount + 1)))
+            if (LE_OK ==  EncodeMultiData(pathArray, &rootNode, 0, (pathArrayIdx - 1),
+                                          (levelCount + 1), false, true))
             {
                 RespondToAvServer(COAP_CONTENT_AVAILABLE,
                                   buf, cbor_encoder_get_buffer_size(&rootNode, buf));
@@ -2303,7 +2334,7 @@ le_result_t le_avdata_GetInt
     AssetValue_t assetValue;
     le_avdata_DataType_t type;
 
-    le_result_t result = GetVal(path, &assetValue, &type, true);
+    le_result_t result = GetVal(path, &assetValue, &type, true, false);
 
     if (type == LE_AVDATA_DATA_TYPE_NONE)
     {
@@ -2368,7 +2399,7 @@ le_result_t le_avdata_GetFloat
     AssetValue_t assetValue;
     le_avdata_DataType_t type;
 
-    le_result_t result = GetVal(path, &assetValue, &type, true);
+    le_result_t result = GetVal(path, &assetValue, &type, true, false);
 
     if (type == LE_AVDATA_DATA_TYPE_NONE)
     {
@@ -2433,7 +2464,7 @@ le_result_t le_avdata_GetBool
     AssetValue_t assetValue;
     le_avdata_DataType_t type;
 
-    le_result_t result = GetVal(path, &assetValue, &type, true);
+    le_result_t result = GetVal(path, &assetValue, &type, true, false);
 
     if (type == LE_AVDATA_DATA_TYPE_NONE)
     {
@@ -2499,7 +2530,7 @@ le_result_t le_avdata_GetString
     AssetValue_t assetValue;
     le_avdata_DataType_t type;
 
-    le_result_t result = GetVal(path, &assetValue, &type, true);
+    le_result_t result = GetVal(path, &assetValue, &type, true, false);
 
     if (type == LE_AVDATA_DATA_TYPE_NONE)
     {
@@ -2818,7 +2849,7 @@ le_result_t le_avdata_Push
         return LE_FAULT;
     }
 
-    le_result_t result = GetVal(namespacedPath, &assetValue, &type, false);
+    le_result_t result = IsPathFound(namespacedPath);
 
     char* pathArray[le_hashmap_Size(AssetDataMap)];
     memset(pathArray, 0, sizeof(pathArray));
@@ -2875,7 +2906,7 @@ le_result_t le_avdata_Push
     CborEncoder rootNode;
     cbor_encoder_init(&rootNode, (uint8_t*)&buf, sizeof(buf), 0); // no error check needed.
 
-    result = EncodeMultiData(pathArray, &rootNode, 0, (pathArrayIdx - 1), 1);
+    result = EncodeMultiData(pathArray, &rootNode, 0, (pathArrayIdx - 1), 1, true, true);
 
     if (result == LE_OK)
     {
