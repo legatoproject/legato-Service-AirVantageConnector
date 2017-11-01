@@ -27,7 +27,11 @@ processes:
     }
 
     faultAction: restart
-    watchdogTimeout: 30000
+    #if ${LEGATO_SERVICES_WDOG_DISABLE} = 1
+        watchdogTimeout: never
+    #else
+        watchdogTimeout: 30000
+    #endif
 
     // Maximum size of the download file (50 MBytes)
     // ToDo: Change this to "unlimited" when mktools support it
