@@ -818,8 +818,6 @@ static le_result_t AcceptInstallPackage
     // next time this function is called, the user app will no longer be blocking the update.
     if (BlockRefCount > 0)
     {
-        // Since the decision is not to install at this time, go back to idle
-        CurrentState = AVC_IDLE;
         StartDeferTimer(LE_AVC_USER_AGREEMENT_INSTALL, BLOCKED_DEFER_TIME);
     }
     else
@@ -861,8 +859,6 @@ static le_result_t AcceptUninstallApplication
     // next time this function is called, the user app will no longer be blocking the update.
     if (BlockRefCount > 0)
     {
-        // Since the decision is not to uninstall at this time, go back to idle
-        CurrentState = AVC_IDLE;
         StartDeferTimer(LE_AVC_USER_AGREEMENT_UNINSTALL, BLOCKED_DEFER_TIME);
     }
     else
