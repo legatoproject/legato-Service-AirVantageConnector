@@ -11,7 +11,6 @@
 #define _CLIENTCONFIG_H_
 
 #include "legato.h"
-#include "interfaces.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -46,6 +45,24 @@
  */
 //--------------------------------------------------------------------------------------------------
 #define CONN_MONITOR_ROUTER_IP_ADDRESSES_MAX_NB     (2 * MAX_PDP_CONTEXTS)
+
+//--------------------------------------------------------------------------------------------------
+/*
+ * As this file is used by 3rd party lwm2mcore, which is not a Legato apps, we cannot include
+ * "interfaces.h" in the actual build system.
+ * So we overload it.
+ */
+//--------------------------------------------------------------------------------------------------
+#define LE_MDC_IPV6_ADDR_MAX_BYTES                  46
+
+//--------------------------------------------------------------------------------------------------
+/*
+ * As this file is used by 3rd party lwm2mcore, which is not a Legato apps, we cannot include
+ * "interfaces.h" in the actual build system.
+ * So we overload it.
+ */
+//--------------------------------------------------------------------------------------------------
+#define LE_MDC_APN_NAME_MAX_BYTES                   101
 
 //--------------------------------------------------------------------------------------------------
 /**
