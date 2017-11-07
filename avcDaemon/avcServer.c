@@ -90,6 +90,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Default user agreement setting for connection notifications
+ */
+//--------------------------------------------------------------------------------------------------
+#define DISABLE_CONNECTION_NOTIFICATION  0
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Value if polling timer is disabled
  */
 //--------------------------------------------------------------------------------------------------
@@ -997,7 +1004,7 @@ static le_result_t RespondToConnectionPending
     {
         // Use default configuration if read fails
         LE_WARN("Using default user agreement configuration");
-        isUserAgreementEnabled = USER_AGREEMENT_DEFAULT;
+        isUserAgreementEnabled = DISABLE_CONNECTION_NOTIFICATION;
     }
 
     if (!isUserAgreementEnabled)
@@ -2430,7 +2437,7 @@ static void SetDefaultConfig
     }
 
     // set user agreement to default
-    avcConfig.ua.connect = USER_AGREEMENT_DEFAULT;
+    avcConfig.ua.connect = DISABLE_CONNECTION_NOTIFICATION;
     avcConfig.ua.download = USER_AGREEMENT_DEFAULT;
     avcConfig.ua.install = USER_AGREEMENT_DEFAULT;
     avcConfig.ua.uninstall = USER_AGREEMENT_DEFAULT;
