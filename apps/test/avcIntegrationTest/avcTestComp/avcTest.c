@@ -288,9 +288,12 @@ static void CloseSocket
     int socketfd
 )
 {
-    if (!close(socketfd))
+    if (socketfd >= 0)
     {
-        LE_ERROR("Error in close(): %d %m", errno);
+        if (!close(socketfd))
+        {
+            LE_ERROR("Error in close(): %d %m", errno);
+        }
     }
 }
 
