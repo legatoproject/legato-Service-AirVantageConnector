@@ -3442,6 +3442,7 @@ le_result_t assetData_Init
     RegUpdateTimerRef = le_timer_Create("RegUpdate timer");
     le_timer_SetInterval(RegUpdateTimerRef, timerInterval);
     le_timer_SetHandler(RegUpdateTimerRef, RegUpdateTimerHandler);
+    le_timer_SetWakeup(RegUpdateTimerRef, false);
 
     // Pre-load the /lwm2m/9 object into the AssetMap; don't actually need to use the assetRef here.
     assetData_AssetDataRef_t lwm2mAssetRef;
