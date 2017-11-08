@@ -2280,6 +2280,11 @@ le_result_t le_avdata_GetInt
 
     le_result_t result = GetVal(path, &assetValue, &type, true, false);
 
+    if (result != LE_OK)
+    {
+        return result;
+    }
+
     if (type == LE_AVDATA_DATA_TYPE_NONE)
     {
         return LE_UNAVAILABLE;
@@ -2291,15 +2296,8 @@ le_result_t le_avdata_GetInt
         return LE_BAD_PARAMETER;
     }
 
-    if (result != LE_OK)
-    {
-        return result;
-    }
-    else
-    {
-        *valuePtr = assetValue.intValue;
-        return LE_OK;
-    }
+    *valuePtr = assetValue.intValue;
+    return LE_OK;
 }
 
 
@@ -2345,6 +2343,11 @@ le_result_t le_avdata_GetFloat
 
     le_result_t result = GetVal(path, &assetValue, &type, true, false);
 
+    if (result != LE_OK)
+    {
+        return result;
+    }
+
     if (type == LE_AVDATA_DATA_TYPE_NONE)
     {
         return LE_UNAVAILABLE;
@@ -2356,15 +2359,8 @@ le_result_t le_avdata_GetFloat
         return LE_BAD_PARAMETER;
     }
 
-    if (result != LE_OK)
-    {
-        return result;
-    }
-    else
-    {
-        *valuePtr = assetValue.floatValue;
-        return LE_OK;
-    }
+    *valuePtr = assetValue.floatValue;
+    return LE_OK;
 }
 
 
@@ -2410,6 +2406,11 @@ le_result_t le_avdata_GetBool
 
     le_result_t result = GetVal(path, &assetValue, &type, true, false);
 
+    if (result != LE_OK)
+    {
+        return result;
+    }
+
     if (type == LE_AVDATA_DATA_TYPE_NONE)
     {
         return LE_UNAVAILABLE;
@@ -2421,15 +2422,8 @@ le_result_t le_avdata_GetBool
         return LE_BAD_PARAMETER;
     }
 
-    if (result != LE_OK)
-    {
-        return result;
-    }
-    else
-    {
-        *valuePtr = assetValue.boolValue;
-        return LE_OK;
-    }
+    *valuePtr = assetValue.boolValue;
+    return LE_OK;
 }
 
 
@@ -2476,6 +2470,11 @@ le_result_t le_avdata_GetString
 
     le_result_t result = GetVal(path, &assetValue, &type, true, false);
 
+    if (result != LE_OK)
+    {
+        return result;
+    }
+
     if (type == LE_AVDATA_DATA_TYPE_NONE)
     {
         return LE_UNAVAILABLE;
@@ -2487,15 +2486,8 @@ le_result_t le_avdata_GetString
         return LE_BAD_PARAMETER;
     }
 
-    if (result != LE_OK)
-    {
-        return result;
-    }
-    else
-    {
-        strncpy(value, assetValue.strValuePtr, valueNumElements);
-        return LE_OK;
-    }
+    strncpy(value, assetValue.strValuePtr, valueNumElements);
+    return LE_OK;
 }
 
 

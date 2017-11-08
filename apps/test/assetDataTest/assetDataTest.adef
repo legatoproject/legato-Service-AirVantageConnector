@@ -1,0 +1,20 @@
+
+executables:
+{
+    assetDataTest = ( assetDataTestComponent )
+}
+
+processes:
+{
+    run:
+    {
+        ( assetDataTest )
+    }
+}
+
+start: manual
+
+bindings:
+{
+    assetDataTest.assetDataTestComponent.le_avdata -> avcService.le_avdata
+}

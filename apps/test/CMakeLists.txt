@@ -34,3 +34,6 @@ endif()
 
 # AirVantageConnector unitary test
 add_subdirectory(airVantageConnectorUnitTest)
+
+# assetData unit test
+add_subdirectory(assetDataTest)
