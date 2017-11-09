@@ -15,7 +15,7 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Internal state of avc app update used to track of the commands received from AV server.
+ * Internal state of avc app update used to track of the commands received from AV server or device.
  */
 //--------------------------------------------------------------------------------------------------
 typedef enum
@@ -23,7 +23,8 @@ typedef enum
     INTERNAL_STATE_INVALID = 0,             ///< Invalid internal state
     INTERNAL_STATE_DOWNLOAD_REQUESTED,      ///< Download request from server received by device
     INTERNAL_STATE_INSTALL_REQUESTED,       ///< Install request from server received by device
-    INTERNAL_STATE_UNINSTALL_REQUESTED      ///< Uninstall request from server received by device
+    INTERNAL_STATE_UNINSTALL_REQUESTED,     ///< Uninstall request from server received by device
+    INTERNAL_STATE_CONNECTION_REQUESTED     ///< Device requests connection after any app update
 
 }
 avcApp_InternalState_t;
@@ -322,12 +323,12 @@ le_result_t avcApp_GetPackageVersion
  * Set software update state in asset data and SW update workspace for ongoing update.
  *
  * @return:
- *      - DWL_OK on success
- *      - DWL_SUSPEND if no ongoing update.
- *      - DWL_FAULT on any other error
+ *      - LE_OK on success
+ *      - LE_NOT_FOUND if no ongoing update.
+ *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t  avcApp_SetSwUpdateState
+le_result_t avcApp_SetSwUpdateState
 (
     lwm2mcore_SwUpdateState_t updateState
 );
@@ -338,12 +339,12 @@ lwm2mcore_DwlResult_t  avcApp_SetSwUpdateState
  * Set software update result in asset data and SW update workspace for ongoing update.
  *
  * @return:
- *      - DWL_OK on success
- *      - DWL_SUSPEND if no ongoing update.
- *      - DWL_FAULT on any other error
+ *      - LE_OK on success
+ *      - LE_NOT_FOUND if no ongoing update.
+ *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t  avcApp_SetSwUpdateResult
+le_result_t  avcApp_SetSwUpdateResult
 (
     lwm2mcore_SwUpdateResult_t updateResult
 );
@@ -351,10 +352,12 @@ lwm2mcore_DwlResult_t  avcApp_SetSwUpdateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Create an object 9 instance
+ * Create an object 9 instance and initializes SOTA workspace. If no instance exists, then instance
+ * will be created. If already an instance exists, its fields will be overridden. In both case, SOTA
+ * workspace will be cleared.
  *
  * @return:
- *      - LE_OK on success
+ *      - LE_OK on success.
  *      - LE_DUPLICATE if already exists an instance
  *      - LE_FAULT on any other error
  */

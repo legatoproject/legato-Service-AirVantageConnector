@@ -70,6 +70,33 @@ lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResult
 (
     lwm2mcore_FwUpdateResult_t fwUpdateResult   ///< [IN] New FW update result
 );
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function for setting software update state
+ *
+ * @return
+ *  - DWL_OK     The function succeeded
+ *  - DWL_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateState
+(
+    lwm2mcore_SwUpdateState_t swUpdateState     ///< [IN] New SW update state
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function for setting software update result
+ *
+ * @return
+ *  - DWL_OK     The function succeeded
+ *  - DWL_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t swUpdateResult   ///< [IN] New SW update result
+);
 
 //--------------------------------------------------------------------------------------------------
 /**

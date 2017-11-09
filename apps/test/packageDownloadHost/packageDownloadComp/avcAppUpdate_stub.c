@@ -253,40 +253,40 @@ le_result_t avcApp_GetResumePosition
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software update result in asset data and SW update workspace for ongoing update.
- *
- * @return:
- *      - DWL_OK on success
- *      - DWL_SUSPEND if no ongoing update.
- *      - DWL_FAULT on any other error
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t avcApp_SetSwUpdateResult
-(
-    lwm2mcore_SwUpdateResult_t updateResult
-)
-{
-    LE_DEBUG("Stub");
-    return DWL_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Set software update state in asset data and SW update workspace for ongoing update.
  *
  * @return:
- *      - DWL_OK on success
- *      - DWL_SUSPEND if no ongoing update.
- *      - DWL_FAULT on any other error
+ *      - LE_OK on success
+ *      - LE_NOT_FOUND if no ongoing update.
+ *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t avcApp_SetSwUpdateState
+le_result_t avcApp_SetSwUpdateState
 (
     lwm2mcore_SwUpdateState_t updateState
 )
 {
     LE_DEBUG("Stub");
-    return DWL_OK;
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update result in asset data and SW update workspace for ongoing update.
+ *
+ * @return:
+ *      - LE_OK on success
+ *      - LE_NOT_FOUND if no ongoing update.
+ *      - LE_FAULT on any other error
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t  avcApp_SetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t updateResult
+)
+{
+    LE_DEBUG("Stub");
+    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------

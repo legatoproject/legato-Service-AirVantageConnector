@@ -429,6 +429,62 @@ lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Function for setting software update state
+ *
+ * @return
+ *  - DWL_OK     The function succeeded
+ *  - DWL_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateState
+(
+    lwm2mcore_SwUpdateState_t swUpdateState     ///< [IN] New SW update state
+)
+{
+    le_result_t result;
+    result = avcApp_SetSwUpdateState(swUpdateState);
+
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to set SW update state: %d. %s",
+                 (int)swUpdateState,
+                 LE_RESULT_TXT(result));
+        return DWL_FAULT;
+    }
+
+    return DWL_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function for setting software update result
+ *
+ * @return
+ *  - DWL_OK     The function succeeded
+ *  - DWL_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t swUpdateResult   ///< [IN] New SW update result
+)
+{
+    le_result_t result;
+    result = avcApp_SetSwUpdateResult(swUpdateResult);
+
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to set SW update result: %d. %s",
+                 (int)swUpdateResult,
+                 LE_RESULT_TXT(result));
+        return DWL_FAULT;
+    }
+
+    return DWL_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Get firmware update state
  *
  * @return
@@ -458,7 +514,7 @@ le_result_t packageDownloader_GetFwUpdateState
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_ERROR("FW update state not found");
+            LE_WARN("FW update state not found");
             *fwUpdateStatePtr = LWM2MCORE_FW_UPDATE_STATE_IDLE;
             return LE_OK;
         }
@@ -503,7 +559,7 @@ le_result_t packageDownloader_GetFwUpdateResult
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_ERROR("FW update result not found");
+            LE_WARN("FW update result not found");
             *fwUpdateResultPtr = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
             return LE_OK;
         }
@@ -549,7 +605,7 @@ le_result_t packageDownloader_GetFwUpdateInstallPending
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_ERROR("FW update install pending not found");
+            LE_WARN("FW update install pending not found");
             *isFwInstallPendingPtr = false;
             return LE_OK;
         }
@@ -760,7 +816,7 @@ le_result_t packageDownloader_GetSwUpdateState
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_ERROR("SW update state not found");
+            LE_WARN("SW update state not found");
             *swUpdateStatePtr = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
             return LE_OK;
         }
@@ -804,7 +860,7 @@ le_result_t packageDownloader_GetSwUpdateResult
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_ERROR("SW update result not found");
+            LE_WARN("SW update result not found");
             *swUpdateResultPtr = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
             return LE_OK;
         }
@@ -856,8 +912,8 @@ static void* DownloadThread
                 break;
 
             case LWM2MCORE_SW_UPDATE_TYPE:
-                avcApp_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
-                avcApp_SetSwUpdateResult(LWM2MCORE_SW_UPDATE_RESULT_CONNECTION_LOST);
+                packageDownloader_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
+                packageDownloader_SetSwUpdateResult(LWM2MCORE_SW_UPDATE_RESULT_CONNECTION_LOST);
                 break;
 
             default:
@@ -1213,8 +1269,8 @@ void packageDownloader_StartDownload
     PkgDwl.getInfo = pkgDwlCb_GetInfo;
     PkgDwl.setFwUpdateState = packageDownloader_SetFwUpdateState;
     PkgDwl.setFwUpdateResult = packageDownloader_SetFwUpdateResult;
-    PkgDwl.setSwUpdateState = avcApp_SetSwUpdateState;
-    PkgDwl.setSwUpdateResult = avcApp_SetSwUpdateResult;
+    PkgDwl.setSwUpdateState = packageDownloader_SetSwUpdateState;
+    PkgDwl.setSwUpdateResult = packageDownloader_SetSwUpdateResult;
     PkgDwl.download = pkgDwlCb_Download;
     PkgDwl.storeRange = pkgDwlCb_StoreRange;
     PkgDwl.endDownload = pkgDwlCb_EndDownload;
@@ -1316,7 +1372,7 @@ le_result_t packageDownloader_AbortDownload
             break;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
-            dwlResult = avcApp_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
+            dwlResult = packageDownloader_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
             if (DWL_OK != dwlResult)
             {
                 return LE_FAULT;

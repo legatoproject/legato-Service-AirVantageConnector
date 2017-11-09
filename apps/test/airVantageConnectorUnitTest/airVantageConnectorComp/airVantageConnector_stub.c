@@ -7,6 +7,7 @@
 
 #include "legato.h"
 #include "interfaces.h"
+#include "lwm2mcorePackageDownloader.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -441,12 +442,12 @@ le_result_t packageDownloader_GetFwUpdateNotification
  *
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_SetFwUpdateResult
+lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResult
 (
     lwm2mcore_FwUpdateResult_t fwUpdateResult   ///< [IN] New FW update result
 )
 {
-    return LE_OK;
+    return DWL_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -458,12 +459,43 @@ le_result_t packageDownloader_SetFwUpdateResult
  *  - LE_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_SetFwUpdateState
+lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateState
 (
     lwm2mcore_FwUpdateState_t fwUpdateState     ///< [IN] New FW update state
 )
 {
-    return LE_OK;
+    return DWL_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update result
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t swUpdateResult   ///< [IN] New SW update result
+)
+{
+    return DWL_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set software update state
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateState
+(
+    lwm2mcore_SwUpdateState_t swUpdateState     ///< [IN] New SW update state
+)
+{
+    return DWL_OK;
 }
 
 //--------------------------------------------------------------------------------------------------

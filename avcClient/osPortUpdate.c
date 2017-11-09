@@ -322,7 +322,10 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
             // SOTA suspend resume activity.
             packageDownloader_DeleteFwUpdateInfo();
 
-            if (DWL_OK != avcApp_SetSwUpdateResult(LWM2MCORE_SW_UPDATE_RESULT_INITIAL))
+            // For SOTA upgrade, no create command is issued. So if device reboots after uninstall,
+            // there is a chance that no SOTA object is dedicated for this uri. So create a SOTA
+            // object if there is currently none.
+            if (LE_FAULT == avcApp_CreateObj9Instance(instanceId))
             {
                 return LWM2MCORE_ERR_GENERAL_ERROR;
             }

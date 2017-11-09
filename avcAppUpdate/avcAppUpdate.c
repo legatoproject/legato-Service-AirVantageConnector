@@ -14,14 +14,11 @@
 #include "appCfg.h"
 #include "assetData.h"
 #include "avcServer.h"
-#include "lwm2mcorePackageDownloader.h"
 #include "packageDownloader.h"
 #include "avcAppUpdate.h"
 #include "avcFsConfig.h"
 #include "avcFs.h"
 #include "avcClient.h"
-#include "file.h"
-#include "fileDescriptor.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -665,7 +662,7 @@ static assetData_InstanceDataRef_t GetObject9InstanceForApp
 //--------------------------------------------------------------------------------------------------
 /**
  *  Send a list of object 9 instances currently managed by legato to lwm2mcore
-  */
+ */
 //--------------------------------------------------------------------------------------------------
 static void NotifyObj9List
 (
@@ -918,8 +915,8 @@ static void AppInstallHandler
     // Finished install operation, reinit object 9 instance reference.
     CurrentObj9 = NULL;
 
-    //Delete SW update workspace
-    DeletePackage();
+    // Don't Delete SW update workspace because it will remove the pending notification as well.
+    // Delete workspace when the object9 update state/result are read by server.
 
     // Notify lwm2mcore that an app is installed
     NotifyObj9List();
@@ -993,11 +990,70 @@ static void AppUninstallHandler
         }
     }
 
-    //Delete SW update workspace
-    DeletePackage();
+    // Don't Delete SW update workspace because it will remove the pending notification as well.
+    // Delete workspace when the object9 update state/result are read by server.
 
     // Notify lwm2mcore that an app is uninstalled
     NotifyObj9List();
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Checks whether or not a file exists at a given file system path.
+ *
+ * @return
+ *     - true if the file exists and is a normal file.
+ *     - false otherwise.
+ */
+//--------------------------------------------------------------------------------------------------
+static bool FileExists
+(
+    const char* filePath  ///< [IN] Path to the file in question.
+)
+//--------------------------------------------------------------------------------------------------
+{
+    struct stat fileStatus;
+
+    // Use stat(2) to check for existence of the file.
+    if (stat(filePath, &fileStatus) != 0)
+    {
+        return false;
+    }
+    else
+    {
+        // Something exists. Make sure it's a file.
+        // NOTE: stat() follows symlinks.
+        if (S_ISREG(fileStatus.st_mode))
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Closes a file descriptor
+ */
+//--------------------------------------------------------------------------------------------------
+static void CloseFd
+(
+    int fd  ///< [IN] File descriptor to close.
+)
+{
+    if (fd < 0)
+    {
+        LE_ERROR("Bad file descriptor: %d", fd);
+        return;
+    }
+
+    if (-1 == close(fd))
+    {
+        LE_ERROR("Error in closing fd: %d. %m", fd);
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1113,110 +1169,6 @@ static void LaunchSwUpdate
 
 //--------------------------------------------------------------------------------------------------
 /**
- *  Called during an application install.
- */
-//--------------------------------------------------------------------------------------------------
-static void UpdateProgressHandler
-(
-  le_update_State_t updateState,  ///< State of the update in question.
-  uint percentDone,               ///< How much work has been done.
-  void* contextPtr                ///< Context for the callback.
-)
-{
-    le_avc_ErrorCode_t avcErrorCode = LE_AVC_ERR_NONE;
-
-    switch (updateState)
-    {
-        case LE_UPDATE_STATE_UNPACKING:
-            LE_INFO("Unpacking package, percentDone: %d.", percentDone);
-            break;
-
-        case LE_UPDATE_STATE_DOWNLOAD_SUCCESS:
-             SetObj9State(CurrentObj9,
-                          LWM2MCORE_SW_UPDATE_STATE_DELIVERED,
-                          LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED);
-            LE_INFO("Package delivered");
-
-            // Delete the SOTA resume info.
-            packageDownloader_DeleteResumeInfo();
-
-            // Check and resume install if necessary.
-            le_event_Report(InstallResumeEventId, NULL, 0);
-            break;
-
-        case LE_UPDATE_STATE_APPLYING:
-            avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS,
-                                   LE_AVC_APPLICATION_UPDATE,
-                                   -1,
-                                   percentDone,
-                                   LE_AVC_ERR_NONE);
-
-            LE_INFO("Doing update.");
-            break;
-
-        case LE_UPDATE_STATE_SUCCESS:
-            LE_INFO("Install completed.");
-            avcServer_UpdateStatus(LE_AVC_INSTALL_COMPLETE,
-                                   LE_AVC_APPLICATION_UPDATE,
-                                   -1,
-                                   100,
-                                   LE_AVC_ERR_NONE);
-            avcServer_QueryConnection(LE_AVC_APPLICATION_UPDATE);
-            le_update_End();
-            break;
-
-        case LE_UPDATE_STATE_FAILED:
-            LE_DEBUG("Install/uninstall failed.");
-
-            // Get the error code.
-            switch (le_update_GetErrorCode())
-            {
-                case LE_UPDATE_ERR_SECURITY_FAILURE:
-                    avcErrorCode = LE_AVC_ERR_SECURITY_FAILURE;
-                    break;
-
-                case LE_UPDATE_ERR_BAD_PACKAGE:
-                    avcErrorCode = LE_AVC_ERR_BAD_PACKAGE;
-                    break;
-
-                case LE_UPDATE_ERR_INTERNAL_ERROR:
-                    avcErrorCode = LE_AVC_ERR_INTERNAL;
-                    break;
-
-                default:
-                    LE_ERROR("Should have an error code in failed state.");
-                    break;
-            }
-
-            // Notify registered control app
-            avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED,
-                                   LE_AVC_APPLICATION_UPDATE,
-                                   -1,
-                                   percentDone,
-                                   avcErrorCode);
-
-            // Now end the update and set the UpdateStarted flag false before calling SetObj9State()
-            // function (otherwise, SetObj9State() may call le_update_End() again if it notices
-            // installation failure).
-            UpdateStarted = false;
-            avcServer_QueryConnection(LE_AVC_APPLICATION_UPDATE);
-            le_update_End();
-
-            SetObj9State(CurrentObj9,
-                         LWM2MCORE_SW_UPDATE_STATE_INITIAL,
-                         LWM2MCORE_SW_UPDATE_RESULT_INSTALL_FAILURE);
-
-            CurrentObj9 = NULL;
-        break;
-
-        default:
-            LE_ERROR("Bad state: %d\n", updateState);
-            break;
-     }
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Set software update instance id
  *
  * @return
@@ -1275,6 +1227,34 @@ static le_result_t SetSwUpdateBytesDownloaded
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Set software internal state
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t SetSwUpdateInternalState
+(
+    avcApp_InternalState_t internalState   ///< [IN] internal state
+)
+{
+    le_result_t result;
+
+    result = WriteFs(SW_UPDATE_INTERNAL_STATE_PATH,
+                     (uint8_t *)&internalState,
+                     sizeof(int));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", SW_UPDATE_INTERNAL_STATE_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Get software update bytes downloaded
  *
  * @return
@@ -1318,34 +1298,6 @@ static le_result_t GetSwUpdateBytesDownloaded
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set software internal state
- *
- * @return
- *  - LE_OK     The function succeeded
- *  - LE_FAULT  The function failed
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t SetSwUpdateInternalState
-(
-    avcApp_InternalState_t internalState   ///< [IN] internal state
-)
-{
-    le_result_t result;
-
-    result = WriteFs(SW_UPDATE_INTERNAL_STATE_PATH,
-                     (uint8_t *)&internalState,
-                     sizeof(int));
-    if (LE_OK != result)
-    {
-        LE_ERROR("Failed to write %s: %s", SW_UPDATE_INTERNAL_STATE_PATH, LE_RESULT_TXT(result));
-        return LE_FAULT;
-    }
-
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Get software update instance ID
  *
  * @return
@@ -1375,7 +1327,7 @@ static le_result_t GetSwUpdateInstanceId
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_ERROR("SW update instance id not found");
+            LE_WARN("SW update instance id not found. Returning negative instance id.");
             *instanceIdPtr = -1;
             return LE_OK;
         }
@@ -1419,7 +1371,7 @@ static le_result_t GetSwUpdateInternalState
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_ERROR("SW update internal state not found");
+            LE_WARN("SW update internal state not found. Returning 'INVALID' state");
             *internalStatePtr = INTERNAL_STATE_INVALID;
             return LE_OK;
         }
@@ -1439,6 +1391,10 @@ static le_result_t GetSwUpdateInternalState
 
         case INTERNAL_STATE_UNINSTALL_REQUESTED:
             *internalStatePtr = INTERNAL_STATE_UNINSTALL_REQUESTED;
+            break;
+
+        case INTERNAL_STATE_CONNECTION_REQUESTED:
+            *internalStatePtr = INTERNAL_STATE_CONNECTION_REQUESTED;
             break;
 
         default:
@@ -1480,7 +1436,7 @@ static le_result_t GetSwUpdateState
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_ERROR("SW update state not found");
+            LE_WARN("SW update state not found. Returning 'INITIAL' state");
             *swUpdateStatePtr = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
             return LE_OK;
         }
@@ -1524,7 +1480,7 @@ static le_result_t GetSwUpdateResult
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_ERROR("SW update result not found");
+            LE_WARN("SW update result not found. Returning 'INITIAL' result");
             *swUpdateResultPtr = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
             return LE_OK;
         }
@@ -1535,6 +1491,124 @@ static le_result_t GetSwUpdateResult
     *swUpdateResultPtr = updateResult;
 
     return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Requests connection to avc server after SOTA update.
+ */
+//--------------------------------------------------------------------------------------------------
+static void RequestConnection
+(
+    void
+)
+{
+    SetSwUpdateInternalState(INTERNAL_STATE_CONNECTION_REQUESTED);
+    avcServer_QueryConnection(LE_AVC_APPLICATION_UPDATE);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Called during an application install.
+ */
+//--------------------------------------------------------------------------------------------------
+static void UpdateProgressHandler
+(
+  le_update_State_t updateState,  ///< State of the update in question.
+  uint percentDone,               ///< How much work has been done.
+  void* contextPtr                ///< Context for the callback.
+)
+{
+    le_avc_ErrorCode_t avcErrorCode = LE_AVC_ERR_NONE;
+
+    switch (updateState)
+    {
+        case LE_UPDATE_STATE_UNPACKING:
+            LE_INFO("Unpacking package, percentDone: %d.", percentDone);
+            break;
+
+        case LE_UPDATE_STATE_DOWNLOAD_SUCCESS:
+             SetObj9State(CurrentObj9,
+                          LWM2MCORE_SW_UPDATE_STATE_DELIVERED,
+                          LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED);
+            LE_INFO("Package delivered");
+
+            // Delete the SOTA resume info.
+            packageDownloader_DeleteResumeInfo();
+
+            // Check and resume install if necessary.
+            le_event_Report(InstallResumeEventId, NULL, 0);
+            break;
+
+        case LE_UPDATE_STATE_APPLYING:
+            avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS,
+                                   LE_AVC_APPLICATION_UPDATE,
+                                   -1,
+                                   percentDone,
+                                   LE_AVC_ERR_NONE);
+
+            LE_INFO("Doing update.");
+            break;
+
+        case LE_UPDATE_STATE_SUCCESS:
+            LE_INFO("Install completed.");
+            avcServer_UpdateStatus(LE_AVC_INSTALL_COMPLETE,
+                                   LE_AVC_APPLICATION_UPDATE,
+                                   -1,
+                                   100,
+                                   LE_AVC_ERR_NONE);
+            RequestConnection();
+            le_update_End();
+            break;
+
+        case LE_UPDATE_STATE_FAILED:
+            LE_DEBUG("Install/uninstall failed.");
+
+            // Get the error code.
+            switch (le_update_GetErrorCode())
+            {
+                case LE_UPDATE_ERR_SECURITY_FAILURE:
+                    avcErrorCode = LE_AVC_ERR_SECURITY_FAILURE;
+                    break;
+
+                case LE_UPDATE_ERR_BAD_PACKAGE:
+                    avcErrorCode = LE_AVC_ERR_BAD_PACKAGE;
+                    break;
+
+                case LE_UPDATE_ERR_INTERNAL_ERROR:
+                    avcErrorCode = LE_AVC_ERR_INTERNAL;
+                    break;
+
+                default:
+                    LE_ERROR("Should have an error code in failed state.");
+                    break;
+            }
+
+            // Notify registered control app
+            avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED,
+                                   LE_AVC_APPLICATION_UPDATE,
+                                   -1,
+                                   percentDone,
+                                   avcErrorCode);
+
+            // Now end the update and set the UpdateStarted flag false before calling SetObj9State()
+            // function (otherwise, SetObj9State() may call le_update_End() again if it notices
+            // installation failure).
+            UpdateStarted = false;
+            RequestConnection();
+            le_update_End();
+
+            SetObj9State(CurrentObj9,
+                         LWM2MCORE_SW_UPDATE_STATE_INITIAL,
+                         LWM2MCORE_SW_UPDATE_RESULT_INSTALL_FAILURE);
+
+            CurrentObj9 = NULL;
+        break;
+
+        default:
+            LE_ERROR("Bad state: %d\n", updateState);
+            break;
+     }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1557,14 +1631,14 @@ static void StopStoringPackage
     if (UpdateReadFd != -1)
     {
         LE_DEBUG("Close downloader read pipe.");
-        fd_Close(UpdateReadFd);
+        CloseFd(UpdateReadFd);
         UpdateReadFd = -1;
     }
 
     if (UpdateStoreFd != -1)
     {
         LE_DEBUG("Close store pipe.");
-        fd_Close(UpdateStoreFd);
+        CloseFd(UpdateStoreFd);
         UpdateStoreFd = -1;
     }
 
@@ -1797,7 +1871,7 @@ static le_result_t StartStoringPackage
 
     if (isResume)
     {
-        if (false == file_Exists(downloadFile))
+        if (false == FileExists(downloadFile))
         {
             LE_ERROR("update file doesn't exist");
             return LE_FAULT;
@@ -1827,7 +1901,7 @@ static le_result_t StartStoringPackage
         if (fileOffset == -1)
         {
             LE_ERROR("Seek file to offset %zd failed.", offset);
-            fd_Close(UpdateStoreFd);
+            CloseFd(UpdateStoreFd);
             return LE_FAULT;
         }
     }
@@ -1847,9 +1921,6 @@ static le_result_t StartStoringPackage
 
     // Total count should begin from the stored offset for resume.
     TotalCount = offset;
-
-    // Set read fd as non blocking
-    fd_SetNonBlocking(UpdateReadFd);
 
     // Create FD monitor for the input FD
     StoreFdMonitor = le_fdMonitor_Create("store", UpdateReadFd, StoreFdEventHandler, POLLIN);
@@ -1887,19 +1958,19 @@ static void DownloadHandler
     if (UpdateReadFd != -1)
     {
         LE_DEBUG("Close downloader read pipe.");
-        fd_Close(UpdateReadFd);
+        CloseFd(UpdateReadFd);
         UpdateReadFd = -1;
     }
 
     if (UpdateStoreFd != -1)
     {
         LE_DEBUG("Close store pipe.");
-        fd_Close(UpdateStoreFd);
+        CloseFd(UpdateStoreFd);
         UpdateStoreFd = -1;
     }
 
     // Open read pipe
-    UpdateReadFd = open(dwlCtxPtr->fifoPtr, O_RDONLY, 0);
+    UpdateReadFd = open(dwlCtxPtr->fifoPtr, O_RDONLY|O_NONBLOCK, 0);
     LE_DEBUG("Opened fifo");
 
     if (-1 == UpdateReadFd)
@@ -2226,7 +2297,7 @@ le_result_t avcApp_StartUpdate
 
     LE_INFO("Read update file from %s", downloadFile);
 
-    if (false == file_Exists(downloadFile))
+    if (false == FileExists(downloadFile))
     {
         LE_ERROR("update file doesn't exist");
         return LE_FAULT;
@@ -2245,7 +2316,7 @@ le_result_t avcApp_StartUpdate
     result = le_update_Start(readFd);
 
     // Close fd
-    close(readFd);
+    CloseFd(readFd);
 
     if (result != LE_OK)
     {
@@ -2265,7 +2336,6 @@ le_result_t avcApp_StartUpdate
  *  but deletes only the app objects, so that an existing app can stay running during an upgrade
  *  operation. During an uninstall operation the app will be removed after the client receives the
  *  object9 delete command.
- *
  */
 //--------------------------------------------------------------------------------------------------
 void avcApp_PrepareUninstall
@@ -2288,18 +2358,19 @@ void avcApp_PrepareUninstall
 
     LE_DEBUG("Application '%s' uninstall requested, instanceID: %d", appName, instanceId);
 
+    // Set the CurrentObj9 before calling SetObj9State() function, otherwise State/Result
+    // won't be stored in flash. SetObj9State() only stores these values when CurrentObj9 is set
+    // properly.
+    CurrentObj9 = instanceRef;
+
     // Just set the state of this object 9 to initial.
     // The server queries for this state and sends us object9 delete, which will kick an uninstall.
     SetObj9State(instanceRef,
                  LWM2MCORE_SW_UPDATE_STATE_INITIAL,
                  LWM2MCORE_SW_UPDATE_RESULT_INITIAL);
 
-    CurrentObj9 = instanceRef;
-
-    //Delete SW update workspace
-    DeletePackage();
-
-    return;
+    // Notify connection pending if there is no active session.
+    RequestConnection();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2557,10 +2628,12 @@ le_result_t avcApp_GetActivationState
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Create an object 9 instance
+ * Create an object 9 instance and initializes SOTA workspace. If no instance exists, then instance
+ * will be created. If already an instance exists, its fields will be overridden. In both case, SOTA
+ * workspace will be cleared.
  *
  * @return:
- *      - LE_OK on success
+ *      - LE_OK on success.
  *      - LE_DUPLICATE if already exists an instance
  *      - LE_FAULT on any other error
  */
@@ -2578,28 +2651,58 @@ le_result_t avcApp_CreateObj9Instance
                                                       instanceId,
                                                       &instanceRef);
 
-    if (result != LE_OK)
+    if (result == LE_FAULT)
     {
         LE_ERROR("Failed to create instance: %d (%s)", instanceId, LE_RESULT_TXT(result));
-
         return result;
+    }
+
+    if (LE_DUPLICATE == result)
+    {
+        LE_WARN("Already exists an instance. Overriding it");
+
+        // Now get the instance reference by instance id
+        if (LE_OK != assetData_GetInstanceRefById(LWM2M_NAME, LWM2M_OBJ9, instanceId, &instanceRef))
+        {
+            LE_ERROR("Failed to retrieve instance reference by instanceId");
+            return LE_FAULT;
+        }
     }
 
     CurrentObj9 = instanceRef;
 
-    LE_DEBUG("Initialize sw update workspace.");
+    LE_DEBUG("Initialize SOTA workspace.");
 
     // Delete update package file
     DeletePackage();
 
     // This is a new download - set number of bytes downloaded to 0
     TotalCount = 0;
-    SetSwUpdateBytesDownloaded();
 
-    SetSwUpdateInstanceId(instanceId);
-    SetSwUpdateInternalState(INTERNAL_STATE_DOWNLOAD_REQUESTED);
-    SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
-    SetSwUpdateResult(LWM2MCORE_SW_UPDATE_RESULT_INITIAL);
+    if (LE_OK != SetSwUpdateBytesDownloaded())
+    {
+        return LE_FAULT;
+    }
+
+    if (LE_OK != SetSwUpdateInstanceId(instanceId))
+    {
+        return LE_FAULT;
+    }
+
+    if (LE_OK != SetSwUpdateInternalState(INTERNAL_STATE_DOWNLOAD_REQUESTED))
+    {
+        return LE_FAULT;
+    }
+
+    if (LE_OK != avcApp_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL))
+    {
+        return LE_FAULT;
+    }
+
+    if (LE_OK != avcApp_SetSwUpdateResult(LWM2MCORE_SW_UPDATE_RESULT_INITIAL))
+    {
+        return LE_FAULT;
+    }
 
     return result;
 }
@@ -2745,7 +2848,7 @@ le_result_t avcApp_GetResumePosition
 
     LE_DEBUG("Get the size of %s", downloadFile);
 
-    if (false == file_Exists(downloadFile))
+    if (false == FileExists(downloadFile))
     {
         LE_WARN("update file doesn't exist, create one");
 
@@ -2759,7 +2862,7 @@ le_result_t avcApp_GetResumePosition
             return LE_FAULT;
         }
 
-        close(storeFd);
+        CloseFd(storeFd);
     }
     else
     {
@@ -2813,12 +2916,12 @@ le_result_t avcApp_GetResumePosition
  * Set software update result in asset data and SW update workspace for ongoing update.
  *
  * @return:
- *      - DWL_OK on success
- *      - DWL_SUSPEND if no ongoing update.
- *      - DWL_FAULT on any other error
+ *      - LE_OK on success
+ *      - LE_NOT_FOUND if no ongoing update.
+ *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t avcApp_SetSwUpdateResult
+le_result_t avcApp_SetSwUpdateResult
 (
     lwm2mcore_SwUpdateResult_t updateResult
 )
@@ -2828,7 +2931,7 @@ lwm2mcore_DwlResult_t avcApp_SetSwUpdateResult
     if (CurrentObj9 == NULL)
     {
         LE_ERROR("No update is going on. CurrentObj9 = null");
-        return DWL_SUSPEND;
+        return LE_NOT_FOUND;
     }
 
     switch (updateResult)
@@ -2866,12 +2969,11 @@ lwm2mcore_DwlResult_t avcApp_SetSwUpdateResult
     if (LE_OK != result)
     {
         LE_ERROR("Error (%s) while setting object 9 update result", LE_RESULT_TXT(result));
-        return DWL_FAULT;
+        return LE_FAULT;
     }
 
     // Save result in workspace for resume operation
-    SetSwUpdateResult(updateResult);
-    return DWL_OK;
+    return SetSwUpdateResult(updateResult);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2879,12 +2981,12 @@ lwm2mcore_DwlResult_t avcApp_SetSwUpdateResult
  * Set software update state in asset data and SW update workspace for ongoing update.
  *
  * @return:
- *      - DWL_OK on success
- *      - DWL_SUSPEND if no ongoing update.
- *      - DWL_FAULT on any other error
+ *      - LE_OK on success
+ *      - LE_NOT_FOUND if no ongoing update.
+ *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t avcApp_SetSwUpdateState
+le_result_t avcApp_SetSwUpdateState
 (
     lwm2mcore_SwUpdateState_t updateState
 )
@@ -2894,7 +2996,7 @@ lwm2mcore_DwlResult_t avcApp_SetSwUpdateState
     if (CurrentObj9 == NULL)
     {
         LE_ERROR("No update is going on. CurrentObj9 = null");
-        return DWL_SUSPEND;
+        return LE_NOT_FOUND;
     }
 
     le_result_t result = assetData_client_SetInt(CurrentObj9, O9F_UPDATE_STATE, updateState);
@@ -2902,13 +3004,11 @@ lwm2mcore_DwlResult_t avcApp_SetSwUpdateState
     if (LE_OK != result)
     {
         LE_ERROR("Error (%s) while setting object 9 update state", LE_RESULT_TXT(result));
-        return DWL_FAULT;
+        return LE_FAULT;
     }
 
     // Save state in workspace for resume operation
-    SetSwUpdateState(updateState);
-
-    return DWL_OK;
+    return SetSwUpdateState(updateState);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2960,6 +3060,19 @@ le_result_t avcApp_GetSwUpdateResult
     }
 
     *updateResultPtr = (uint8_t)updateResult;
+
+    int storedInstanceId = -1;
+    avcApp_InternalState_t storedInternalState;
+
+    if ((LE_OK == GetSwUpdateInstanceId(&storedInstanceId)) &&
+        (LE_OK == GetSwUpdateInternalState(&storedInternalState)))
+    {
+        if ((storedInstanceId == instanceId) &&
+            (INTERNAL_STATE_CONNECTION_REQUESTED == storedInternalState))
+        {
+            DeletePackage();
+        }
+    }
 
     LE_DEBUG("UpdateResult: %d, instance id: %d", updateResult, instanceId);
     return LE_OK;
@@ -3233,6 +3346,13 @@ le_result_t avcApp_CheckNotificationToSend
     LE_PRINT_VALUE("%d", restoreResult);
     LE_PRINT_VALUE("%i", instanceId);
     LE_PRINT_VALUE("%d", internalState);
+
+    if (INTERNAL_STATE_CONNECTION_REQUESTED == internalState)
+    {
+        LE_INFO("Requesting connection to server for pending notification");
+        RequestConnection();
+        return LE_BUSY;
+    }
 
     if (   (LWM2MCORE_SW_UPDATE_STATE_DELIVERED == restoreState)
         && (INTERNAL_STATE_INSTALL_REQUESTED == internalState))
