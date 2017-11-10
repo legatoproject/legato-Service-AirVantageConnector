@@ -104,7 +104,6 @@ cflags:
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/wakaama/core/er-coap-13
     -I${LEGATO_BUILD}/3rdParty/inc
-    -w
     -std=gnu99
     -DWITH_SHA256
     -fvisibility=default

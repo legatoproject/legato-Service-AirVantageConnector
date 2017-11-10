@@ -385,12 +385,12 @@ lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateState
     lwm2mcore_FwUpdateState_t fwUpdateState     ///< [IN] New FW update state
 )
 {
-    lwm2mcore_DwlResult_t result;
+    le_result_t result;
 
     result = WriteFs(FW_UPDATE_STATE_PATH,
                      (uint8_t*)&fwUpdateState,
                      sizeof(lwm2mcore_FwUpdateState_t));
-    if (DWL_OK != result)
+    if (LE_OK != result)
     {
         LE_ERROR("Failed to write %s: %s", FW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
         return DWL_FAULT;
@@ -413,12 +413,12 @@ lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResult
     lwm2mcore_FwUpdateResult_t fwUpdateResult   ///< [IN] New FW update result
 )
 {
-    lwm2mcore_DwlResult_t result;
+    le_result_t result;
 
     result = WriteFs(FW_UPDATE_RESULT_PATH,
                      (uint8_t*)&fwUpdateResult,
                      sizeof(lwm2mcore_FwUpdateResult_t));
-    if (DWL_OK != result)
+    if (LE_OK != result)
     {
         LE_ERROR("Failed to write %s: %s", FW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
         return DWL_FAULT;
@@ -829,10 +829,10 @@ static void* DownloadThread
 {
     lwm2mcore_PackageDownloader_t* pkgDwlPtr;
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
-    static int ret;
+    static le_result_t ret;
 
     // Initialize the return value at every start
-    ret = 0;
+    ret = LE_OK;
 
     // Connect to services used by this thread
     secStoreGlobal_ConnectService();
@@ -846,7 +846,7 @@ static void* DownloadThread
     if (-1 == dwlCtxPtr->downloadFd)
     {
         LE_ERROR("Open FIFO failed: %m");
-        ret = -1;
+        ret = LE_IO_ERROR;
 
         switch (pkgDwlPtr->data.updateType)
         {
@@ -883,7 +883,7 @@ static void* DownloadThread
         if (DWL_OK != lwm2mcore_PackageDownloaderRun(pkgDwlPtr))
         {
             LE_ERROR("packageDownloadRun failed");
-            ret = -1;
+            ret = LE_FAULT;
             // An error occurred, close the file descriptor in order to stop the Store thread
             close(dwlCtxPtr->downloadFd);
             dwlCtxPtr->downloadFd = -1;
@@ -909,23 +909,23 @@ static void* DownloadThread
     // Wait for the end of the store thread used for FOTA
     if (LWM2MCORE_FW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
     {
-        void* storeThreadReturn = 0;
-        le_thread_Join(StoreFwRef, &storeThreadReturn);
+        le_result_t *storeThreadReturnPtr = 0;
+        le_thread_Join(StoreFwRef, (void**) &storeThreadReturnPtr);
         StoreFwRef = NULL;
-        LE_DEBUG("Store thread joined with return value = %p", storeThreadReturn);
+        LE_DEBUG("Store thread joined with return value = %d", *storeThreadReturnPtr);
 
         // Check if store thread finished with an error
-        if (0 != storeThreadReturn)
+        if (LE_OK != *storeThreadReturnPtr)
         {
             LE_ERROR("Package store failed");
-            ret = -1;
+            ret = LE_FAULT;
         }
 
         // Status notification is not relevant for suspend.
         if (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus())
         {
             // Check if there is any error in package download / store
-            if (ret < 0)
+            if (ret != LE_OK)
             {
                 // Send download failed event and set the error to "bad package",
                 // as it was rejected by the FW update process.
@@ -998,7 +998,7 @@ static void* DownloadThread
         break;
 
         case DOWNLOAD_STATUS_ABORT:
-            if (ret < 0)
+            if (ret != LE_OK)
             {
                 // The abort was caused by an error during the firmware update process:
                 // - Delete stored information
@@ -1057,10 +1057,10 @@ static void* StoreFwThread
     le_result_t result;
     int fd;
     bool fwupdateInitError = false;
-    static int ret;
+    static le_result_t ret;
 
     // Initialize the return value at every start
-    ret = 0;
+    ret = LE_OK;
 
     LE_DEBUG("Started storing FW package");
 
@@ -1103,14 +1103,14 @@ static void* StoreFwThread
     if (-1 == fd)
     {
         LE_ERROR("Failed to open FIFO %m");
-        ret = -1;
+        ret = LE_IO_ERROR;
         goto thread_end;
     }
 
     // There was an error during the FW update initialization, stop here
     if (fwupdateInitError)
     {
-        ret = -1;
+        ret = LE_FAULT;
         goto thread_end_close_fd;
     }
 
@@ -1125,7 +1125,7 @@ static void* StoreFwThread
             lwm2mcore_FwUpdateResult_t fwUpdateResult;
 
             LE_ERROR("Failed to update firmware: %s", LE_RESULT_TXT(result));
-            ret = -1;
+            ret = LE_FAULT;
 
             // Abort active download
             AbortDownload();
@@ -1154,7 +1154,7 @@ static void* StoreFwThread
 thread_end_close_fd:
     close(fd);
 thread_end:
-    return (void*)ret;
+    return (void*)&ret;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1222,7 +1222,7 @@ void packageDownloader_StartDownload
                 // Get fwupdate offset before launching the download
                 // and the blocking call to le_fwupdate_Download()
                 le_fwupdate_GetResumePosition((size_t *)&PkgDwl.data.updateOffset);
-                LE_DEBUG("updateOffset: %llu", PkgDwl.data.updateOffset);
+                LE_DEBUG("updateOffset: %"PRIu64, PkgDwl.data.updateOffset);
             }
             dwlCtx.storePackage = (void*)StoreFwThread;
             break;
@@ -1232,7 +1232,7 @@ void packageDownloader_StartDownload
             {
                 // Get swupdate offset before launching the download
                 avcApp_GetResumePosition((size_t *)&PkgDwl.data.updateOffset);
-                LE_DEBUG("updateOffset: %llu", PkgDwl.data.updateOffset);
+                LE_DEBUG("updateOffset: %"PRIu64, PkgDwl.data.updateOffset);
             }
             dwlCtx.storePackage = NULL;
             break;
@@ -1401,7 +1401,7 @@ le_result_t packageDownloader_BytesLeftToDownload
             return LE_FAULT;
         }
 
-        LE_INFO("Package size: %llu", packageSize);
+        LE_INFO("Package size: %"PRIu64, packageSize);
 
         // Check whether it is SW or FW update type and update status based on stored status.
         switch (updateType)

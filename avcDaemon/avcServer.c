@@ -2046,7 +2046,7 @@ static void CheckNotificationToSend
     // 4. Check if a download pending notification should be sent
     if (LE_OK == packageDownloader_BytesLeftToDownload(&numBytesToDownload))
     {
-        LE_DEBUG("Bytes left to download: %llu", numBytesToDownload);
+        LE_DEBUG("Bytes left to download: %"PRIu64, numBytesToDownload);
 
         uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
         size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_BYTES;

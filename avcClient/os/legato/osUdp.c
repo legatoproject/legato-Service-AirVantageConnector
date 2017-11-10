@@ -40,8 +40,6 @@ lwm2mcore_SocketConfig_t SocketConfig;
 
 static lwm2mcore_UdpCb_t udpCb = NULL;
 
-#define OS_SOCK_PROTO SOCK_DGRAM
-
 //--------------------------------------------------------------------------------------------------
 /**
  *  lwm2m client receive monitor.
@@ -299,8 +297,8 @@ bool lwm2mcore_UdpOpen
     }
 
     SocketConfig.instanceRef = instanceRef;
-    SocketConfig.type = LWM2MCORE_SOCK_UDP;
-    SocketConfig.proto = OS_SOCK_PROTO;
+    SocketConfig.type = LWM2MCORE_SOCK_TYPE_MAX;
+    SocketConfig.proto = LWM2MCORE_SOCK_UDP;
     SocketConfig.sock = CreateSocket (localPortPtr, SocketConfig);
     LE_DEBUG ("sock %d", SocketConfig.sock);
     memcpy (configPtr, &SocketConfig, sizeof (lwm2mcore_SocketConfig_t));

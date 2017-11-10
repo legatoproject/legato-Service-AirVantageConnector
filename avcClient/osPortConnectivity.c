@@ -1922,7 +1922,7 @@ lwm2mcore_Sid_t lwm2mcore_GetTxData
     {
         // Amount of data is converted from bytes to kilobytes
         *valuePtr = txBytes / KILOBYTE;
-        LE_DEBUG("txBytes: %llu -> Tx Data = %llu kB", txBytes, *valuePtr);
+        LE_DEBUG("txBytes: %"PRIu64" -> Tx Data = %"PRIu64" kB", txBytes, *valuePtr);
         sID = LWM2MCORE_ERR_COMPLETED_OK;
     }
     else
@@ -1962,7 +1962,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRxData
     {
         // Amount of data is converted from bytes to kilobytes
         *valuePtr = rxBytes / KILOBYTE;
-        LE_DEBUG("rxBytes: %llu -> Rx Data = %llu kB", rxBytes, *valuePtr);
+        LE_DEBUG("rxBytes: %"PRIu64" -> Rx Data = %"PRIu64" kB", rxBytes, *valuePtr);
         sID = LWM2MCORE_ERR_COMPLETED_OK;
     }
     else

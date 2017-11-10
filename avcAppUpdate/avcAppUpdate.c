@@ -1420,7 +1420,7 @@ static le_result_t GetSwUpdateInternalState
         if (LE_NOT_FOUND == result)
         {
             LE_ERROR("SW update internal state not found");
-            *internalStatePtr = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
+            *internalStatePtr = INTERNAL_STATE_INVALID;
             return LE_OK;
         }
         LE_ERROR("Failed to read %s: %s", SW_UPDATE_INTERNAL_STATE_PATH, LE_RESULT_TXT(result));
@@ -1630,7 +1630,7 @@ static le_result_t WriteBytesToFd
     // Check for errors.
     if (writeResult == -1)
     {
-        LE_ERROR("Failed to write bytes to fd (%m). Requested: %zd Bytes, Written: %d Bytes",
+        LE_ERROR("Failed to write bytes to fd (%m). Requested: %zd Bytes, Written: %zd Bytes",
                   readCount,
                   bytesWritten);
         return LE_FAULT;
@@ -2599,7 +2599,7 @@ le_result_t avcApp_CreateObj9Instance
     SetSwUpdateInstanceId(instanceId);
     SetSwUpdateInternalState(INTERNAL_STATE_DOWNLOAD_REQUESTED);
     SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
-    SetSwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL);
+    SetSwUpdateResult(LWM2MCORE_SW_UPDATE_RESULT_INITIAL);
 
     return result;
 }

@@ -540,7 +540,7 @@ lwm2mcore_Sid_t lwm2mcore_CopySha1
     // Check buffer length
     if (bufSize < sizeof(SHA_CTX))
     {
-        LE_ERROR("Buffer is too short (%zu < %d)", bufSize, sizeof(SHA_CTX));
+        LE_ERROR("Buffer is too short (%zu < %zd)", bufSize, sizeof(SHA_CTX));
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
@@ -577,7 +577,7 @@ lwm2mcore_Sid_t lwm2mcore_RestoreSha1
     // Check buffer length
     if (bufSize < sizeof(SHA_CTX))
     {
-        LE_ERROR("Buffer is too short (%zu < %d)", bufSize, sizeof(SHA_CTX));
+        LE_ERROR("Buffer is too short (%zu < %zd)", bufSize, sizeof(SHA_CTX));
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
