@@ -2743,7 +2743,7 @@ void le_avdata_ReplyExecResult
     le_dls_List_t* argListPtr = le_ref_Lookup(ArgListRefMap, argListRef);
     if (NULL == argListPtr)
     {
-        LE_KILL_CLIENT("Invalid argument list (%p) provided!", argListRef);
+        LE_ERROR("Invalid argument list (%p) provided!", argListRef);
         return;
     }
 
