@@ -493,7 +493,6 @@ static int EventHandler
 )
 {
     int result = 0;
-    static bool authStartedSent = false;
 
     switch (status.event)
     {
@@ -528,6 +527,8 @@ static int EventHandler
             if (status.u.session.type == LWM2MCORE_SESSION_BOOTSTRAP)
             {
                 LE_DEBUG("Connected to bootstrap");
+                avcServer_UpdateStatus(LE_AVC_SESSION_BS_STARTED, LE_AVC_UNKNOWN_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
             }
             else
             {
@@ -552,14 +553,6 @@ static int EventHandler
             break;
 
         case LWM2MCORE_EVENT_AUTHENTICATION_STARTED:
-            // Send only the first "authentication started" notification in case the device
-            // authenticates first with the BS then the DM server
-            if (!authStartedSent)
-            {
-                avcServer_UpdateStatus(LE_AVC_AUTH_STARTED, LE_AVC_UNKNOWN_UPDATE,
-                                       -1, -1, LE_AVC_ERR_NONE);
-                authStartedSent = true;
-            }
             if (status.u.session.type == LWM2MCORE_SESSION_BOOTSTRAP)
             {
                 LE_DEBUG("Authentication to BS started");
@@ -567,9 +560,9 @@ static int EventHandler
             else
             {
                 LE_DEBUG("Authentication to DM started");
-                // Authentication with the DM server started, reset the flag
-                authStartedSent = false;
             }
+            avcServer_UpdateStatus(LE_AVC_AUTH_STARTED, LE_AVC_UNKNOWN_UPDATE,
+                       -1, -1, LE_AVC_ERR_NONE);
             break;
 
         case LWM2MCORE_EVENT_AUTHENTICATION_FAILED:
