@@ -68,6 +68,7 @@ sources:
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortDevice.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortLocation.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortSecurity.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortServer.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortUpdate.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortParamStorage.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcAppUpdate/avcAppUpdate.c
