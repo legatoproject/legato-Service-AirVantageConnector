@@ -45,23 +45,19 @@ lwm2mcore_Sid_t lwm2mcore_GetLatitude
     switch (result)
     {
         case LE_OK:
-        case LE_OUT_OF_RANGE:
-            if (INT32_MAX != latitude)
+            latitudeLen = snprintf(bufferPtr, *lenPtr, "%.6f", (float)latitude/1e6);
+            if (*lenPtr < latitudeLen)
             {
-                latitudeLen = snprintf(bufferPtr, *lenPtr, "%.6f", (float)latitude/1e6);
-                if (*lenPtr < latitudeLen)
-                {
-                    sID = LWM2MCORE_ERR_OVERFLOW;
-                }
-                else
-                {
-                    sID = LWM2MCORE_ERR_COMPLETED_OK;
-                }
+                sID = LWM2MCORE_ERR_OVERFLOW;
             }
             else
             {
-                sID = LWM2MCORE_ERR_INVALID_STATE;
+                sID = LWM2MCORE_ERR_COMPLETED_OK;
             }
+            break;
+
+        case LE_OUT_OF_RANGE:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
         case LE_FAULT:
@@ -108,23 +104,19 @@ lwm2mcore_Sid_t lwm2mcore_GetLongitude
     switch (result)
     {
         case LE_OK:
-        case LE_OUT_OF_RANGE:
-            if (INT32_MAX != longitude)
+            longitudeLen = snprintf(bufferPtr, *lenPtr, "%.6f", (float)longitude/1e6);
+            if (*lenPtr < longitudeLen)
             {
-                longitudeLen = snprintf(bufferPtr, *lenPtr, "%.6f", (float)longitude/1e6);
-                if (*lenPtr < longitudeLen)
-                {
-                    sID = LWM2MCORE_ERR_OVERFLOW;
-                }
-                else
-                {
-                    sID = LWM2MCORE_ERR_COMPLETED_OK;
-                }
+                sID = LWM2MCORE_ERR_OVERFLOW;
             }
             else
             {
-                sID = LWM2MCORE_ERR_INVALID_STATE;
+                sID = LWM2MCORE_ERR_COMPLETED_OK;
             }
+            break;
+
+        case LE_OUT_OF_RANGE:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
         case LE_FAULT:
@@ -173,23 +165,19 @@ lwm2mcore_Sid_t lwm2mcore_GetAltitude
     switch (result)
     {
         case LE_OK:
-        case LE_OUT_OF_RANGE:
-            if (INT32_MAX != altitude)
+            altitudeLen = snprintf(bufferPtr, *lenPtr, "%d", altitude);
+            if (*lenPtr < altitudeLen)
             {
-                altitudeLen = snprintf(bufferPtr, *lenPtr, "%d", altitude);
-                if (*lenPtr < altitudeLen)
-                {
-                    sID = LWM2MCORE_ERR_OVERFLOW;
-                }
-                else
-                {
-                    sID = LWM2MCORE_ERR_COMPLETED_OK;
-                }
+                sID = LWM2MCORE_ERR_OVERFLOW;
             }
             else
             {
-                sID = LWM2MCORE_ERR_INVALID_STATE;
+                sID = LWM2MCORE_ERR_COMPLETED_OK;
             }
+            break;
+
+        case LE_OUT_OF_RANGE:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
         case LE_FAULT:
