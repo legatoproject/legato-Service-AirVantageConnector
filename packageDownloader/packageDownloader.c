@@ -906,40 +906,49 @@ static void* DownloadThread
         }
     }
 
-    // Wait for the end of the store thread used for FOTA
+    // At this point, download has ended. Wait for the end of store thread used for FOTA
     if (LWM2MCORE_FW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
     {
-        le_result_t *storeThreadReturnPtr = 0;
+        le_result_t* storeThreadReturnPtr = 0;
         le_thread_Join(StoreFwRef, (void**) &storeThreadReturnPtr);
         StoreFwRef = NULL;
         LE_DEBUG("Store thread joined with return value = %d", *storeThreadReturnPtr);
 
-        // Check if store thread finished with an error
-        if (LE_OK != *storeThreadReturnPtr)
+        if (LE_OK != ret)
         {
-            LE_ERROR("Package store failed");
-            ret = LE_FAULT;
-        }
+            // An error occured during download. A package download failure notification
+            // has already been sent by packagedownloader callbacks. No need to check store
+            // status as it will also fail and send the notification a second time
 
-        // Status notification is not relevant for suspend.
-        if (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus())
+            LE_ERROR("Package download failed");
+        }
+        else
         {
-            // Check if there is any error in package download / store
-            if (ret != LE_OK)
+            // No error during download. Check store thread return status.
+            if (LE_OK != *storeThreadReturnPtr)
             {
-                // Send download failed event and set the error to "bad package",
-                // as it was rejected by the FW update process.
-                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
-                                       LE_AVC_FIRMWARE_UPDATE,
-                                       -1,
-                                       -1,
-                                       LE_AVC_ERR_BAD_PACKAGE);
+                // An error occured during store, send a notification.
+                LE_ERROR("Package store failed");
+                ret = LE_FAULT;
+
+                // Status notification is not relevant for suspend.
+                if (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus())
+                {
+                    // Send download failed event and set the error to "bad package",
+                    // as it was rejected by the FW update process.
+                    avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
+                                           LE_AVC_FIRMWARE_UPDATE,
+                                           -1,
+                                           -1,
+                                           LE_AVC_ERR_BAD_PACKAGE);
+                }
             }
             else
             {
-                // Package download is aborted and no error: the download end is expected in this
-                // case, no need to send a notification.
-                if (DOWNLOAD_STATUS_ABORT != GetDownloadStatus())
+                // Package download is aborted or suspended and no error: the download end
+                // is expected in this case, no need to send a notification.
+                if ((DOWNLOAD_STATUS_ABORT != GetDownloadStatus())
+                    && (DOWNLOAD_STATUS_SUSPEND != GetDownloadStatus()))
                 {
                     // Send download complete event.
                     // Not setting the downloaded number of bytes and percentage
