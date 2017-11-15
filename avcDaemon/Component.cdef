@@ -61,6 +61,7 @@ sources:
     timeseriesData.c
     push.c
     avcFs.c
+    avcComm.c
 
     // AVC
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/avcClient.c
@@ -118,4 +119,3 @@ ldflags:
     -lcrypto
     -L${LEGATO_BUILD}/3rdParty/lib
 }
-

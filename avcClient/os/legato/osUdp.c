@@ -34,7 +34,7 @@ le_fdMonitor_Ref_t Lwm2mMonitorRef;
  * Local port for socket
  */
 //--------------------------------------------------------------------------------------------------
-const char * localPortPtr = "56830";
+#define LOCAL_PORT  "56830"
 
 lwm2mcore_SocketConfig_t SocketConfig;
 
@@ -299,7 +299,7 @@ bool lwm2mcore_UdpOpen
     SocketConfig.instanceRef = instanceRef;
     SocketConfig.type = LWM2MCORE_SOCK_TYPE_MAX;
     SocketConfig.proto = LWM2MCORE_SOCK_UDP;
-    SocketConfig.sock = CreateSocket (localPortPtr, SocketConfig);
+    SocketConfig.sock = CreateSocket(LOCAL_PORT, SocketConfig);
     LE_DEBUG ("sock %d", SocketConfig.sock);
     memcpy (configPtr, &SocketConfig, sizeof (lwm2mcore_SocketConfig_t));
 
@@ -461,4 +461,3 @@ bool lwm2mcore_UdpConnect
     }
     return false;
 }
-
