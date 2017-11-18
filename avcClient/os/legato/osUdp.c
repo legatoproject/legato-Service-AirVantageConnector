@@ -287,13 +287,13 @@ bool lwm2mcore_UdpOpen
 
     le_mdc_ProfileRef_t profileRef = le_mdc_GetProfile(le_data_GetCellularProfileIndex());
 
-    if (le_mdc_IsIPv6(profileRef))
+    if (le_mdc_IsIPv6(profileRef) && !le_mdc_IsIPv4(profileRef))
     {
         SocketConfig.af = AF_INET6;
     }
     else
     {
-        SocketConfig.af = AF_INET;
+        SocketConfig.af = AF_UNSPEC;
     }
 
     SocketConfig.instanceRef = instanceRef;
