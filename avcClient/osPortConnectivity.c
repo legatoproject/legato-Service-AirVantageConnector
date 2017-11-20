@@ -1755,11 +1755,11 @@ lwm2mcore_Sid_t lwm2mcore_GetRscp
         case LE_MRC_RAT_GSM:
         case LE_MRC_RAT_LTE:
         case LE_MRC_RAT_CDMA:
-        case LE_MRC_RAT_UMTS:
-            // RSCP available only for TDSCDMA
+            // RSCP available only for UMTS and TD-SCDMA
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
+        case LE_MRC_RAT_UMTS:
         case LE_MRC_RAT_TDSCDMA:
             if (LE_OK != le_mrc_GetUmtsSignalMetrics(metricsRef, &rxLevel, &er,
                                                      &ecio, &rscp, &sinr))
