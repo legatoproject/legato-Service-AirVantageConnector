@@ -106,7 +106,10 @@ static void ReportInfo
     CommInfo_t *infoPtr
 )
 {
-    le_event_Report(CommEventId, infoPtr, sizeof(CommInfo_t));
+    if (CommEventId)
+    {
+        le_event_Report(CommEventId, infoPtr, sizeof(CommInfo_t));
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -248,7 +251,8 @@ void lwm2mcore_ReportCoapResponseCode
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Handler ADD function
+ * Register a handler function in order to receive communication information notifications
+ * @note This function creates the event handler ID if not yet created
  */
 //--------------------------------------------------------------------------------------------------
 le_avc_CommInfoHandlerRef_t le_avc_AddCommInfoHandler
@@ -281,7 +285,7 @@ le_avc_CommInfoHandlerRef_t le_avc_AddCommInfoHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Handler REMOVE function
+ * Unregister a handler
  */
 //--------------------------------------------------------------------------------------------------
 void le_avc_RemoveCommInfoHandler
