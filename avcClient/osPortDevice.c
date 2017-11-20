@@ -1040,6 +1040,90 @@ lwm2mcore_Sid_t lwm2mcore_GetIccid
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Retrieve the currently used SIM card
+ * This API needs to have a procedural treatment
+ *
+ * @note
+ *      This function is stubbed
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetCurrentSimCard
+(
+    int*   currentSimPtr  ///< [OUT]    Currently used SIM card
+)
+{
+    if (!currentSimPtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    *currentSimPtr = 0;
+    LE_DEBUG("lwm2mcore_GetCurrentSimCard: %d", *currentSimPtr);
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set SIM mode
+ * This API needs to have a procedural treatment
+ *
+ * @note
+ *      This function is stubbed
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_SetSimMode
+(
+    char*   bufferPtr,  ///< [IN]    data buffer pointer
+    size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
+)
+{
+    if ((!bufferPtr) || (!lenPtr))
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    LE_DEBUG("lwm2mcore_SetSimMode: %s", bufferPtr);
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the SIM switch status
+ * This API needs to have a procedural treatment
+ *
+ * @note
+ *      This function is stubbed
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetSimSwitchStatus
+(
+    int*   switchStatusPtr  ///< [OUT]    SIM switch status
+)
+{
+    if (!switchStatusPtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    *switchStatusPtr = 0;
+    LE_DEBUG("lwm2mcore_GetSimSwitchStatus: %d", *switchStatusPtr);
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Retrieve the subscription identity (MEID/ESN/IMSI)
  * This API needs to have a procedural treatment
  *
