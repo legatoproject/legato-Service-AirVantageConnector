@@ -2002,7 +2002,8 @@ static le_result_t CheckFwInstallResult
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Check if a notification needs to be sent to the application after a reboot or a service restart.
+ * Check if a notification needs to be sent to the application after a reboot, a service restart or
+ * a new registration to the event handler
  */
 //--------------------------------------------------------------------------------------------------
 static void CheckNotificationToSend
@@ -2012,9 +2013,24 @@ static void CheckNotificationToSend
 {
     bool notify = false;
     uint64_t numBytesToDownload = 0;
+    le_avc_Status_t avcStatus;
+    le_avc_ErrorCode_t errorCode;
 
     if (AVC_IDLE != CurrentState)
     {
+        // Since FW install result notification is not reported when auto-connect is performed at
+        // startup, this notification needs to be resent again to the newly registred applications
+        avcStatus = LE_AVC_NO_UPDATE;
+        errorCode = LE_AVC_ERR_NONE;
+        if ((LE_OK == packageDownloader_GetFwUpdateNotification(&notify, &avcStatus, &errorCode))
+            && (notify))
+        {
+            avcServer_UpdateStatus(avcStatus, LE_AVC_FIRMWARE_UPDATE, -1, -1, errorCode);
+
+            LE_DEBUG("Reporting FW install notification (status: avcStatus)");
+            return;
+        }
+
         // Something is already going on, no need to check the notification to send
         LE_DEBUG("Current state is %s, not checking notification to send",
                  ConvertAvcStateToString(CurrentState));
@@ -2025,9 +2041,10 @@ static void CheckNotificationToSend
     // check FW install result and notification flag
     if (LE_OK == CheckFwInstallResult())
     {
-        le_avc_Status_t avcStatus = LE_AVC_NO_UPDATE;
-        le_avc_ErrorCode_t errorCode = LE_AVC_ERR_NONE;
-        if (   (LE_OK == packageDownloader_GetFwUpdateNotification(&notify, &avcStatus, &errorCode))
+        notify = false;
+        avcStatus = LE_AVC_NO_UPDATE;
+        errorCode = LE_AVC_ERR_NONE;
+        if ((LE_OK == packageDownloader_GetFwUpdateNotification(&notify, &avcStatus, &errorCode))
             && (notify))
         {
             avcServer_UpdateStatus(avcStatus, LE_AVC_FIRMWARE_UPDATE, -1, -1, errorCode);
