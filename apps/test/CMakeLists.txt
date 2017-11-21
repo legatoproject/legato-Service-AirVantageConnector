@@ -37,3 +37,7 @@ add_subdirectory(airVantageConnectorUnitTest)
 
 # assetData unit test
 add_subdirectory(assetDataTest)
+
+if(EXISTS ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tests)
+    add_subdirectory(${LEGATO_ROOT}/3rdParty/Lwm2mCore/tests ${EXECUTABLE_OUTPUT_PATH})
+endif()
