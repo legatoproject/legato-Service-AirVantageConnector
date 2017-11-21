@@ -21,6 +21,7 @@
 #include "limit.h"
 #include "push.h"
 #include "sessionManager.h"
+#include "appCfg.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -44,14 +45,6 @@
  */
 //--------------------------------------------------------------------------------------------------
 #define MAX_PUSH_BUFFER_BYTES 20000
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- *  Path to the persistent asset setting path
- */
-//--------------------------------------------------------------------------------------------------
-#define CFG_ASSET_SETTING_PATH "/apps/avcService/settings"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -276,7 +269,7 @@ static uint32_t RequestCount = 0;
  * Flag to check if asset data has been restored
  */
 //--------------------------------------------------------------------------------------------------
-static bool IsRestored = false;
+static bool IsRestored = true;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /* Helper functions                                                                               */
@@ -306,20 +299,11 @@ static void ClientCloseSessionHandler
         assetDataPtr = le_hashmap_GetValue(iter);
         if (assetDataPtr->msgRef == sessionRef)
         {
-            // remove cache entry from configTree
-            if (assetDataPtr->accessMode == LE_AVDATA_ACCESS_SETTING)
-            {
-                le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_ASSET_SETTING_PATH);
-                le_cfg_DeleteNode(iterRef, assetPathPtr + 1);
-                le_cfg_CommitTxn(iterRef);
-            }
-
             LE_DEBUG("Removing asset data: %s", assetPathPtr);
             le_hashmap_Remove(AssetDataMap, assetPathPtr);
             le_mem_Release(assetPathPtr);
             le_mem_Release(assetDataPtr);
         }
-
     }
 
     // Search for the record references used by the closed client, and clean up any data.
@@ -885,10 +869,11 @@ static le_result_t SetVal
  * Initialize resource
  */
 //--------------------------------------------------------------------------------------------------
-static void InitResource
+static le_result_t InitResource
 (
-    const char* path,                 ///< [IN] Asset data path
-    le_avdata_AccessMode_t accessMode ///< [IN] Asset data access mode
+    const char* path,                       ///< [IN] Asset data path
+    le_avdata_AccessMode_t accessMode,      ///< [IN] Asset data access mode
+    le_msg_SessionRef_t sessionRef          ///< [IN] Session reference
 )
 {
     // Convert access mode to access bitmasks.
@@ -898,6 +883,14 @@ static void InitResource
         (ConvertAccessModeToClientAccess(accessMode, &clientAccess) != LE_OK))
     {
         LE_KILL_CLIENT("Invalid access mode [%d].", accessMode);
+    }
+
+    // The path cannot already exists, and cannot be a parent or child path to any of the existing
+    // path.
+    if ((GetAssetData(path) != NULL) || IsPathParent(path) || IsPathChild(path))
+    {
+        LE_DEBUG("Asset data path already exists");
+        return LE_DUPLICATE;
     }
 
     char* assetPathPtr = le_mem_ForceAlloc(AssetPathPool);
@@ -916,9 +909,11 @@ static void InitResource
     assetDataPtr->handlerPtr = NULL;
     assetDataPtr->contextPtr = NULL;
     assetDataPtr->arguments = LE_DLS_LIST_INIT;
-    assetDataPtr->msgRef = le_avdata_GetClientSessionRef();
+    assetDataPtr->msgRef = sessionRef;
 
     le_hashmap_Put(AssetDataMap, assetPathPtr, assetDataPtr);
+
+    return LE_OK;
 }
 
 
@@ -929,105 +924,140 @@ static void InitResource
 //--------------------------------------------------------------------------------------------------
 static void RecursiveRestore
 (
-    le_cfg_IteratorRef_t iterRef,   ///< [IN] Config iterator to stored data
-    const char * path               ///< [IN] Asset data path
+    le_cfg_IteratorRef_t iterRef,       ///< [IN] Config iterator to stored data
+    const char * path,                  ///< [IN] Asset data path
+    le_msg_SessionRef_t sessionRef      ///< [IN] Session reference
 )
 {
     char strBuffer[LE_CFG_STR_LEN_BYTES] = "";
+    IsRestored = false;
 
     do
     {
         char nodeName[LE_CFG_STR_LEN_BYTES] = "";
         le_cfg_GetNodeName(iterRef, "", nodeName, LE_CFG_STR_LEN_BYTES);
         le_cfg_nodeType_t type = le_cfg_GetNodeType(iterRef, "");
+
         snprintf(strBuffer, sizeof(strBuffer), "%s/%s", path, nodeName);
 
         // keep iterating
         if (type == LE_CFG_TYPE_STEM)
         {
             le_cfg_GoToFirstChild(iterRef);
-            RecursiveRestore(iterRef, strBuffer);
+            RecursiveRestore(iterRef, strBuffer, sessionRef);
             le_cfg_GoToParent(iterRef);
         }
-        else
+        else if (type != LE_CFG_TYPE_DOESNT_EXIST)
         {
             // restore asset data as setting
             LE_INFO("Restoring asset data: %s", strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1));
-            InitResource(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1), LE_AVDATA_ACCESS_SETTING);
-            AssetValue_t assetValue;
 
-            switch (type)
+            le_result_t result = InitResource(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
+                                              LE_AVDATA_ACCESS_SETTING, sessionRef);
+
+            // Restore value from config tree for the new setting
+            if (result == LE_OK)
             {
-                case LE_CFG_TYPE_INT:
-                    assetValue.intValue = le_cfg_GetInt(iterRef, strBuffer, 0);
-                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
-                           assetValue,
-                           LE_AVDATA_DATA_TYPE_INT,
-                           false,
-                           false);
-                    break;
-                case LE_CFG_TYPE_FLOAT:
-                    assetValue.floatValue = le_cfg_GetFloat(iterRef, strBuffer, 0);
-                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
-                           assetValue,
-                           LE_AVDATA_DATA_TYPE_FLOAT,
-                           false,
-                           false);
-                    break;
-                case LE_CFG_TYPE_BOOL:
-                    assetValue.boolValue = le_cfg_GetBool(iterRef, strBuffer, 0);
-                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
-                           assetValue,
-                           LE_AVDATA_DATA_TYPE_BOOL,
-                           false,
-                           false);
-                    break;
-                case LE_CFG_TYPE_STRING:
-                    assetValue.strValuePtr = le_mem_ForceAlloc(StringPool);
-                    le_cfg_GetString(iterRef, strBuffer, assetValue.strValuePtr, LE_AVDATA_STRING_VALUE_BYTES, "");
-                    SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
-                           assetValue,
-                           LE_AVDATA_DATA_TYPE_STRING,
-                           false,
-                           false);
-                    break;
-                default:
-                    LE_DEBUG("Invalid type.");
-                    return;
-            }
+                AssetValue_t assetValue;
 
+                switch (type)
+                {
+                    case LE_CFG_TYPE_INT:
+                        assetValue.intValue = le_cfg_GetInt(iterRef, strBuffer, 0);
+                        SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
+                               assetValue,
+                               LE_AVDATA_DATA_TYPE_INT,
+                               false,
+                               false);
+                        break;
+                    case LE_CFG_TYPE_FLOAT:
+                        assetValue.floatValue = le_cfg_GetFloat(iterRef, strBuffer, 0);
+                        SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
+                               assetValue,
+                               LE_AVDATA_DATA_TYPE_FLOAT,
+                               false,
+                               false);
+                        break;
+                    case LE_CFG_TYPE_BOOL:
+                        assetValue.boolValue = le_cfg_GetBool(iterRef, strBuffer, 0);
+                        SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
+                               assetValue,
+                               LE_AVDATA_DATA_TYPE_BOOL,
+                               false,
+                               false);
+                        break;
+                    case LE_CFG_TYPE_STRING:
+                        assetValue.strValuePtr = le_mem_ForceAlloc(StringPool);
+                        le_cfg_GetString(iterRef, strBuffer, assetValue.strValuePtr, LE_AVDATA_STRING_VALUE_BYTES, "");
+                        SetVal(strBuffer + (sizeof(CFG_ASSET_SETTING_PATH) - 1),
+                               assetValue,
+                               LE_AVDATA_DATA_TYPE_STRING,
+                               false,
+                               false);
+                        break;
+                    default:
+                        LE_ERROR("Invalid type.");
+                        return;
+                }
+            }
+        }
+        else
+        {
+            LE_ERROR("No setting exist in config tree for resource");
         }
     }
     while (le_cfg_GoToNextSibling(iterRef) == LE_OK);
+
+    IsRestored = true;
 }
 
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Restore asset data from the cfgTree to keep them persistent if legato or app restarts.
+ * Handler for client session open
  */
 //--------------------------------------------------------------------------------------------------
-static void RestoreData
+static void ClientOpenSessionHandler
 (
-    void
+    le_msg_SessionRef_t sessionRef,
+    void*               contextPtr
 )
 {
-    LE_INFO("Restoring asset data.");
+    char appName[LE_LIMIT_APP_NAME_LEN+1] = "";
+    char appSettingPath[LE_AVDATA_PATH_NAME_BYTES] = "";
+    le_cfg_IteratorRef_t iterRef;
+    pid_t pid;
 
+    // Get client pid
+    if (LE_OK != le_msg_GetClientProcessId(sessionRef, &pid))
+    {
+        LE_FATAL("Error getting client pid.");
+    }
 
-    le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn(CFG_ASSET_SETTING_PATH);
+    // Get app name
+    if (LE_OK != le_appInfo_GetName(pid, appName, sizeof(appName)))
+    {
+        LE_FATAL("Error getting client app name.");
+    }
+
+    // Get the path where the settings for this client app is stored
+    snprintf(appSettingPath, sizeof(appSettingPath),"%s/%s", CFG_ASSET_SETTING_PATH, appName);
+
+    // exit if there no setting found in config tree
+    iterRef = le_cfg_CreateReadTxn(appSettingPath);
 
     if (le_cfg_GoToFirstChild(iterRef) != LE_OK)
     {
-        LE_INFO("No asset data to restore.");
+        LE_INFO("No asset setting to restore.");
         le_cfg_CancelTxn(iterRef);
         return;
     }
 
-    RecursiveRestore(iterRef, CFG_ASSET_SETTING_PATH);
+    // Restore setting from config tree
+    RecursiveRestore(iterRef, appSettingPath, sessionRef);
     le_cfg_CancelTxn(iterRef);
-}
 
+}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2226,16 +2256,7 @@ le_result_t le_avdata_CreateResource
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
     GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
 
-    // The path cannot already exists, and cannot be a parent or child path to any of the existing
-    // path.
-    if ((GetAssetData(namespacedPath) != NULL) || IsPathParent(namespacedPath) || IsPathChild(namespacedPath))
-    {
-        return LE_DUPLICATE;
-    }
-
-    InitResource(namespacedPath, accessMode);
-
-    return LE_OK;
+    return InitResource(namespacedPath, accessMode, le_avdata_GetClientSessionRef());
 }
 
 
@@ -3431,6 +3452,9 @@ void avData_Init
     // Set the AV server request handler
     lwm2mcore_SetCoapEventHandler(AvServerRequestHandler);
 
+    // Add a handler for client session open
+    le_msg_AddServiceOpenHandler( le_avdata_GetServiceRef(), ClientOpenSessionHandler, NULL );
+
     // Add a handler for client session closes
     le_msg_AddServiceCloseHandler( le_avdata_GetServiceRef(), ClientCloseSessionHandler, NULL );
 
@@ -3439,8 +3463,4 @@ void avData_Init
     // Create safe reference map for session request references. The size of the map should be based
     // on the expected number of simultaneous requests for session. 5 of them seems reasonable.
     AvSessionRequestRefMap = le_ref_CreateMap("AVSessionRequestRef", 5);
-
-    // Restore asset data
-    RestoreData();
-    IsRestored = true;
 }

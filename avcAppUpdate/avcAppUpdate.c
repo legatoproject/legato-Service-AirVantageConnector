@@ -815,6 +815,22 @@ static void MarkInstallComplete
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Delete the setting entry from config tree
+ */
+//--------------------------------------------------------------------------------------------------
+static void DeleteAssetDataSetting
+(
+    const char* appNamePtr
+)
+{
+    // Delete setting entry from configTree
+    le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_ASSET_SETTING_PATH);
+    le_cfg_DeleteNode(iterRef, appNamePtr);
+    le_cfg_CommitTxn(iterRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  *  Notification handler that's called when an application is installed.
  */
 //--------------------------------------------------------------------------------------------------
@@ -992,6 +1008,8 @@ static void AppUninstallHandler
 
     // Don't Delete SW update workspace because it will remove the pending notification as well.
     // Delete workspace when the object9 update state/result are read by server.
+    // Delete asset data setting from config tree
+    DeleteAssetDataSetting(appNamePtr);
 
     // Notify lwm2mcore that an app is uninstalled
     NotifyObj9List();
