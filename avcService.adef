@@ -37,7 +37,7 @@ processes:
     #if ${LEGATO_SERVICES_WDOG_DISABLE} = 1
         watchdogTimeout: never
     #else
-        maxWatchdogTimeout: 120000
+        maxWatchdogTimeout: 300000
     #endif
 
     // Maximum size of the download file (50 MBytes)
