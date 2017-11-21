@@ -263,7 +263,7 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
     size_t len                      ///< [IN] Length of input buffer
 )
 {
-    LE_DEBUG("URI: len %zd", len);
+    LE_DEBUG("URI: len %zu", len);
 
     if (0 == len)
     {

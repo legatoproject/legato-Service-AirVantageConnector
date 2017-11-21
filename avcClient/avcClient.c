@@ -800,10 +800,10 @@ le_result_t avcClient_Connect
 
         // attempt to start a retry timer.
 
-        // if index is -1, then get the retry timers config. The implication is that while a retry
-        // timer is running, changes to retry timers aren't applied. They are applied when retry
-        // timers are being reset.
-        if (-1 == RetryTimersIndex)
+        // if index is less than 0, then get the retry timers config. The implication is that while
+        // a retry timer is running, changes to retry timers aren't applied. They are applied when
+        // retry timers are being reset.
+        if (0 > RetryTimersIndex)
         {
             size_t numTimers = NUM_ARRAY_MEMBERS(RetryTimers);
 

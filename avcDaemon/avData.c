@@ -1099,7 +1099,7 @@ static le_result_t EncodeAssetData
 
             if (strValLen > LE_AVDATA_STRING_VALUE_LEN)
             {
-                LE_ERROR("String len too big (%zd). %d chars expected.",
+                LE_ERROR("String len too big (%zu). %d chars expected.",
                          strValLen, LE_AVDATA_STRING_VALUE_LEN);
                 return LE_FAULT;
             }
@@ -1142,7 +1142,7 @@ static le_result_t CheckCborStringLen
     // Need to reserve one byte for the null terminating byte.
     if (incomingStrSize > (strSize-1))
     {
-        LE_ERROR("Encoded string (%zd bytes) too big. Max %zd bytes expected.",
+        LE_ERROR("Encoded string (%zu bytes) too big. Max %zu bytes expected.",
                  incomingStrSize, (strSize-1));
         return LE_FAULT;
     }
@@ -1358,6 +1358,8 @@ static le_result_t EncodeMultiData
                     (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange,
                                               level+1, isClient, isNameSpaced)))
                 {
+                    free(currStrCopy);
+                    free(savedToken);
                     return LE_FAULT;
                 }
             }
@@ -1366,12 +1368,22 @@ static le_result_t EncodeMultiData
             if (NULL == currToken)
             {
                 LE_ERROR("currToken is NULL");
+                free(currStrCopy);
+                if (0 != strcmp(savedToken, ""))
+                {
+                    free(savedToken);
+                }
                 return LE_FAULT;
             }
 
             // Value name.
             if (CborNoError != cbor_encode_text_stringz(&mapNode, currToken))
             {
+                free(currStrCopy);
+                if (0 != strcmp(savedToken, ""))
+                {
+                    free(savedToken);
+                }
                 return LE_FAULT;
             }
 
@@ -1385,11 +1397,21 @@ static le_result_t EncodeMultiData
                 LE_ERROR("Fail to get asset data at [%s]. Result [%s]",
                          list[i], LE_RESULT_TXT(getValresult));
 
+                free(currStrCopy);
+                if (0 != strcmp(savedToken, ""))
+                {
+                    free(savedToken);
+                }
                 return LE_FAULT;
             }
 
             if (LE_OK != EncodeAssetData(type, assetValue, &mapNode))
             {
+                free(currStrCopy);
+                if (0 != strcmp(savedToken, ""))
+                {
+                    free(savedToken);
+                }
                 return LE_FAULT;
             }
 
@@ -1412,6 +1434,8 @@ static le_result_t EncodeMultiData
                     (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange,
                                               level+1, isClient, isNameSpaced)))
                 {
+                    free(currStrCopy);
+                    free(savedToken);
                     return LE_FAULT;
                 }
             }
@@ -1450,15 +1474,27 @@ static le_result_t EncodeMultiData
             (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange,
                                       level+1, isClient, isNameSpaced)))
         {
+            if (0 != strcmp(savedToken, ""))
+            {
+                free(savedToken);
+            }
             return LE_FAULT;
         }
     }
 
     if (CborNoError != cbor_encoder_close_container(parentCborEncoder, &mapNode))
     {
+        if (0 != strcmp(savedToken, ""))
+        {
+            free(savedToken);
+        }
         return LE_FAULT;
     }
 
+    if (0 != strcmp(savedToken, ""))
+    {
+        free(savedToken);
+    }
     return LE_OK;
 }
 
@@ -1523,7 +1559,7 @@ static le_result_t DecodeMultiData
 
             if (maxPathBytes <= (pathLen + endingPathSegLen + 1))  // +1 for "/"
             {
-                LE_CRIT("Path size too big. Max allowed: %zd, Actual: %zd",
+                LE_CRIT("Path size too big. Max allowed: %zu, Actual: %zu",
                         maxPathBytes - 1,
                         (pathLen + endingPathSegLen + 1));
                 return LE_FAULT;
@@ -1547,7 +1583,7 @@ static le_result_t DecodeMultiData
 
                 if (strlen(path) < (endingPathSegLen + 1))
                 {
-                    LE_ERROR("Path length (%zd) can't be smaller than its segment length (%zd)",
+                    LE_ERROR("Path length (%zu) can't be smaller than its segment length (%zu)",
                              strlen(path),
                              endingPathSegLen + 1);
                     return LE_FAULT;
@@ -2632,26 +2668,33 @@ le_result_t le_avdata_GetIntArg
 )
 {
     Argument_t* argPtr = GetArg(argumentListRef, argName);
-
-    if (argPtr != NULL)
-    {
-        if (argPtr->argValType == LE_AVDATA_DATA_TYPE_INT)
-        {
-            *intArgPtr = argPtr->argValue.intValue;
-            return LE_OK;
-        }
-        else
-        {
-            LE_ERROR("Found argument named %s, but type is %s instead of %s", argName,
-                     GetDataTypeStr(argPtr->argValType), GetDataTypeStr(LE_AVDATA_DATA_TYPE_INT));
-            return LE_NOT_FOUND;
-        }
-    }
-    else
+    if (NULL == argPtr)
     {
         LE_ERROR("Cannot find argument named %s", argName);
         return LE_NOT_FOUND;
     }
+
+    if (NULL == argName)
+    {
+        LE_ERROR("Argument name is NULL!");
+        return LE_NOT_FOUND;
+    }
+
+    if (NULL == intArgPtr)
+    {
+        LE_ERROR("intArgPtr is NULL!");
+        return LE_NOT_FOUND;
+    }
+
+    if (argPtr->argValType == LE_AVDATA_DATA_TYPE_INT)
+    {
+        *intArgPtr = argPtr->argValue.intValue;
+        return LE_OK;
+    }
+
+    LE_ERROR("Found argument named %s, but type is %s instead of %s", argName,
+             GetDataTypeStr(argPtr->argValType), GetDataTypeStr(LE_AVDATA_DATA_TYPE_INT));
+    return LE_NOT_FOUND;
 }
 
 

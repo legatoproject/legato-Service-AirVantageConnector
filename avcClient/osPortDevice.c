@@ -349,7 +349,7 @@ static size_t GetRfsVersion
         {
             fclose(fpPtr);
         }
-        LE_INFO("RfsVersion %s, len %zd", versionBufferPtr, returnedLen);
+        LE_INFO("RfsVersion %s, len %zu", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
@@ -488,7 +488,7 @@ static size_t GetCustomerPriVersion
         {
             returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
-        LE_INFO("PriVersion %s, len %zd", versionBufferPtr, returnedLen);
+        LE_INFO("PriVersion %s, len %zu", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }

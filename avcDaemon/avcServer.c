@@ -3235,6 +3235,18 @@ le_result_t le_avc_GetRetryTimers
     AvcConfigData_t config;
     le_result_t result;
 
+    if (NULL == timerValuePtr)
+    {
+        LE_ERROR("Retry timer array pointer is NULL!");
+        return LE_FAULT;
+    }
+
+    if (NULL == numTimers)
+    {
+        LE_ERROR("numTimers pointer in NULL!");
+        return LE_FAULT;
+    }
+
     if (*numTimers < LE_AVC_NUM_RETRY_TIMERS)
     {
         LE_ERROR("Supplied retry timer array too small (%zd). Expected %d.",
