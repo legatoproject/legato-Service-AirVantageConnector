@@ -483,15 +483,21 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdateState
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
-            if (LE_OK == packageDownloader_GetFwUpdateState(
-                                                (lwm2mcore_FwUpdateState_t*)updateStatePtr))
             {
-                sid = LWM2MCORE_ERR_COMPLETED_OK;
-                LE_DEBUG("updateState : %d", *updateStatePtr);
-            }
-            else
-            {
-                sid = LWM2MCORE_ERR_GENERAL_ERROR;
+                lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
+
+                // Don't pass updateStatePtr by casting to pointer to enum as it may result wrong
+                // memory alignment and eventually stack corruption.
+                if (LE_OK == packageDownloader_GetFwUpdateState(&fwUpdateState))
+                {
+                    sid = LWM2MCORE_ERR_COMPLETED_OK;
+                    *updateStatePtr = (uint8_t)fwUpdateState;
+                    LE_DEBUG("updateState : %d", *updateStatePtr);
+                }
+                else
+                {
+                    sid = LWM2MCORE_ERR_GENERAL_ERROR;
+                }
             }
             break;
 
@@ -543,20 +549,28 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdateResult
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
-            if (LE_OK == packageDownloader_GetFwUpdateResult(
-                                                    (lwm2mcore_FwUpdateResult_t*)updateResultPtr))
             {
-                sid = LWM2MCORE_ERR_COMPLETED_OK;
-                // After device reboot on firmware update, firmware update notification flag is set
-                // to true to notify control app that a connection to server is required to inform
-                // the firmware update result. Now set this flag to false as request from server to
-                // read firmware update result succeeds.
-                packageDownloader_SetFwUpdateNotification(false, LE_AVC_NO_UPDATE, LE_AVC_ERR_NONE);
-                LE_DEBUG("updateResult : %d", *updateResultPtr);
-            }
-            else
-            {
-                sid = LWM2MCORE_ERR_GENERAL_ERROR;
+                lwm2mcore_FwUpdateResult_t fwUpdateResult =
+                                                        LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
+                // Don't pass updateResultPtr by casting to pointer to enum as it may result wrong
+                // memory alignment and eventually stack corruption.
+                if (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
+                {
+                    sid = LWM2MCORE_ERR_COMPLETED_OK;
+                    // After device reboot on firmware update, firmware update notification flag is
+                    // set to true to notify control app that a connection to server is required to
+                    // inform the firmware update result. Now set this flag to false as request
+                    // from server to read firmware update result succeeds.
+                    packageDownloader_SetFwUpdateNotification(false,
+                                                              LE_AVC_NO_UPDATE,
+                                                              LE_AVC_ERR_NONE);
+                    *updateResultPtr = (uint8_t)fwUpdateResult;
+                    LE_DEBUG("updateResult : %d", *updateResultPtr);
+                }
+                else
+                {
+                    sid = LWM2MCORE_ERR_GENERAL_ERROR;
+                }
             }
             break;
 
