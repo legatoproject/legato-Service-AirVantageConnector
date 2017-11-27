@@ -94,11 +94,12 @@ le_result_t GetExecPath(char* buffer)
     char* pathEndPtr = NULL;
     int paddingLen;
 
-    length = readlink("/proc/self/exe", buffer, PATH_MAX_LENGTH);
+    length = readlink("/proc/self/exe", buffer, PATH_MAX_LENGTH - 1);
     if (length <= 0)
     {
         return LE_FAULT;
     }
+    buffer[length] = '\0';
 
     // Delete the binary name from the path
     pathEndPtr = strrchr(buffer, '/');
@@ -153,7 +154,14 @@ static le_result_t CheckDownloadedFile
 
     // The downloaded file is a shrink from the original file. So, we apply an offset
     // before starting comparison
-    lseek(sourceFile.fd, CWE_IMAGE_START_OFFSET, SEEK_SET);
+    if (lseek(sourceFile.fd, CWE_IMAGE_START_OFFSET, SEEK_SET) == -1)
+    {
+        LE_ERROR("Seek file to offset %zd failed.", CWE_IMAGE_START_OFFSET);
+        close(sourceFile.fd);
+        close(dwnldedFile.fd);
+        return LE_FAULT;
+    }
+
     lseek(dwnldedFile.fd, 0, SEEK_SET);
 
     do

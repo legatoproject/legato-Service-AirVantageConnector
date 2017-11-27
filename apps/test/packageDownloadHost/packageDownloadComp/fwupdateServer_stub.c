@@ -93,7 +93,19 @@ le_result_t le_fwupdate_Download
 
     // Make the file descriptor blocking
     int flags = fcntl(fd, F_GETFL);
-    fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
+    if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) != 0)
+    {
+         LE_ERROR("fcntl failed: %m");
+
+         result = le_fs_Close(fileRef);
+         if (LE_OK != result)
+         {
+             LE_ERROR("failed to close %s: %s", FWUPDATE_STORE_FILE, LE_RESULT_TXT(result));
+             return result;
+         }
+
+         return LE_FAULT;
+    }
 
     while (true)
     {

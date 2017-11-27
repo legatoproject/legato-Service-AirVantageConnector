@@ -118,7 +118,7 @@ CURL *curl_easy_init
 
     // Zero-initialize the strucure and set a dummy handler
     memset(CurlTestHandler, 0, sizeof(CurlTestHandler_t));
-    CurlTestHandler->handle = (CURL* )random();
+    CurlTestHandler->handle = (CURL* )le_rand_GetNumBetween(0, 10000008);
 
     return CurlTestHandler->handle;
 }
@@ -152,8 +152,9 @@ CURLcode curl_easy_setopt
         {
             // Get the size of the URL
             int urlSize = strlen((const char*)paramPtr);
-            if ((0 == urlSize) || (LWM2MCORE_PACKAGE_URI_MAX_BYTES < urlSize))
+            if ((0 == urlSize) || (LWM2MCORE_PACKAGE_URI_MAX_BYTES <= urlSize))
             {
+                va_end(arg);
                 return CURLE_URL_MALFORMAT;
             }
 
@@ -165,6 +166,7 @@ CURLcode curl_easy_setopt
             struct stat buffer;
             if (stat(CurlTestHandler->url, &buffer) != 0)
             {
+                va_end(arg);
                 return CURLE_READ_ERROR;
             }
         }
@@ -185,6 +187,7 @@ CURLcode curl_easy_setopt
         default:
             break;
     }
+    va_end(arg);
 
     return CURLE_OK;
 }
@@ -219,7 +222,12 @@ CURLcode curl_easy_perform
 
         // Since this function handles pause and resume, we adjust the read pointer in order
         // to not re-send previous data
-        lseek(fd, CurlTestHandler->dataOffset, SEEK_SET);
+        if (lseek(fd, CurlTestHandler->dataOffset, SEEK_SET) == -1)
+        {
+            LE_ERROR("Seek file to offset %zd failed.", CurlTestHandler->dataOffset);
+            close(fd);
+            return LE_FAULT;
+        }
         CurlTestHandler->dataOffset = 0;
 
         // Read the file by shrunks and send it to the callback
