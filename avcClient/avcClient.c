@@ -1,7 +1,7 @@
 /**
  * @file avcClient.c
  *
- * client of the LWM2M stack
+ * Client of the LwM2M stack.
  *
  * Copyright (C) Sierra Wireless Inc.
  *
@@ -20,50 +20,73 @@
 #include "avcServer.h"
 
 //--------------------------------------------------------------------------------------------------
-/**
- * Length of date/time buffer, including NULL-terminator
- */
+// Definitions
 //--------------------------------------------------------------------------------------------------
-#define DATE_TIME_LENGTH            200
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Year used to determine if date is correctly set
+ * Length of date/time buffer, including NULL-terminator.
  */
 //--------------------------------------------------------------------------------------------------
-#define MINIMAL_YEAR                2017
+#define DATE_TIME_LENGTH  200
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Define value for the base used in strtoul
+ * Year used to determine if date is correctly set.
  */
 //--------------------------------------------------------------------------------------------------
-#define BASE10                      10
+#define MINIMAL_YEAR  2017
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Static instance reference for LWM2MCore
+ * Define value for the base used in strtoul.
+ */
+//--------------------------------------------------------------------------------------------------
+#define BASE10  10
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Default activity timer value.
+ */
+//--------------------------------------------------------------------------------------------------
+#define DEFAULT_ACTIVITY_TIMER  20
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Size of activity timer events memory pool.
+ */
+//--------------------------------------------------------------------------------------------------
+#define ACTIVITY_TIMER_EVENTS_POOL_SIZE  5
+
+
+//--------------------------------------------------------------------------------------------------
+// Local variables.
+//--------------------------------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Static instance reference for LWM2MCore.
  */
 //--------------------------------------------------------------------------------------------------
 static lwm2mcore_Ref_t Lwm2mInstanceRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Static data connection state for agent
+ * Static data connection state for agent.
  */
 //--------------------------------------------------------------------------------------------------
 static bool DataConnected = false;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Static data reference
+ * Static data reference.
  */
 //--------------------------------------------------------------------------------------------------
 static le_data_RequestObjRef_t DataRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Static data connection handler
+ * Static data connection handler.
  */
 //--------------------------------------------------------------------------------------------------
 static le_data_ConnectionStateHandlerRef_t DataHandler;
@@ -111,33 +134,24 @@ static le_timer_Ref_t ActivityTimerRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Pool used to pass activity timer events to the main thread
+ * Pool used to pass activity timer events to the main thread.
  */
 //--------------------------------------------------------------------------------------------------
 static le_mem_PoolRef_t ActivityTimerEventsPool;
 
+
 //--------------------------------------------------------------------------------------------------
-/**
- * Default activity timer value
- */
+// Local functions
 //--------------------------------------------------------------------------------------------------
-#define DEFAULT_ACTIVITY_TIMER              20
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Size of activity timer events memory pool
- */
-//--------------------------------------------------------------------------------------------------
-#define ACTIVITY_TIMER_EVENTS_POOL_SIZE     5
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Convert an OMA FUMO (Firmware Update Management Object) error to an AVC error code
+ * Convert an OMA FUMO (Firmware Update Management Object) error to an AVC error code.
  */
 //--------------------------------------------------------------------------------------------------
 static le_avc_ErrorCode_t ConvertFumoErrorCode
 (
-    uint32_t fumoError
+    uint32_t fumoError   ///< OMA FUMO error code.
 )
 {
     switch (fumoError)
@@ -181,20 +195,20 @@ static void CheckDateTimeValidity
 
     deviceYear = (uint32_t) strtoul(dateTimeBuf, NULL, BASE10);
 
-    // The date is considered as incorrect if the year is before 2017
+    // The date is considered as incorrect if the year is before 2017.
     if (deviceYear < MINIMAL_YEAR)
     {
         uint16_t year, month, day, hour, minute, second, millisecond;
 
-        // Retrieve the date and time from a server
-        if (   (LE_OK != le_data_GetDate(&year, &month, &day))
+        // Retrieve the date and time from a server.
+        if ((LE_OK != le_data_GetDate(&year, &month, &day))
             || (LE_OK != le_data_GetTime(&hour, &minute, &second, &millisecond)))
         {
             LE_ERROR("Unable to retrieve date or time from server");
             return;
         }
 
-        // Set the date and time
+        // Set the date and time.
         memset(dateTimeBuf, 0, sizeof(dateTimeBuf));
         snprintf(dateTimeBuf, sizeof(dateTimeBuf), "%04d-%02d-%02d %02d:%02d:%02d",
                  year, month, day, hour, minute, second);
@@ -209,53 +223,49 @@ static void CheckDateTimeValidity
 
 //--------------------------------------------------------------------------------------------------
 /**
- *  Call back registered in LWM2M client for bearer related events
+ *  Callback registered in LwM2M client for bearer related events.
  */
 //--------------------------------------------------------------------------------------------------
 static void BearerEventCb
 (
-    bool connected,     ///< [IN] Indicates if the bearer is connected or disconnected
-    void* contextPtr    ///< [IN] User data
+    bool connected,     ///< [IN] Indicates if the bearer is connected or disconnected.
+    void* contextPtr    ///< [IN] User data.
 )
 {
-    LE_INFO("connected %d", connected);
+    LE_INFO("Connected %d", connected);
     if (connected)
     {
-        char endpointPtr[LWM2MCORE_ENDPOINT_LEN];
-        bool result = false;
+        char endpointPtr[LWM2MCORE_ENDPOINT_LEN] = {0};
 
-        /* Register objects to LWM2M and set the device endpoint:
-         * - endpoint shall be unique for each client: IMEI/ESN/MEID
-         * - the number of objects we will be passing through and the objects array
-         */
+        // Register objects to LwM2M and set the device endpoint:
+        // - Endpoint shall be unique for each client: IMEI/ESN/MEID.
+        // - The number of objects we will be passing through and the objects array.
 
-        /* Get the device endpoint: IMEI */
-        memset(endpointPtr, 0, LWM2MCORE_ENDPOINT_LEN);
+        // Get the device endpoint: IMEI.
         if (LE_OK != le_info_GetImei((char*)endpointPtr, (uint32_t) LWM2MCORE_ENDPOINT_LEN))
         {
             LE_ERROR("Error to retrieve the device IMEI");
             return;
         }
 
-        // Register to the LWM2M agent
+        // Register to the LwM2M agent.
         if (!lwm2mcore_ObjectRegister(Lwm2mInstanceRef, endpointPtr, NULL, NULL))
         {
-            LE_ERROR("ERROR in LWM2M obj reg");
+            LE_ERROR("ERROR in LwM2M obj reg");
             return;
         }
 
-        result = lwm2mcore_Connect(Lwm2mInstanceRef);
-        if (result != true)
+        if (!lwm2mcore_Connect(Lwm2mInstanceRef))
         {
-            LE_ERROR("connect error");
+            LE_ERROR("Connect error");
         }
     }
     else
     {
         if (NULL != Lwm2mInstanceRef)
         {
-            // If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active
-            if (true == lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
+            // If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active.
+            if (lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
             {
                 avcClient_Disconnect(false);
             }
@@ -265,14 +275,14 @@ static void BearerEventCb
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Callback for the connection state
+ * Callback for the connection state.
  */
 //--------------------------------------------------------------------------------------------------
 static void ConnectionStateHandler
 (
-    const char* intfNamePtr,    ///< [IN] Interface name
-    bool connected,             ///< [IN] connection state (true = connected, else false)
-    void* contextPtr            ///< [IN] User data
+    const char* intfNamePtr,    ///< [IN] Interface name.
+    bool connected,             ///< [IN] connection state (true = connected, else false).
+    void* contextPtr            ///< [IN] User data.
 )
 {
     if (connected)
@@ -280,10 +290,10 @@ static void ConnectionStateHandler
         LE_DEBUG("Connected through interface '%s'", intfNamePtr);
         DataConnected = true;
 
-        /* Check if date/time is valid when connected */
+        // Check if date/time is valid when connected.
         CheckDateTimeValidity();
 
-        /* Call the callback */
+        // Call the callback.
         BearerEventCb(connected, contextPtr);
     }
     else
@@ -291,7 +301,7 @@ static void ConnectionStateHandler
         LE_WARN("Disconnected from data connection service, current state %d", DataConnected);
         if (DataConnected)
         {
-            /* Call the callback */
+            // Call the callback.
             BearerEventCb(connected, contextPtr);
             DataConnected = false;
         }
@@ -300,17 +310,17 @@ static void ConnectionStateHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Callback for the LWM2M events linked to package download and update
+ * Callback for the LwM2M events linked to package download and update.
  *
  * @return
- *      - 0 on success
+ *      - 0 on success.
  *      - negative value on failure.
 
  */
 //--------------------------------------------------------------------------------------------------
 static int PackageEventHandler
 (
-    lwm2mcore_Status_t status              ///< [IN] event status
+    lwm2mcore_Status_t status              ///< [IN] event status.
 )
 {
     int result = 0;
@@ -469,7 +479,7 @@ static int PackageEventHandler
         default:
             if (LWM2MCORE_EVENT_LAST <= status.event)
             {
-                LE_ERROR("unsupported event %d", status.event);
+                LE_ERROR("Unsupported event %d", status.event);
                 result = -1;
             }
             break;
@@ -479,17 +489,17 @@ static int PackageEventHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Callback for the LWM2M events
+ * Callback for the LwM2M events.
  *
  * @return
- *      - 0 on success
+ *      - 0 on success.
  *      - negative value on failure.
 
  */
 //--------------------------------------------------------------------------------------------------
 static int EventHandler
 (
-    lwm2mcore_Status_t status              ///< [IN] event status
+    lwm2mcore_Status_t status              ///< [IN] event status.
 )
 {
     int result = 0;
@@ -502,9 +512,9 @@ static int EventHandler
 
         case LWM2MCORE_EVENT_SESSION_FAILED:
             LE_ERROR("Session failure");
-            // If the device is connected to the bootstrap server, disconnect from server
+            // If the device is connected to the bootstrap server, disconnect from server.
             // If the device is connected to the DM server, a bootstrap connection will be
-            // automatically initiated (session is not stopped)
+            // automatically initiated (session is not stopped).
             if (LE_AVC_BOOTSTRAP_SESSION == le_avc_GetSessionType())
             {
                 avcServer_UpdateStatus(LE_AVC_AUTH_FAILED, LE_AVC_UNKNOWN_UPDATE,
@@ -520,7 +530,6 @@ static int EventHandler
                                    -1, -1, LE_AVC_ERR_NONE);
 
             SessionStarted = false;
-
             break;
 
         case LWM2MCORE_EVENT_LWM2M_SESSION_TYPE_START:
@@ -581,7 +590,7 @@ static int EventHandler
         default:
             if (LWM2MCORE_EVENT_LAST <= status.event)
             {
-                LE_ERROR("unsupported event %d", status.event);
+                LE_ERROR("Unsupported event %d", status.event);
                 result = -1;
             }
             break;
@@ -608,7 +617,7 @@ static void ResetRetryTimers
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Start the bearer
+ * Start the bearer.
  */
 //--------------------------------------------------------------------------------------------------
 static void StartBearer
@@ -616,24 +625,22 @@ static void StartBearer
     void
 )
 {
-    // Attempt to connect
+    // Attempt to connect.
     Lwm2mInstanceRef = lwm2mcore_Init(EventHandler);
 
-    /* Initialize the bearer */
-    /* Open a data connection */
+    // Initialize the bearer and open a data connection.
     le_data_ConnectService();
 
     DataHandler = le_data_AddConnectionStateHandler(ConnectionStateHandler, NULL);
 
-    /* Request data connection */
+    // Request data connection.
     DataRef = le_data_Request();
     LE_ASSERT(NULL != DataRef);
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
- * Stop the bearer - undo what StartBearer does
+ * Stop the bearer - undo what StartBearer does.
  */
 //--------------------------------------------------------------------------------------------------
 static void StopBearer
@@ -645,48 +652,112 @@ static void StopBearer
     {
         if (DataRef)
         {
-            /* Close the data connection */
+            // Close the data connection.
             le_data_Release(DataRef);
-            /* Remove the data handler */
+
+            // Remove the data handler.
             le_data_RemoveConnectionStateHandler(DataHandler);
             DataRef = NULL;
         }
-        /* The data connection is closed */
+
+        // The data connection is closed.
         lwm2mcore_Free(Lwm2mInstanceRef);
         Lwm2mInstanceRef = NULL;
     }
 }
+
 //--------------------------------------------------------------------------------------------------
 /**
- * Connection is retried according to the configured retry timers.
- *
- * @return none
+ * Handler function for ActivityTimerRef expiry.
  */
 //--------------------------------------------------------------------------------------------------
-void avcClient_RetryTimer
+static void ActivityTimerHandler
 (
-    le_timer_Ref_t timerRef
+    le_timer_Ref_t timerRef    ///< This timer has expired.
 )
 {
-    le_result_t res = avcClient_Connect();
+    LE_DEBUG("Activity timer expired; reporting LE_AVC_NO_UPDATE");
+    avcServer_UpdateStatus(LE_AVC_NO_UPDATE, LE_AVC_UNKNOWN_UPDATE, -1, -1, LE_AVC_ERR_NONE);
+}
 
-    if (LE_OK == res)
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function queued onto Legato Thread to toggle the activity timer.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ToggleActivityTimerHandler
+(
+    void* param1Ptr,    ///< [IN] User data that holds activity timer flag.
+    void* param2Ptr     ///< [IN] Unused user data.
+)
+{
+    LE_DEBUG("Toggling Activity timer");
+    bool toggleFlag = *((bool*)param1Ptr);
+
+    if (!toggleFlag)
     {
-        LE_ERROR("Cannot able to establish Connection to Server");
+        LE_DEBUG("Trying to stop activity timer");
+        if (le_timer_IsRunning(ActivityTimerRef))
+        {
+            LE_DEBUG("Stopping Activity timer");
+            le_timer_Stop(ActivityTimerRef);
+        }
+    }
+    else
+    {
+        LE_DEBUG("Starting activity timer");
+        le_timer_Start(ActivityTimerRef);
+    }
+
+    le_mem_Release(param1Ptr);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Handler to terminate a connection to bootstrap on failure.
+ */
+//--------------------------------------------------------------------------------------------------
+static void BsFailureHandler
+(
+    void* reportPtr    ///< [IN] Pointer to the event report payload
+)
+{
+    avcClient_Disconnect(true);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Timer handler to periodically perform a connection attempt.
+ */
+//--------------------------------------------------------------------------------------------------
+static void avcClient_RetryTimer
+(
+    le_timer_Ref_t timerRef    ///< [IN] Expired timer reference
+)
+{
+    if (LE_OK != avcClient_Connect())
+    {
+        LE_ERROR("Unable to request a connection to the server");
     }
 }
 
+//--------------------------------------------------------------------------------------------------
+// Public functions
+//--------------------------------------------------------------------------------------------------
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Connect to the server. If this function is called while one of the retry timers is running,
- * retry isn't performed and LE_BUSY is returned.
+ * Starts a periodic connection attempt to the AirVantage server.
+ *
+ * @note - After a user-initiated call, this function registers itself inside a timer expiry handler
+ *         to perform retries. On connection success, this function deinitializes the timer.
+ *       - If this function is called when another connection is in the middle of being initiated
+ *         then LE_BUSY will be returned.
  *
  * @return
  *      - LE_OK if connection request has been sent.
  *      - LE_DUPLICATE if already connected.
  *      - LE_BUSY if currently retrying.
- *      - LE_NOT_PERMITTED if device is in airplane mode
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcClient_Connect
@@ -697,13 +768,13 @@ le_result_t avcClient_Connect
     le_onoff_t radioStatus;
     if ((le_mrc_GetRadioPower(&radioStatus) == LE_OK) && radioStatus == LE_OFF)
     {
-        LE_INFO("Device in airplane mode.");
+        LE_INFO("Device in airplane mode");
         return LE_NOT_PERMITTED;
     }
 
     if (SessionStarted)
     {
-        LE_INFO("Session already started.");
+        LE_INFO("Session already started");
 
         // No need to start a retry timer. Perform reset/cleanup.
         ResetRetryTimers();
@@ -739,7 +810,7 @@ le_result_t avcClient_Connect
             if (LE_OK != le_avc_GetRetryTimers(RetryTimers, &numTimers))
             {
                 LE_WARN("Failed to retrieve retry timers config. Failed session start is not \
-                         retried.");
+                         retried");
 
                 return LE_OK;
             }
@@ -753,11 +824,11 @@ le_result_t avcClient_Connect
             RetryTimersIndex++;
         }
 
-        // Get the next valid retry timer
+        // Get the next valid retry timer.
 
-        // see which timer we are at by looking at RetryTimersIndex
-        // if the timer is 0, get the next one. (0 means disabled / not used)
-        // if we run out of timers, do nothing.  Perform reset/cleanup
+        // See which timer we are at by looking at RetryTimersIndex
+        // If the timer is 0, get the next one. (0 means disabled / not used)
+        // If we run out of timers, do nothing.  Perform reset/cleanup.
         while((RetryTimersIndex < LE_AVC_NUM_RETRY_TIMERS) &&
               (0 == RetryTimers[RetryTimersIndex]))
         {
@@ -778,43 +849,42 @@ le_result_t avcClient_Connect
 
             le_clk_Time_t interval = {RetryTimers[RetryTimersIndex] * 60, 0};
 
-            LE_ASSERT(LE_OK == le_timer_SetInterval(RetryTimerRef, interval));
-            LE_ASSERT(LE_OK == le_timer_SetHandler(RetryTimerRef,avcClient_RetryTimer));
-            LE_ASSERT(LE_OK == le_timer_Start(RetryTimerRef));
+            LE_ASSERT_OK(le_timer_SetInterval(RetryTimerRef, interval));
+            LE_ASSERT_OK(le_timer_SetHandler(RetryTimerRef,avcClient_RetryTimer));
+            LE_ASSERT_OK(le_timer_Start(RetryTimerRef));
         }
-
         return LE_OK;
     }
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * LWM2M client entry point to close a connection
+ * LwM2M client entry point to close a connection.
  *
  * @return
- *      - LE_OK in case of success
- *      - LE_FAULT in case of failure
+ *      - LE_OK in case of success.
+ *      - LE_FAULT in case of failure.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcClient_Disconnect
 (
-    bool resetRetry  ///< [IN] if true, reset the retry timers
+    bool resetRetry  ///< [IN] if true, reset the retry timers.
 )
 {
     LE_DEBUG("Disconnect");
 
     le_result_t result = LE_OK;
 
-    /* If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active.
-       In that case, attempt to disconnect. */
-    if (true == lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
+    // If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active.
+    // In that case, attempt to disconnect.
+    if (lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
     {
-        result = (true == lwm2mcore_Disconnect(Lwm2mInstanceRef)) ? LE_OK : LE_FAULT;
+        result = (lwm2mcore_Disconnect(Lwm2mInstanceRef)) ? LE_OK : LE_FAULT;
     }
 
     StopBearer();
 
-    if (true == resetRetry)
+    if (resetRetry)
     {
         ResetRetryTimers();
     }
@@ -824,12 +894,12 @@ le_result_t avcClient_Disconnect
 
 //--------------------------------------------------------------------------------------------------
 /**
- * LWM2M client entry point to send a registration update
+ * LwM2M client entry point to send a registration update.
  *
  * @return
- *      - LE_OK in case of success
+ *      - LE_OK in case of success.
  *      - LE_UNAVAILABLE when session closed.
- *      - LE_FAULT in case of failure
+ *      - LE_FAULT in case of failure.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcClient_Update
@@ -839,13 +909,13 @@ le_result_t avcClient_Update
 {
     LE_DEBUG("Registration update");
 
-    if (Lwm2mInstanceRef == NULL)
+    if (NULL == Lwm2mInstanceRef)
     {
         LE_DEBUG("Session closed");
         return LE_UNAVAILABLE;
     }
 
-    if (true == lwm2mcore_Update(Lwm2mInstanceRef))
+    if (lwm2mcore_Update(Lwm2mInstanceRef))
     {
         return LE_OK;
     }
@@ -857,20 +927,20 @@ le_result_t avcClient_Update
 
 //--------------------------------------------------------------------------------------------------
 /**
- * LWM2M client entry point to push data
+ * LwM2M client entry point to push data.
  *
  * @return
- *      - LE_OK in case of success
- *      - LE_BUSY if busy pushing data
- *      - LE_FAULT in case of failure
+ *      - LE_OK in case of success.
+ *      - LE_BUSY if busy pushing data.
+ *      - LE_FAULT in case of failure.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcClient_Push
 (
-    uint8_t* payload,
-    size_t payloadLength,
-    lwm2mcore_PushContent_t contentType,
-    uint16_t* midPtr
+    uint8_t* payload,                       ///< [IN] Payload to push.
+    size_t payloadLength,                   ///< [IN] Payload length.
+    lwm2mcore_PushContent_t contentType,    ///< [IN] Content type.
+    uint16_t* midPtr                        ///< [OUT] Message identifier.
 )
 {
     LE_DEBUG("Push data");
@@ -895,14 +965,13 @@ le_result_t avcClient_Push
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Send instances of object 9 and the Legato objects for all currently installed applications.
- *
+ * Notify LwM2M of supported object instance list for software and asset data.
  */
 //--------------------------------------------------------------------------------------------------
 void avcClient_SendList
 (
-    char* lwm2mObjListPtr,      ///< [IN] Object instances list
-    size_t objListLen           ///< [IN] List length
+    char* lwm2mObjListPtr,      ///< [IN] Object instances list.
+    size_t objListLen           ///< [IN] List length.
 )
 {
     lwm2mcore_UpdateSwList(Lwm2mInstanceRef, lwm2mObjListPtr, objListLen);
@@ -910,7 +979,7 @@ void avcClient_SendList
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Returns the instance reference of this client
+ * Returns the instance reference of this client.
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Ref_t avcClient_GetInstance
@@ -923,12 +992,12 @@ lwm2mcore_Ref_t avcClient_GetInstance
 
 //--------------------------------------------------------------------------------------------------
 /**
- * LWM2M client entry point to get session status
+ * LwM2M client entry point to get session status.
  *
  * @return
- *      - LE_AVC_DM_SESSION when the device is connected to the DM server
- *      - LE_AVC_BOOTSTRAP_SESSION when the device is connected to the BS server
- *      - LE_AVC_SESSION_INVALID in other cases
+ *      - LE_AVC_DM_SESSION when the device is connected to the DM server.
+ *      - LE_AVC_BOOTSTRAP_SESSION when the device is connected to the BS server.
+ *      - LE_AVC_SESSION_INVALID in other cases.
  */
 //--------------------------------------------------------------------------------------------------
 le_avc_SessionType_t avcClient_GetSessionType
@@ -947,72 +1016,15 @@ le_avc_SessionType_t avcClient_GetSessionType
 
 //--------------------------------------------------------------------------------------------------
 /**
- *  Handler to terminate a connection to bootstrap on failure
- */
-//--------------------------------------------------------------------------------------------------
-void BsFailureHandler
-(
-    void* reportPtr
-)
-{
-    avcClient_Disconnect(true);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Handler function for ActivityTimerRef expiry
- */
-//--------------------------------------------------------------------------------------------------
-static void ActivityTimerHandler
-(
-    le_timer_Ref_t timerRef    ///< This timer has expired
-)
-{
-    LE_DEBUG("Activity timer expired; reporting LE_AVC_NO_UPDATE");
-    avcServer_UpdateStatus(LE_AVC_NO_UPDATE, LE_AVC_UNKNOWN_UPDATE, -1, -1, LE_AVC_ERR_NONE);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Function queued onto LegatoThread to toggle the activity timer.
- */
-//--------------------------------------------------------------------------------------------------
-static void ToggleActivityTimerHandler
-(
-    void* param1Ptr,
-    void* param2Ptr
-)
-{
-    LE_DEBUG("Toggling Activity timer");
-    bool toggleFlag = *((bool*)param1Ptr);
-
-    if (!toggleFlag)
-    {
-        LE_DEBUG("Trying to stop activity timer.");
-        if (le_timer_IsRunning(ActivityTimerRef))
-        {
-            LE_DEBUG("Stopping Activity timer");
-            le_timer_Stop(ActivityTimerRef);
-        }
-    }
-    else
-    {
-        LE_DEBUG("Starting activity timer.");
-        le_timer_Start(ActivityTimerRef);
-    }
-
-    le_mem_Release(param1Ptr);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * This function sets up the activity timer. The timeout will default to 20 seconds if
- * user defined value doesn't exist or if the defined value is less than 0.
+ * This function sets up the activity timer.
+ *
+ * @note The timeout will default to DEFAULT_ACTIVITY_TIMER if user defined value is less or equal
+ * to 0.
  */
 //--------------------------------------------------------------------------------------------------
 void avcClient_SetActivityTimeout
 (
-    int timeout               ///< [IN] Timeout for activity timer
+    int timeout     ///< [IN] Timeout for activity timer.
 )
 {
     // After a session is started, if there has been no activity within the timer
@@ -1024,7 +1036,7 @@ void avcClient_SetActivityTimeout
         timerInterval.sec = timeout;
     }
 
-    LE_DEBUG("Activity timeout set to %d seconds.", (int)timerInterval.sec);
+    LE_DEBUG("Activity timeout set to %d seconds", (int)timerInterval.sec);
 
     ActivityTimerRef = le_timer_Create("Activity timer");
     le_timer_SetInterval(ActivityTimerRef, timerInterval);
@@ -1075,7 +1087,7 @@ void avcClient_StopActivityTimer
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Reset the retry timers by resetting the retrieved reset timer config, and stopping the current
+ * Reset the retry timers by resetting the retrieved reset timer config and stopping the current
  * retry timer.
  */
 //--------------------------------------------------------------------------------------------------
@@ -1089,7 +1101,9 @@ void avcClient_ResetRetryTimer
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Initialization function avcClient. Should be called only once.
+ * Initialize the AVC client sub-component.
+ *
+ * @note This function should be called during the initializaion phase of the AVC daemon.
  */
 //--------------------------------------------------------------------------------------------------
 void avcClient_Init
@@ -1097,12 +1111,17 @@ void avcClient_Init
    void
 )
 {
+    // Create event for bootstrap connection failure.
     BsFailureEventId = le_event_CreateId("BsFailure", 0);
     le_event_AddHandler("BsFailureHandler", BsFailureEventId, BsFailureHandler);
+
+    // Create retry timer for avcClient connection.
     RetryTimerRef = le_timer_Create("AvcRetryTimer");
+
+    // Store the calling thread reference.
     LegatoThread = le_thread_GetCurrent();
 
-    // Create pool to report activity timer events
+    // Create pool to report activity timer events.
     ActivityTimerEventsPool = le_mem_CreatePool("ActivityTimerEventsPool", sizeof(bool));
     le_mem_ExpandPool(ActivityTimerEventsPool, ACTIVITY_TIMER_EVENTS_POOL_SIZE);
 }
