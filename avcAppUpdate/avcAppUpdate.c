@@ -1722,7 +1722,7 @@ static le_result_t WriteBytesToFd
     // Check for errors.
     if (writeResult == -1)
     {
-        LE_ERROR("Failed to write bytes to fd (%m). Requested: %zd Bytes, Written: %zd Bytes",
+        LE_ERROR("Failed to write bytes to fd (%m). Requested: %zu Bytes, Written: %zd Bytes",
                   readCount,
                   bytesWritten);
         return LE_FAULT;
