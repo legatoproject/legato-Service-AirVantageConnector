@@ -60,8 +60,8 @@ static const char* CredentialLocations[LWM2MCORE_CREDENTIAL_MAX] = {
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Retrieve a credential
- * This API treatment needs to have a procedural treatment
+ * Retrieve a credential.
+ * This API treatment needs to have a procedural treatment.
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
@@ -72,12 +72,15 @@ static const char* CredentialLocations[LWM2MCORE_CREDENTIAL_MAX] = {
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetCredential
 (
-    lwm2mcore_Credentials_t credId,         ///< [IN] credential Id of credential to be retrieved
-    char* bufferPtr,                        ///< [INOUT] data buffer
-    size_t* lenPtr                          ///< [INOUT] length of input buffer and length of the
-                                            ///< returned data
+    lwm2mcore_Credentials_t credId,     ///< [IN] credential Id of credential to be retrieved
+    uint16_t                serverId,   ///< [IN] server Id
+    char*                   bufferPtr,  ///< [INOUT] data buffer
+    size_t*                 lenPtr      ///< [INOUT] length of input buffer and length of the
+                                        ///< returned data
 )
 {
+    (void)serverId;
+
     if ((bufferPtr == NULL) || (lenPtr == NULL) || (credId >= LWM2MCORE_CREDENTIAL_MAX))
     {
         return LWM2MCORE_ERR_INVALID_ARG;
@@ -116,11 +119,14 @@ lwm2mcore_Sid_t lwm2mcore_GetCredential
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_SetCredential
 (
-    lwm2mcore_Credentials_t credId,         ///< [IN] credential Id of credential to be set
-    char* bufferPtr,                        ///< [INOUT] data buffer
-    size_t len                              ///< [IN] length of input buffer
+    lwm2mcore_Credentials_t credId,     ///< [IN] credential Id of credential to be set
+    uint16_t                serverId,   ///< [IN] server Id
+    char*                   bufferPtr,  ///< [INOUT] data buffer
+    size_t                  len         ///< [IN] length of input buffer
 )
 {
+    (void)serverId;
+
     if ((bufferPtr == NULL) || (credId >= LWM2MCORE_CREDENTIAL_MAX))
     {
         return LWM2MCORE_ERR_INVALID_ARG;
@@ -161,17 +167,20 @@ lwm2mcore_Sid_t lwm2mcore_SetCredential
 //--------------------------------------------------------------------------------------------------
 bool lwm2mcore_CheckCredential
 (
-    lwm2mcore_Credentials_t credId      ///< [IN] Credential identifier
+    lwm2mcore_Credentials_t credId,     ///< [IN] Credential identifier
+    uint16_t                serverId    ///< [IN] server Id
 )
 {
-    char buffer[SECSTOREGLOBAL_MAX_NAME_BYTES] = {0};
+    char buffer[LWM2MCORE_PUBLICKEY_LEN] = {0};
     size_t bufferSz = sizeof(buffer);
     bool ret = false;
     const char* retTxt = "Not Present";
     lwm2mcore_Sid_t result;
 
-    result = lwm2mcore_GetCredential(credId, buffer, &bufferSz);
-    if ( (LWM2MCORE_ERR_COMPLETED_OK == result) && bufferSz)
+    (void)serverId;
+
+    result = lwm2mcore_GetCredential(credId, serverId, buffer, &bufferSz);
+    if ((LWM2MCORE_ERR_COMPLETED_OK == result) && bufferSz)
     {
         ret = true;
         retTxt = "Present";
@@ -192,9 +201,12 @@ bool lwm2mcore_CheckCredential
 //--------------------------------------------------------------------------------------------------
 bool lwm2mcore_DeleteCredential
 (
-    lwm2mcore_Credentials_t credId      ///< [IN] Credential identifier
+    lwm2mcore_Credentials_t credId,     ///< [IN] Credential identifier
+    uint16_t                serverId    ///< [IN] server Id
 )
 {
+    (void)serverId;
+
     if (credId >= LWM2MCORE_CREDENTIAL_MAX)
     {
         LE_ERROR("Bad parameter credId[%u]", credId);
@@ -413,6 +425,7 @@ lwm2mcore_Sid_t lwm2mcore_EndSha1
 
     // Retrieve the public key corresponding to the package type
     if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_GetCredential(credId,
+                                                              LWM2MCORE_NO_SERVER_ID,
                                                               publicKey,
                                                               &publicKeyLen))
     {

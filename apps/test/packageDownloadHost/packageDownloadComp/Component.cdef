@@ -30,6 +30,7 @@ sources:
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/examples/linux/debug.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/examples/linux/security.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/examples/linux/clientConfig.c
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/examples/linux/platform.c
 
 
     // Stubbed files in the AVC
