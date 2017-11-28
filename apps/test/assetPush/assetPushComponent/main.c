@@ -9,7 +9,7 @@
 #include "legato.h"
 #include "interfaces.h"
 
-static int testCase = 0;
+static int TestCase = 0;
 
 // Push callback handler
 static void PushCallbackHandler
@@ -20,6 +20,17 @@ static void PushCallbackHandler
 {
     int value = (int)contextPtr;
     LE_INFO("PushCallbackHandler: %d, value: %d", status, value);
+
+    if ((status == LE_AVDATA_PUSH_SUCCESS) && (value == TestCase))
+    {
+        LE_INFO("Push test case %d successful", TestCase);
+        exit(EXIT_SUCCESS);
+    }
+    else
+    {
+        LE_ERROR("Push test case %d failed", TestCase);
+        exit(EXIT_FAILURE);
+    }
 }
 
 
@@ -27,6 +38,7 @@ static void PushCallbackHandler
 void PushNonExistentAsset()
 {
     LE_ASSERT(le_avdata_Push("/asdf/zxcv", PushCallbackHandler, NULL) == LE_NOT_FOUND);
+    PushCallbackHandler(LE_AVDATA_PUSH_SUCCESS, (void *)1);
 }
 
 
@@ -34,17 +46,16 @@ void PushNonExistentAsset()
 void PushNotValidAsset()
 {
     LE_ASSERT(le_avdata_Push("/asdf////", PushCallbackHandler, NULL) == LE_FAULT);
+    PushCallbackHandler(LE_AVDATA_PUSH_SUCCESS, (void *)2);
 }
-
 
 // pushing single element
 void PushSingle()
 {
-    LE_ASSERT(le_avdata_CreateResource("/assetPush/value", LE_AVDATA_ACCESS_VARIABLE) == LE_OK);
-    LE_ASSERT(le_avdata_SetInt("/assetPush/value", 5) == LE_OK);
-    LE_ASSERT(le_avdata_Push("/assetPush/value", PushCallbackHandler, (void *)3) == LE_OK);
+    LE_ASSERT(le_avdata_CreateResource("/asset/value", LE_AVDATA_ACCESS_VARIABLE) == LE_OK);
+    LE_ASSERT(le_avdata_SetInt("/asset/value", 5) == LE_OK);
+    LE_ASSERT(le_avdata_Push("/asset/value", PushCallbackHandler, (void *)3) == LE_OK);
 }
-
 
 // pushing multiple element
 void PushMulti()
@@ -54,9 +65,9 @@ void PushMulti()
     LE_ASSERT(le_avdata_CreateResource("/asset/value3", LE_AVDATA_ACCESS_VARIABLE) == LE_OK);
     LE_ASSERT(le_avdata_CreateResource("/asset/value4", LE_AVDATA_ACCESS_VARIABLE) == LE_OK);
 
-    LE_ASSERT(le_avdata_SetInt("/asset/value1", 5) == LE_OK);
-    LE_ASSERT(le_avdata_SetFloat("/asset/value2", 3.14) == LE_OK);
-    LE_ASSERT(le_avdata_SetString("/asset/value3", "helloWorld") == LE_OK);
+    LE_ASSERT(le_avdata_SetInt("/asset/value1", 7) == LE_OK);
+    LE_ASSERT(le_avdata_SetFloat("/asset/value2", 1.23) == LE_OK);
+    LE_ASSERT(le_avdata_SetString("/asset/value3", "slashDelimiter") == LE_OK);
     LE_ASSERT(le_avdata_SetBool("/asset/value4", false) == LE_OK);
     LE_ASSERT(le_avdata_Push("/asset", PushCallbackHandler, (void *)4) == LE_OK);
 }
@@ -206,6 +217,29 @@ void PushData()
     close(fd);
 }
 
+// pushing single element use dot as delimiter for resource path
+void PushSingleDotDelimiter()
+{
+    LE_ASSERT(le_avdata_CreateResource("asset.value", LE_AVDATA_ACCESS_VARIABLE) == LE_OK);
+    LE_ASSERT(le_avdata_SetInt("asset.value", 6) == LE_OK);
+    LE_ASSERT(le_avdata_Push("asset.value", PushCallbackHandler, (void *)6) == LE_OK);
+}
+
+// pushing multiple element on resource path with a dot delimiter
+void PushMultiDotDelimiter()
+{
+    LE_ASSERT(le_avdata_CreateResource("asset.value1", LE_AVDATA_ACCESS_VARIABLE) == LE_OK);
+    LE_ASSERT(le_avdata_CreateResource("asset.value2", LE_AVDATA_ACCESS_VARIABLE) == LE_OK);
+    LE_ASSERT(le_avdata_CreateResource("asset.value3", LE_AVDATA_ACCESS_VARIABLE) == LE_OK);
+    LE_ASSERT(le_avdata_CreateResource("asset.value4", LE_AVDATA_ACCESS_VARIABLE) == LE_OK);
+
+    LE_ASSERT(le_avdata_SetInt("asset.value1", 8) == LE_OK);
+    LE_ASSERT(le_avdata_SetFloat("asset.value2", 4.56) == LE_OK);
+    LE_ASSERT(le_avdata_SetString("asset.value3", "dotDelimiter") == LE_OK);
+    LE_ASSERT(le_avdata_SetBool("asset.value4", false) == LE_OK);
+    LE_ASSERT(le_avdata_Push("asset", PushCallbackHandler, (void *)7) == LE_OK);
+}
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -222,8 +256,8 @@ static void SessionHandler
     {
         LE_INFO("Airvantage session started.");
 
-        LE_INFO("Running test case: %d", testCase);
-        switch (testCase)
+        LE_INFO("Running test case: %d", TestCase);
+        switch (TestCase)
         {
             case 1:
                 PushNonExistentAsset();
@@ -239,6 +273,12 @@ static void SessionHandler
                 break;
             case 5:
                 PushData();
+                break;
+            case 6:
+                PushSingleDotDelimiter();
+                break;
+            case 7:
+                PushMultiDotDelimiter();
                 break;
             default:
                 break;
@@ -264,7 +304,7 @@ COMPONENT_INIT
     if (le_arg_NumArgs() >= 1)
     {
         const char* arg1 = le_arg_GetArg(0);
-        testCase = atoi(arg1);
+        TestCase = atoi(arg1);
     }
 
     le_avdata_RequestSession();

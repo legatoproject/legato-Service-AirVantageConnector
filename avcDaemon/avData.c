@@ -49,6 +49,42 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ *  Path to the persistent asset setting path
+ */
+//--------------------------------------------------------------------------------------------------
+#define CFG_ASSET_SETTING_PATH "/apps/avcService/settings"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  DOT - Path delimiter string
+ */
+//--------------------------------------------------------------------------------------------------
+#define DOT_DELIMITER_STRING "."
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  SLASH - Path delimiter string
+ */
+//--------------------------------------------------------------------------------------------------
+#define SLASH_DELIMITER_STRING "/"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  DOT as the path delimiter char
+ */
+//--------------------------------------------------------------------------------------------------
+#define DOT_DELIMITER_CHAR '.'
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  SLASH as the path delimiter char
+ */
+//--------------------------------------------------------------------------------------------------
+#define SLASH_DELIMITER_CHAR '/'
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Map containing asset data.
  */
 //--------------------------------------------------------------------------------------------------
@@ -447,6 +483,48 @@ static le_result_t ConvertAccessModeToClientAccess
     return LE_OK;
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Format path by adding a leading slash and replacing dot with slash
+ *
+ * @return
+ *      - modified string
+ */
+//--------------------------------------------------------------------------------------------------
+static void FormatPath
+(
+    char*   srcPtr     ///< [IN] original string
+)
+{
+    char path[LE_AVDATA_PATH_NAME_BYTES] = SLASH_DELIMITER_STRING;
+    char* pathPtr = path;
+
+    if (SLASH_DELIMITER_CHAR != *srcPtr)
+    {
+        // Append a leading slash
+        LE_FATAL_IF(LE_OK != le_path_Concat(SLASH_DELIMITER_STRING,
+                                            pathPtr,
+                                            sizeof(path),
+                                            srcPtr,
+                                            NULL), "Buffer is not long enough");
+
+        // Replace all dots with slash
+        while(*pathPtr)
+        {
+            if (DOT_DELIMITER_CHAR == *pathPtr)
+            {
+                *srcPtr = SLASH_DELIMITER_CHAR;
+            }
+            else
+            {
+                *srcPtr = *pathPtr;
+            }
+            pathPtr++;
+            srcPtr++;
+        }
+        *srcPtr = 0;
+    }
+}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -459,14 +537,21 @@ static bool IsAssetDataPathValid
 )
 {
     // The path cannot lack a leading slash, or contain a trailing slash.
-    if (('/' != path[0]) || ('/' == path[strlen(path)-1]))
+    if ((SLASH_DELIMITER_CHAR != path[0]) || (SLASH_DELIMITER_CHAR == path[strlen(path)-1]))
+    {
+        return false;
+    }
+
+    // The path cannot have multiple slashes together.
+    if (strstr(path, "//") != NULL)
     {
         return false;
     }
 
     // The path cannot resemble a lwm2m object.
+    char *savePtr;
     char* pathDup = strdup(path);
-    char* firstLevelPath = strtok(pathDup, "/");
+    char* firstLevelPath = strtok_r(pathDup, SLASH_DELIMITER_STRING, &savePtr);
 
     int i;
     for (i = 0; i < NUM_ARRAY_MEMBERS(InvalidFirstLevelPathNames); i++)
@@ -497,7 +582,7 @@ static bool IsPathParent
 
     while (le_hashmap_NextNode(iter) == LE_OK)
     {
-        if (le_path_IsSubpath(path, le_hashmap_GetKey(iter), "/"))
+        if (le_path_IsSubpath(path, le_hashmap_GetKey(iter), SLASH_DELIMITER_STRING))
         {
             return true;
         }
@@ -521,7 +606,7 @@ static bool IsPathChild
 
     while (le_hashmap_NextNode(iter) == LE_OK)
     {
-        if (le_path_IsSubpath(le_hashmap_GetKey(iter), path, "/"))
+        if (le_path_IsSubpath(le_hashmap_GetKey(iter), path, SLASH_DELIMITER_STRING))
         {
             return true;
         }
@@ -639,7 +724,7 @@ static void GetNamespacedPath
     }
 
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
-    snprintf(namespacedPath, sizeof(namespacedPath), "/%s%s", appName, path);
+    snprintf(namespacedPath, sizeof(namespacedPath), "%s%s%s", SLASH_DELIMITER_STRING, appName, path);
     LE_ASSERT(le_utf8_Copy(namespacedPathPtr, namespacedPath, namespacedSize, NULL) == LE_OK);
 }
 
@@ -652,7 +737,7 @@ static void GetNamespacedPath
  *      - LE_OK - if path exists
  */
 //--------------------------------------------------------------------------------------------------
-static bool IsPathFound
+static le_result_t IsPathFound
 (
     const char* path                  ///< [IN] Asset data path
 )
@@ -689,6 +774,8 @@ static le_result_t GetVal
 {
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
 
+    // Format the path with correct delimiter
+    FormatPath((char*)path);
 
     if (!isNameSpaced)
     {
@@ -798,6 +885,9 @@ static le_result_t SetVal
 )
 {
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
+
+    // Format the path with correct delimiter
+    FormatPath((char*)path);
 
     if (isClient)
     {
@@ -1318,6 +1408,7 @@ static le_result_t EncodeMultiData
 )
 {
     // Each range of paths is enclosed in a CBOR map.
+    char* savePtr = NULL;
     CborEncoder mapNode;
     if (CborNoError != cbor_encoder_create_map(parentCborEncoder, &mapNode, CborIndefiniteLength))
     {
@@ -1337,13 +1428,13 @@ static le_result_t EncodeMultiData
         char* currStrCopy = strdup(list[i]);
 
         // Getting the token of the current path level.
-        currToken = strtok(currStrCopy, "/");
+        currToken = strtok_r(currStrCopy, SLASH_DELIMITER_STRING, &savePtr);
         for (j = 1; j < level; j++)
         {
-            currToken = strtok(NULL, "/");
+            currToken = strtok_r(NULL, SLASH_DELIMITER_STRING, &savePtr);
         }
 
-        peekToken = strtok(NULL, "/");
+        peekToken = strtok_r(NULL, SLASH_DELIMITER_STRING, &savePtr);
 
         if (peekToken == NULL)
         {
@@ -1452,11 +1543,6 @@ static le_result_t EncodeMultiData
         }
         else
         {
-            // Free savedToken
-            if (0 != strcmp(savedToken, ""))
-            {
-                free(savedToken);
-            }
             // Do nothing. We've encountered the same branch node.
         }
 
@@ -1557,7 +1643,7 @@ static le_result_t DecodeMultiData
             endingPathSegLen = strlen(buf);
             int pathLen = strlen(path);
 
-            if (maxPathBytes <= (pathLen + endingPathSegLen + 1))  // +1 for "/"
+            if (maxPathBytes <= (pathLen + endingPathSegLen + 1))  // +1 for the delimiter
             {
                 LE_CRIT("Path size too big. Max allowed: %zu, Actual: %zu",
                         maxPathBytes - 1,
@@ -1566,7 +1652,7 @@ static le_result_t DecodeMultiData
             }
 
             // No need to check return value as length check is done before
-            le_utf8_Append(path, "/", maxPathBytes, NULL);
+            le_utf8_Append(path, SLASH_DELIMITER_STRING, maxPathBytes, NULL);
             le_utf8_Append(path, buf, maxPathBytes, NULL);
 
             labelProcessed = true;
@@ -1859,7 +1945,7 @@ static void ProcessAvServerReadRequest
                 currentPath = le_hashmap_GetKey(iter);
                 assetDataPtr = le_hashmap_GetValue(iter);
 
-                if ((le_path_IsSubpath(path, currentPath, "/")) &&
+                if ((le_path_IsSubpath(path, currentPath, SLASH_DELIMITER_STRING)) &&
                     ((assetDataPtr->serverAccess & LE_AVDATA_ACCESS_READ) == LE_AVDATA_ACCESS_READ))
                 {
                     // Put the currentPath in the path array.
@@ -2218,6 +2304,9 @@ le_avdata_ResourceEventHandlerRef_t le_avdata_AddResourceEventHandler
 {
     AssetData_t* assetDataPtr = NULL;
 
+    // Format the path with correct delimiter
+    FormatPath((char*)path);
+
     // Get namespaced path which is namespaced under the application name
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
     GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
@@ -2265,7 +2354,7 @@ void le_avdata_RemoveResourceEventHandler
 //--------------------------------------------------------------------------------------------------
 /**
  * Create an asset data with the provided path. Note that asset data type and value are determined
- * upton the first call to a Set function. When an asset data is created, it contains a null value,
+ * upon the first call to a Set function. When an asset data is created, it contains a null value,
  * represented by the data type of none.
  *
  * @return:
@@ -2281,6 +2370,9 @@ le_result_t le_avdata_CreateResource
     le_avdata_AccessMode_t accessMode ///< [IN] Asset data access mode
 )
 {
+    // Format the path with correct delimiter
+    FormatPath((char*)path);
+
     // Check if the asset data path is legal.
     if (IsAssetDataPathValid(path) != true)
     {
@@ -2839,6 +2931,10 @@ le_result_t le_avdata_Push
 )
 {
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
+
+    // Format the path with correct delimiter
+    FormatPath((char*)path);
+
     GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
 
     if (!IsAssetDataPathValid(namespacedPath))
@@ -2875,7 +2971,7 @@ le_result_t le_avdata_Push
                 currentPath = (char *)le_hashmap_GetKey(iter);
                 assetDataPtr = le_hashmap_GetValue(iter);
 
-                if ((le_path_IsSubpath(namespacedPath, currentPath, "/")) &&
+                if ((le_path_IsSubpath(namespacedPath, currentPath, SLASH_DELIMITER_STRING)) &&
                     ((assetDataPtr->serverAccess & LE_AVDATA_ACCESS_READ) == LE_AVDATA_ACCESS_READ))
                 {
                     // Put the currentPath in the path array.
