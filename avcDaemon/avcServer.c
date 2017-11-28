@@ -489,6 +489,7 @@ static char* AvcSessionStateToStr
         case LE_AVC_UNINSTALL_COMPLETE:     result = "Uninstall complete";      break;
         case LE_AVC_UNINSTALL_FAILED:       result = "Uninstall failed";        break;
         case LE_AVC_SESSION_STARTED:        result = "Session started";         break;
+        case LE_AVC_SESSION_BS_STARTED:     result = "Session with BS started"; break;
         case LE_AVC_SESSION_STOPPED:        result = "Session stopped";         break;
         case LE_AVC_REBOOT_PENDING:         result = "Reboot pending";          break;
         case LE_AVC_CONNECTION_PENDING:     result = "Connection pending";      break;
@@ -1492,15 +1493,19 @@ static void ProcessUpdateStatus
             break;
 
         case LE_AVC_AUTH_STARTED:
-            LE_DEBUG("Authenticated started");
+            LE_DEBUG("Authentication started");
             break;
 
         case LE_AVC_AUTH_FAILED:
-            LE_DEBUG("Authenticated failed");
+            LE_DEBUG("Authentication failed");
+            break;
+
+        case LE_AVC_SESSION_BS_STARTED:
+            LE_DEBUG("Session with bootstrap server started");
             break;
 
         default:
-            LE_DEBUG("Unhandled updateStatus %s", AvcSessionStateToStr(data->updateStatus));
+            LE_DEBUG("Unhandled updateStatus %d", data->updateStatus);
             break;
     }
 

@@ -107,6 +107,16 @@ static bool SessionStarted = false;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Denoting if the device is in the authentication phase.
+ * The authentication phase:
+ *  - Starts when the authentication to BS or DM server starts.
+ *  - Stops when the session to BS or DM server starts.
+ */
+//--------------------------------------------------------------------------------------------------
+static bool AuthenticationPhase = false;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Retry timers related data. RetryTimersIndex is index to the array of RetryTimers.
  * RetryTimersIndex of -1 means the timers are to be retrieved. A timer of value 0 means it's
  * disabled. The timers values are in minutes.
@@ -547,6 +557,7 @@ static int EventHandler
 
                 SessionStarted = true;
             }
+            AuthenticationPhase = false;
             break;
 
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_DETAILS:
@@ -570,8 +581,9 @@ static int EventHandler
             {
                 LE_DEBUG("Authentication to DM started");
             }
+            AuthenticationPhase = true;
             avcServer_UpdateStatus(LE_AVC_AUTH_STARTED, LE_AVC_UNKNOWN_UPDATE,
-                       -1, -1, LE_AVC_ERR_NONE);
+                                   -1, -1, LE_AVC_ERR_NONE);
             break;
 
         case LWM2MCORE_EVENT_AUTHENTICATION_FAILED:
@@ -752,12 +764,13 @@ static void avcClient_RetryTimer
  * @note - After a user-initiated call, this function registers itself inside a timer expiry handler
  *         to perform retries. On connection success, this function deinitializes the timer.
  *       - If this function is called when another connection is in the middle of being initiated
- *         then LE_BUSY will be returned.
+ *         or when the device is authenticating then LE_BUSY will be returned.
  *
  * @return
  *      - LE_OK if connection request has been sent.
  *      - LE_DUPLICATE if already connected.
- *      - LE_BUSY if currently retrying.
+ *      - LE_BUSY if currently retrying or authenticating.
+ *      - LE_NOT_PERMITTED if device is in airplane mode
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcClient_Connect
@@ -766,95 +779,98 @@ le_result_t avcClient_Connect
 )
 {
     le_onoff_t radioStatus;
-    if ((le_mrc_GetRadioPower(&radioStatus) == LE_OK) && radioStatus == LE_OFF)
+    if ((LE_OK == le_mrc_GetRadioPower(&radioStatus)) && (LE_OFF == radioStatus))
     {
         LE_INFO("Device in airplane mode");
         return LE_NOT_PERMITTED;
     }
 
+    // Check if a session is already started.
     if (SessionStarted)
     {
-        LE_INFO("Session already started");
-
         // No need to start a retry timer. Perform reset/cleanup.
         ResetRetryTimers();
 
+        LE_INFO("Session already started");
         return LE_DUPLICATE;
+    }
+
+    // Check if a retry is in progress.
+    if (le_timer_IsRunning(RetryTimerRef))
+    {
+        LE_INFO("Retry timer already running");
+        return LE_BUSY;
+    }
+
+    // Check if the device is currently authenticating.
+    if (AuthenticationPhase)
+    {
+        LE_INFO("Authentication is ongoing");
+        return LE_BUSY;
+    }
+
+    // If Lwm2mInstanceRef exists, then that means the current call is a "retry", which is
+    // performed by stopping the previous data connection first.
+    if (NULL != Lwm2mInstanceRef)
+    {
+        StopBearer();
+    }
+
+    StartBearer();
+
+    // Attempt to start a retry timer.
+    // if index is less than 0, then get the retry timers config. The implication is that while
+    // a retry timer is running, changes to retry timers aren't applied. They are applied when
+    // retry timers are being reset.
+    if (0 > RetryTimersIndex)
+    {
+        size_t numTimers = NUM_ARRAY_MEMBERS(RetryTimers);
+
+        if (LE_OK != le_avc_GetRetryTimers(RetryTimers, &numTimers))
+        {
+            LE_WARN("Failed to retrieve retry timers config. Failed session start is not retried.");
+            return LE_OK;
+        }
+
+        LE_ASSERT(LE_AVC_NUM_RETRY_TIMERS == numTimers);
+
+        RetryTimersIndex = 0;
     }
     else
     {
-        // Retry is in progress.
-        if (le_timer_IsRunning(RetryTimerRef))
-        {
-            return LE_BUSY;
-        }
-
-        // If Lwm2mInstanceRef exists, then that means the current call is a "retry", which is
-        // performed by stopping the previous data connection first.
-        if (NULL != Lwm2mInstanceRef)
-        {
-            StopBearer();
-        }
-
-        StartBearer();
-
-        // attempt to start a retry timer.
-
-        // if index is less than 0, then get the retry timers config. The implication is that while
-        // a retry timer is running, changes to retry timers aren't applied. They are applied when
-        // retry timers are being reset.
-        if (0 > RetryTimersIndex)
-        {
-            size_t numTimers = NUM_ARRAY_MEMBERS(RetryTimers);
-
-            if (LE_OK != le_avc_GetRetryTimers(RetryTimers, &numTimers))
-            {
-                LE_WARN("Failed to retrieve retry timers config. Failed session start is not \
-                         retried");
-
-                return LE_OK;
-            }
-
-            LE_ASSERT(LE_AVC_NUM_RETRY_TIMERS == numTimers);
-
-            RetryTimersIndex = 0;
-        }
-        else
-        {
-            RetryTimersIndex++;
-        }
-
-        // Get the next valid retry timer.
-
-        // See which timer we are at by looking at RetryTimersIndex
-        // If the timer is 0, get the next one. (0 means disabled / not used)
-        // If we run out of timers, do nothing.  Perform reset/cleanup.
-        while((RetryTimersIndex < LE_AVC_NUM_RETRY_TIMERS) &&
-              (0 == RetryTimers[RetryTimersIndex]))
-        {
-                RetryTimersIndex++;
-        }
-
-        // This is the case when we've run out of timers. Reset/cleanup, and don't start the next
-        // retry timer (since there aren't any left).
-        if ((RetryTimersIndex >= LE_AVC_NUM_RETRY_TIMERS) || (RetryTimersIndex < 0))
-        {
-            ResetRetryTimers();
-        }
-        // Start the next retry timer.
-        else
-        {
-            LE_INFO("Starting retry timer of %d min at index %d",
-                    RetryTimers[RetryTimersIndex], RetryTimersIndex);
-
-            le_clk_Time_t interval = {RetryTimers[RetryTimersIndex] * 60, 0};
-
-            LE_ASSERT_OK(le_timer_SetInterval(RetryTimerRef, interval));
-            LE_ASSERT_OK(le_timer_SetHandler(RetryTimerRef,avcClient_RetryTimer));
-            LE_ASSERT_OK(le_timer_Start(RetryTimerRef));
-        }
-        return LE_OK;
+        RetryTimersIndex++;
     }
+
+    // Get the next valid retry timer.
+    // See which timer we are at by looking at RetryTimersIndex:
+    // - if the timer is 0, get the next one. (0 means disabled / not used)
+    // - if we run out of timers, do nothing. Perform reset/cleanup.
+    while (   (RetryTimersIndex < LE_AVC_NUM_RETRY_TIMERS)
+           && (0 == RetryTimers[RetryTimersIndex]))
+    {
+        RetryTimersIndex++;
+    }
+
+    // This is the case when we've run out of timers. Reset/cleanup, and don't start the next
+    // retry timer (since there aren't any left).
+    if ((RetryTimersIndex >= LE_AVC_NUM_RETRY_TIMERS) || (RetryTimersIndex < 0))
+    {
+        ResetRetryTimers();
+    }
+    // Start the next retry timer.
+    else
+    {
+        LE_INFO("Starting retry timer of %d min at index %d",
+                RetryTimers[RetryTimersIndex], RetryTimersIndex);
+
+        le_clk_Time_t interval = {RetryTimers[RetryTimersIndex] * 60, 0};
+
+        LE_ASSERT_OK(le_timer_SetInterval(RetryTimerRef, interval));
+        LE_ASSERT_OK(le_timer_SetHandler(RetryTimerRef, avcClient_RetryTimer));
+        LE_ASSERT_OK(le_timer_Start(RetryTimerRef));
+    }
+
+    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------

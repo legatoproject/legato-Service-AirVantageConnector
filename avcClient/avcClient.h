@@ -23,12 +23,13 @@
  * @note - After a user-initiated call, this function registers itself inside a timer expiry handler
  *         to perform retries. On connection success, this function deinitializes the timer.
  *       - If this function is called when another connection is in the middle of being initiated
- *         then LE_BUSY will be returned.
+ *         or when the device is authenticating then LE_BUSY will be returned.
  *
  * @return
  *      - LE_OK if connection request has been sent.
  *      - LE_DUPLICATE if already connected.
- *      - LE_BUSY if currently retrying.
+ *      - LE_BUSY if currently retrying or authenticating.
+ *      - LE_NOT_PERMITTED if device is in airplane mode
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcClient_Connect
