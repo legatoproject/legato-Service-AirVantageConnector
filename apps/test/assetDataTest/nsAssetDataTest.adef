@@ -1,0 +1,22 @@
+executables:
+{
+    nsAssetData = ( nsAssetDataTestComponent )
+}
+
+processes:
+{
+    run:
+    {
+        // Normally should be executed with 'app runProc' using:
+        // app runProc nsAssetDataTest --exe=nsAssetData -- x
+        // where x is the test case number.
+        //( nsAssetData )
+    }
+}
+
+start: manual
+
+bindings:
+{
+    nsAssetData.nsAssetDataTestComponent.le_avdata -> avcService.le_avdata
+}

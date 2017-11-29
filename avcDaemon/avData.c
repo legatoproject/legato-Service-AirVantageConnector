@@ -189,6 +189,36 @@ static lwm2mcore_CoapResponse_t AVServerResponse;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Asset data client memory pool.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_mem_PoolRef_t AssetDataClientPool;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * List of asset data clients.  Initialized in push_Init().
+ */
+//--------------------------------------------------------------------------------------------------
+static le_dls_List_t AssetDataClientList;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Structure representing a client of asset data and what namespace they follow.
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct
+{
+    le_msg_SessionRef_t msgRef;                 ///< Session reference.
+    le_avdata_Namespace_t namespace;            ///< Asset data namespace
+    le_dls_Link_t link;
+}
+AssetDataClient_t;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Structure representing an asset value - a union of the possible types.
  */
 //--------------------------------------------------------------------------------------------------
@@ -369,6 +399,28 @@ static void ClientCloseSessionHandler
         if (le_ref_GetValue(iterRef) == sessionRef)
         {
             le_avdata_ReleaseSession((void*)le_ref_GetSafeRef(iterRef));
+        }
+    }
+
+    if (!le_dls_IsEmpty(&AssetDataClientList))
+    {
+        le_dls_Link_t* linkPtr = le_dls_Peek(&AssetDataClientList);
+        AssetDataClient_t* assetDataClientPtr;
+
+        while ( linkPtr != NULL )
+        {
+            assetDataClientPtr = CONTAINER_OF(linkPtr, AssetDataClient_t, link);
+
+            if (assetDataClientPtr->msgRef == sessionRef)
+            {
+                le_mem_Release(assetDataClientPtr);
+                le_dls_Remove(&AssetDataClientList, linkPtr);
+                linkPtr = NULL;
+            }
+            else
+            {
+                linkPtr = le_dls_PeekNext(&AssetDataClientList, linkPtr);
+            }
         }
     }
 }
@@ -689,8 +741,84 @@ static AssetData_t* GetAssetData
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Create asset data client with specified namespace
+ */
+//--------------------------------------------------------------------------------------------------
+static void CreateAssetDataClient
+(
+    le_avdata_Namespace_t namespace
+)
+{
+    AssetDataClient_t* assetDataClientPtr = le_mem_ForceAlloc(AssetDataClientPool);
+    memset(assetDataClientPtr, 0, sizeof(AssetDataClient_t));
+    assetDataClientPtr->msgRef = le_avdata_GetClientSessionRef();
+    assetDataClientPtr->namespace = namespace;
+    assetDataClientPtr->link = LE_DLS_LINK_INIT;
+    le_dls_Queue(&AssetDataClientList, &assetDataClientPtr->link);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get asset data client based on this clients session.
+ */
+//--------------------------------------------------------------------------------------------------
+static AssetDataClient_t* GetAssetDataClient
+(
+    le_msg_SessionRef_t sessionRef
+)
+{
+    if (!le_dls_IsEmpty(&AssetDataClientList))
+    {
+        le_dls_Link_t* linkPtr = le_dls_Peek(&AssetDataClientList);
+        AssetDataClient_t* assetDataClientPtr;
+
+        while ( linkPtr != NULL )
+        {
+            assetDataClientPtr = CONTAINER_OF(linkPtr, AssetDataClient_t, link);
+
+            if (assetDataClientPtr->msgRef == sessionRef)
+            {
+                return assetDataClientPtr;
+            }
+
+            linkPtr = le_dls_PeekNext(&AssetDataClientList, linkPtr);
+        }
+    }
+
+    return NULL;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the namespace used for this asset data client.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_avdata_Namespace_t GetClientSessionNamespace
+(
+    le_msg_SessionRef_t sessionRef
+)
+{
+    AssetDataClient_t* assetDataPtr = GetAssetDataClient(sessionRef);
+
+    if (assetDataPtr == NULL)
+    {
+        CreateAssetDataClient(LE_AVDATA_NAMESPACE_APPLICATION);
+        return LE_AVDATA_NAMESPACE_APPLICATION;
+    }
+    else
+    {
+        return assetDataPtr->namespace;
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Get the namespaced path. The namespaced path is the application name concatenated with the
- * asset data path.
+ * asset data path by default. However, the user can override this with the global namespace which
+ * will not concatenate the path with the app name.
  */
 //--------------------------------------------------------------------------------------------------
 static void GetNamespacedPath
@@ -706,26 +834,34 @@ static void GetNamespacedPath
 
     le_msg_SessionRef_t sessionRef = le_avdata_GetClientSessionRef();
 
-    if (le_msg_GetClientUserCreds(sessionRef, &uid, &pid) != LE_OK)
+    if (GetClientSessionNamespace(sessionRef) != LE_AVDATA_NAMESPACE_APPLICATION)
     {
-        LE_KILL_CLIENT("Could not get credentials for the client.");
-        return;
+        LE_ASSERT(le_utf8_Copy(namespacedPathPtr, path, namespacedSize, NULL) == LE_OK);
+    }
+    else
+    {
+        if (le_msg_GetClientUserCreds(sessionRef, &uid, &pid) != LE_OK)
+        {
+            LE_KILL_CLIENT("Could not get credentials for the client.");
+            return;
+        }
+
+        // Look up the process's application name.
+        char appName[LE_LIMIT_APP_NAME_LEN+1];
+
+        le_result_t result = le_appInfo_GetName(pid, appName, sizeof(appName));
+        LE_FATAL_IF(result == LE_OVERFLOW, "Buffer too small to contain the application name.");
+
+        if (result != LE_OK)
+        {
+            LE_KILL_CLIENT("Could not get app name");
+        }
+
+        char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
+        snprintf(namespacedPath, sizeof(namespacedPath), "%s%s%s", SLASH_DELIMITER_STRING, appName, path);
+        LE_ASSERT(le_utf8_Copy(namespacedPathPtr, namespacedPath, namespacedSize, NULL) == LE_OK);
     }
 
-    // Look up the process's application name.
-    char appName[LE_LIMIT_APP_NAME_LEN+1];
-
-    le_result_t result = le_appInfo_GetName(pid, appName, sizeof(appName));
-    LE_FATAL_IF(result == LE_OVERFLOW, "Buffer too small to contain the application name.");
-
-    if (result != LE_OK)
-    {
-        LE_KILL_CLIENT("Could not get app name");
-    }
-
-    char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
-    snprintf(namespacedPath, sizeof(namespacedPath), "%s%s%s", SLASH_DELIMITER_STRING, appName, path);
-    LE_ASSERT(le_utf8_Copy(namespacedPathPtr, namespacedPath, namespacedSize, NULL) == LE_OK);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2390,6 +2526,41 @@ le_result_t le_avdata_CreateResource
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Sets the namespace for asset data.
+ *
+ * @return:
+ *      - LE_OK on success
+ *      - LE_BAD_PARAMETER if the namespace is unknown
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avdata_SetNamespace
+(
+    le_avdata_Namespace_t namespace   ///< [IN] Asset data namespace
+)
+{
+    // Check if namespace is correct
+    if (namespace > LE_AVDATA_NAMESPACE_GLOBAL)
+    {
+        return LE_BAD_PARAMETER;
+    }
+
+    AssetDataClient_t* assetDataClientPtr = GetAssetDataClient(le_avdata_GetClientSessionRef());
+
+    if (assetDataClientPtr == NULL)
+    {
+        CreateAssetDataClient(namespace);
+    }
+    else
+    {
+        assetDataClientPtr->namespace = namespace;
+    }
+
+    return LE_OK;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Sets an asset data to contain a null value, represented by the data type of none.
  *
  * @return:
@@ -3569,11 +3740,15 @@ void avData_Init
     // Create various memory pools
     AssetPathPool = le_mem_CreatePool("AssetData Path", LE_AVDATA_PATH_NAME_BYTES);
     AssetDataPool = le_mem_CreatePool("AssetData_t", sizeof(AssetData_t));
+    AssetDataClientPool = le_mem_CreatePool("AssetData client", sizeof(AssetDataClient_t));
     StringPool = le_mem_CreatePool("AssetData string", LE_AVDATA_STRING_VALUE_BYTES);
     ArgumentPool = le_mem_CreatePool("AssetData Argument_t", sizeof(Argument_t));
     RecordRefDataPoolRef = le_mem_CreatePool("Record ref data pool", sizeof(RecordRefData_t));
 
-    // Create the hasmap to store asset data
+    // Initialize the asset data client list
+    AssetDataClientList = LE_DLS_LIST_INIT;
+
+    // Create the hashmap to store asset data
     AssetDataMap = le_hashmap_Create("Asset Data Map", MAX_EXPECTED_ASSETDATA,
                                      le_hashmap_HashString, le_hashmap_EqualsString);
 
