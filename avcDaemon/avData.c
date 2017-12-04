@@ -601,9 +601,15 @@ static bool IsAssetDataPathValid
     }
 
     // The path cannot resemble a lwm2m object.
-    char *savePtr;
+    char *savePtr = NULL;
     char* pathDup = strdup(path);
     char* firstLevelPath = strtok_r(pathDup, SLASH_DELIMITER_STRING, &savePtr);
+
+    if (firstLevelPath == NULL)
+    {
+        free(pathDup);
+        return false;
+    }
 
     int i;
     for (i = 0; i < NUM_ARRAY_MEMBERS(InvalidFirstLevelPathNames); i++)
