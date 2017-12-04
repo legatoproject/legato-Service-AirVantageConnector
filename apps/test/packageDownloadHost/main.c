@@ -20,6 +20,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Package size
+ */
+//--------------------------------------------------------------------------------------------------
+#define PACKAGE_SIZE    1024
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Relative location to the test download image
  */
 //--------------------------------------------------------------------------------------------------
@@ -92,7 +99,6 @@ le_result_t GetExecPath(char* buffer)
 {
     int length;
     char* pathEndPtr = NULL;
-    int paddingLen;
 
     length = readlink("/proc/self/exe", buffer, PATH_MAX_LENGTH - 1);
     if (length <= 0)
@@ -225,12 +231,14 @@ static void Test_DownloadRegularFw
 )
 {
     uint16_t instanceId = 0;
-    char path[PATH_MAX_LENGTH] = {0};
+    char     path[PATH_MAX_LENGTH] = {0};
 
     LE_INFO("Running test: %s\n", __func__);
 
     GetExecPath(path);
-    strncat(path, DOWNLOAD_URI, strlen(path));
+
+    LE_ASSERT((strlen(path) + strlen(DOWNLOAD_URI)) < LWM2MCORE_PACKAGE_URI_MAX_BYTES);
+    strncat(path, DOWNLOAD_URI, strlen(DOWNLOAD_URI));
 
     LE_ASSERT_OK(packageDownloader_Init());
 
@@ -259,10 +267,344 @@ static void Check_DownloadRegularFw
     LE_ASSERT(LE_AVC_ERR_NONE == DownloadResult.errorCode);
 
     GetExecPath(path);
-    strncat(path, DOWNLOAD_URI, strlen(path));
+
+    LE_ASSERT((strlen(path) + strlen(DOWNLOAD_URI)) < LWM2MCORE_PACKAGE_URI_MAX_BYTES);
+    strncat(path, DOWNLOAD_URI, strlen(DOWNLOAD_URI));
 
     // Compare the downloaded file and the source file
     LE_ASSERT_OK(CheckDownloadedFile(path));
+
+    le_sem_Post(SyncSemRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Test 2: Test packageDownloader_SetFwUpdateState() and packageDownloader_GetFwUpdateState().
+ */
+//--------------------------------------------------------------------------------------------------
+static void Test_SetAndGetFwUpdateState
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    lwm2mcore_FwUpdateState_t fwUpdateState;
+
+    LE_INFO("Running test: %s\n", __func__);
+
+    LE_ASSERT(DWL_OK == packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_DOWNLOADED));
+
+    LE_ASSERT(LE_FAULT == packageDownloader_GetFwUpdateState(NULL));
+    LE_ASSERT_OK(packageDownloader_GetFwUpdateState(&fwUpdateState));
+    LE_ASSERT(LWM2MCORE_FW_UPDATE_STATE_DOWNLOADED == fwUpdateState);
+
+    le_sem_Post(SyncSemRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Test 3: Test packageDownloader_SetFwUpdateResult() and packageDownloader_GetFwUpdateResult().
+ */
+//--------------------------------------------------------------------------------------------------
+static void Test_SetAndGetFwUpdateResult
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    lwm2mcore_FwUpdateResult_t fwUpdateResult;
+
+    LE_INFO("Running test: %s\n", __func__);
+
+    LE_ASSERT(DWL_OK == packageDownloader_SetFwUpdateResult(
+                            LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL));
+
+    LE_ASSERT(LE_BAD_PARAMETER == packageDownloader_GetFwUpdateResult(NULL));
+    LE_ASSERT_OK(packageDownloader_GetFwUpdateResult(&fwUpdateResult));
+    LE_ASSERT(LWM2MCORE_FW_UPDATE_RESULT_INSTALLED_SUCCESSFUL == fwUpdateResult);
+
+    le_sem_Post(SyncSemRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Test 4: Test packageDownloader_SetSwUpdateState() and packageDownloader_GetSwUpdateState().
+ */
+//--------------------------------------------------------------------------------------------------
+static void Test_SetAndGetSwUpdateState
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    lwm2mcore_SwUpdateState_t swUpdateState;
+
+    LE_INFO("Running test: %s\n", __func__);
+
+    LE_ASSERT(DWL_OK == packageDownloader_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED));
+
+    LE_ASSERT(LE_FAULT == packageDownloader_GetSwUpdateState(NULL));
+    LE_ASSERT_OK(packageDownloader_GetSwUpdateState(&swUpdateState));
+    LE_ASSERT(LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED == swUpdateState);
+
+    le_sem_Post(SyncSemRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Test 4: Test packageDownloader_SetSwUpdateResult() and packageDownloader_GetSwUpdateResult().
+ */
+//--------------------------------------------------------------------------------------------------
+static void Test_SetAndGetSwUpdateResult
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    lwm2mcore_SwUpdateResult_t swUpdateResult;
+
+    LE_INFO("Running test: %s\n", __func__);
+
+    LE_ASSERT(DWL_OK == packageDownloader_SetSwUpdateResult(
+                            LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED));
+
+    LE_ASSERT(LE_BAD_PARAMETER == packageDownloader_GetSwUpdateResult(NULL));
+    LE_ASSERT_OK(packageDownloader_GetSwUpdateResult(&swUpdateResult));
+    LE_ASSERT(LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED == swUpdateResult);
+
+    le_sem_Post(SyncSemRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Test 5: Test packageDownloader_SetUpdatePackageSize() and
+                 packageDownloader_GetUpdatePackageSize().
+ */
+//--------------------------------------------------------------------------------------------------
+static void Test_SetAndGetUpdatePackageSize
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    uint64_t packageSize;
+
+    LE_INFO("Running test: %s\n", __func__);
+
+    LE_ASSERT_OK(packageDownloader_SetUpdatePackageSize(PACKAGE_SIZE));
+
+    LE_ASSERT(LE_FAULT == packageDownloader_GetUpdatePackageSize(NULL));
+    LE_ASSERT_OK(packageDownloader_GetUpdatePackageSize(&packageSize));
+    LE_ASSERT(PACKAGE_SIZE == packageSize);
+
+    le_sem_Post(SyncSemRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Test 6: Test packageDownloader_SetFwUpdateNotification() and
+ *               packageDownloader_GetFwUpdateNotification().
+ */
+//--------------------------------------------------------------------------------------------------
+static void Test_SetAndGetFwUpdateNotification
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    bool               notifRequested;
+    le_avc_Status_t    updateStatus;
+    le_avc_ErrorCode_t errorCode;
+
+    LE_INFO("Running test: %s\n", __func__);
+
+    LE_ASSERT_OK(packageDownloader_SetFwUpdateNotification(true, LE_AVC_DOWNLOAD_COMPLETE,
+                                                                           LE_AVC_ERR_NONE));
+
+    LE_ASSERT(LE_FAULT == packageDownloader_GetFwUpdateNotification(NULL, NULL, NULL));
+    LE_ASSERT_OK(packageDownloader_GetFwUpdateNotification(&notifRequested,
+                                                           &updateStatus, &errorCode));
+    LE_ASSERT((true == notifRequested) && (LE_AVC_DOWNLOAD_COMPLETE == updateStatus)
+                                       && (LE_AVC_ERR_NONE == errorCode));
+
+    le_sem_Post(SyncSemRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Test 7: Test packageDownloader_AbortDownload() and
+ *               packageDownloader_CheckDownloadToAbort().
+ */
+//--------------------------------------------------------------------------------------------------
+static void Test_AbortDownload
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    LE_INFO("Running test: %s\n", __func__);
+
+    LE_ASSERT(false == packageDownloader_CheckDownloadToAbort());
+
+    LE_ASSERT_OK(packageDownloader_AbortDownload(LWM2MCORE_FW_UPDATE_TYPE));
+    LE_ASSERT(true == packageDownloader_CheckDownloadToAbort());
+
+    LE_ASSERT_OK(packageDownloader_AbortDownload(LWM2MCORE_SW_UPDATE_TYPE));
+    LE_ASSERT(true == packageDownloader_CheckDownloadToAbort());
+
+    le_sem_Post(SyncSemRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Test 8: Test packageDownloader_SuspendDownload() and
+ *               packageDownloader_CheckDownloadToSuspend().
+ */
+//--------------------------------------------------------------------------------------------------
+static void Test_SuspendDownload
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    LE_INFO("Running test: %s\n", __func__);
+
+    LE_ASSERT(false == packageDownloader_CheckDownloadToSuspend());
+    LE_ASSERT_OK(packageDownloader_SuspendDownload());
+    LE_ASSERT(true == packageDownloader_CheckDownloadToSuspend());
+
+    le_sem_Post(SyncSemRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Test 9: Test packageDownloader_SetFwUpdateInstallPending() and
+ *               packageDownloader_GetFwUpdateInstallPending().
+ */
+//--------------------------------------------------------------------------------------------------
+static void Test_SetAndGetFwUpdateInstallPending
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    bool isFwInstallPending;
+
+    LE_INFO("Running test: %s\n", __func__);
+
+    LE_ASSERT(LE_BAD_PARAMETER ==  packageDownloader_GetFwUpdateInstallPending(NULL));
+
+    LE_ASSERT_OK(packageDownloader_SetFwUpdateInstallPending(false));
+    LE_ASSERT_OK(packageDownloader_GetFwUpdateInstallPending(&isFwInstallPending));
+    LE_ASSERT(false == isFwInstallPending);
+
+    LE_ASSERT_OK(packageDownloader_SetFwUpdateInstallPending(true));
+    LE_ASSERT_OK(packageDownloader_GetFwUpdateInstallPending(&isFwInstallPending));
+    LE_ASSERT(true == isFwInstallPending);
+
+    le_sem_Post(SyncSemRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Test 10: Test packageDownloader_DeleteFwUpdateInfo().
+ */
+//--------------------------------------------------------------------------------------------------
+static void Test_DeleteFwUpdateInfo
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    LE_INFO("Running test: %s\n", __func__);
+
+    packageDownloader_DeleteFwUpdateInfo();
+
+    le_sem_Post(SyncSemRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Test 11: Test packageDownloader_SetResumeInfo()
+ *                packageDownloader_GetResumeInfo() and
+ *                packageDownloader_BytesLeftToDownload().
+ */
+//--------------------------------------------------------------------------------------------------
+static void Test_SetAndGetResumeInfo
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    char     path[PATH_MAX_LENGTH] = {0};
+    char     uri[LWM2MCORE_PACKAGE_URI_MAX_BYTES]= {0};
+    size_t   uriLen = sizeof(uri);
+    size_t   uriSwLen = sizeof(uri);
+    uint64_t numBytes;
+
+    lwm2mcore_UpdateType_t type;
+
+    LE_INFO("Running test: %s\n", __func__);
+
+    GetExecPath(path);
+
+    LE_ASSERT((strlen(path) + strlen(DOWNLOAD_URI)) < LWM2MCORE_PACKAGE_URI_MAX_BYTES);
+    strncat(path, DOWNLOAD_URI, strlen(DOWNLOAD_URI));
+
+    LE_ASSERT_OK(packageDownloader_Init());
+
+    // Test for bad parameter
+    LE_ASSERT(LE_BAD_PARAMETER == packageDownloader_SetResumeInfo(NULL, LWM2MCORE_FW_UPDATE_TYPE));
+    LE_ASSERT(LE_BAD_PARAMETER == packageDownloader_GetResumeInfo(NULL, NULL, NULL));
+
+    // Test for fw update type.
+    LE_ASSERT_OK(packageDownloader_SetResumeInfo(path, LWM2MCORE_FW_UPDATE_TYPE));
+    LE_ASSERT_OK(packageDownloader_GetResumeInfo(uri, &uriLen, &type));
+
+    LE_ASSERT(LE_FAULT == packageDownloader_BytesLeftToDownload(&numBytes));
+
+    LE_ASSERT(DWL_OK == packageDownloader_SetFwUpdateResult(
+                            LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL));
+    // Check number of bytes left when fw update state is idle.
+    LE_ASSERT(DWL_OK == packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE));
+    LE_ASSERT_OK(packageDownloader_BytesLeftToDownload(&numBytes));
+
+    // Check number of bytes left when fw update state is downloading.
+    LE_ASSERT(DWL_OK == packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_DOWNLOADING));
+    LE_ASSERT_OK(packageDownloader_BytesLeftToDownload(&numBytes));
+
+    // Test for sw update type.
+    LE_ASSERT_OK(packageDownloader_SetResumeInfo(path, LWM2MCORE_SW_UPDATE_TYPE));
+    LE_ASSERT_OK(packageDownloader_GetResumeInfo(uri, &uriSwLen, &type));
+
+    LE_ASSERT(LE_FAULT == packageDownloader_BytesLeftToDownload(&numBytes));
+
+    LE_ASSERT(DWL_OK == packageDownloader_SetSwUpdateResult(
+                            LWM2MCORE_SW_UPDATE_RESULT_INITIAL));
+    LE_ASSERT(DWL_OK == packageDownloader_SetSwUpdateState(
+                            LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED));
+    LE_ASSERT_OK(packageDownloader_BytesLeftToDownload(&numBytes));
+
+    le_sem_Post(SyncSemRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Test packageDownloader_BytesLeftToDownload.
+ */
+//--------------------------------------------------------------------------------------------------
+static void Test_BytesLeftToDownload
+(
+    void* param1Ptr,
+    void* param2Ptr
+)
+{
+    uint64_t numBytes;
+
+    LE_INFO("Running test: %s\n", __func__);
+
+    LE_ASSERT(LE_BAD_PARAMETER == packageDownloader_BytesLeftToDownload(NULL));
+    LE_ASSERT_OK(packageDownloader_BytesLeftToDownload(&numBytes));
 
     le_sem_Post(SyncSemRef);
 }
@@ -314,6 +656,45 @@ COMPONENT_INIT
     le_event_QueueFunctionToThread(TestRef, Test_DownloadRegularFw, NULL, NULL);
     le_sem_Wait(SyncSemRef);
     le_event_QueueFunctionToThread(TestRef, Check_DownloadRegularFw, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_BytesLeftToDownload, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_SetAndGetFwUpdateState, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_SetAndGetFwUpdateResult, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_SetAndGetSwUpdateState, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_SetAndGetSwUpdateResult, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_SetAndGetFwUpdateNotification, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_SetAndGetFwUpdateInstallPending, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_SetAndGetUpdatePackageSize, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_SetAndGetResumeInfo, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_SuspendDownload, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_BytesLeftToDownload, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_AbortDownload, NULL, NULL);
+    le_sem_Wait(SyncSemRef);
+
+    le_event_QueueFunctionToThread(TestRef, Test_DeleteFwUpdateInfo, NULL, NULL);
     le_sem_Wait(SyncSemRef);
 
     // Kill the test thread

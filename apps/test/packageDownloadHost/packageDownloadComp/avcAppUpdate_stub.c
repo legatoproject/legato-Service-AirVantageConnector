@@ -266,7 +266,8 @@ le_result_t avcApp_SetSwUpdateState
     lwm2mcore_SwUpdateState_t updateState
 )
 {
-    LE_DEBUG("Stub");
+    LE_ASSERT_OK(WriteFs(SW_UPDATE_STATE_PATH, (uint8_t *)&updateState,
+                                         sizeof(lwm2mcore_SwUpdateState_t)));
     return LE_OK;
 }
 
@@ -285,7 +286,8 @@ le_result_t  avcApp_SetSwUpdateResult
     lwm2mcore_SwUpdateResult_t updateResult
 )
 {
-    LE_DEBUG("Stub");
+    LE_ASSERT_OK(WriteFs(SW_UPDATE_RESULT_PATH, (uint8_t *)&updateResult,
+                                          sizeof(lwm2mcore_SwUpdateResult_t)));
     return LE_OK;
 }
 
