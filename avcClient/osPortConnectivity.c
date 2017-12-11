@@ -1830,6 +1830,45 @@ lwm2mcore_Sid_t lwm2mcore_GetLac
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Retrieve the Tracking Area Code (LTE)
+ * This API treatment needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetServingCellLteTracAreaCode
+(
+    uint16_t* valuePtr  ///< [INOUT] data buffer
+)
+{
+    lwm2mcore_Sid_t sID;
+    uint16_t tac;
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    tac = le_mrc_GetServingCellLteTracAreaCode();
+    if (UINT16_MAX != tac)
+    {
+        *valuePtr = tac;
+        sID = LWM2MCORE_ERR_COMPLETED_OK;
+    }
+    else
+    {
+        sID = LWM2MCORE_ERR_INVALID_STATE;
+    }
+
+    LE_DEBUG("Get TAC result: %d", sID);
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Retrieve the total number of SMS successfully transmitted during the collection period
  * This API treatment needs to have a procedural treatment
  *
