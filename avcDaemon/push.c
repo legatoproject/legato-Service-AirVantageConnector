@@ -218,6 +218,13 @@ le_result_t PushBuffer
         pDataPtr->link = LE_DLS_LINK_INIT;
         le_dls_Queue(&PushDataList, &pDataPtr->link);
     }
+    else
+    {
+        if (handlerPtr != NULL)
+        {
+            handlerPtr(LE_AVDATA_PUSH_FAILED, contextPtr);
+        }
+    }
 
     return result;
 }
