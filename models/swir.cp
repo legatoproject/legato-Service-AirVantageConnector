@@ -15,6 +15,7 @@
           <variable default-label="Unexpected Reset Counter" path="8" type="int"></variable>
           <variable default-label="Total Reset Counter" path="9" type="int"></variable>
           <variable default-label="LAC" path="10" type="int"></variable>
+          <variable default-label="TAC" path="11" type="int"></variable>
         </node>
         <node default-label="Susbcription" path="10241">
           <variable default-label="Module identity (IMEI)" path="0" type="string"></variable>
