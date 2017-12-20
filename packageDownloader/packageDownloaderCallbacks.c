@@ -49,11 +49,10 @@
 //--------------------------------------------------------------------------------------------------
 /**
  * Curl timeout in seconds. Timeout, if the download speed is less than CURL_MINIMUM_SPEED for
- * more than CURL_TIMEOUT_SECONDS. 1000 seconds is chosen, so that the downloader thread has a
- * slightly larger timeout than the store thread which has a timeout of 900 seconds.
+ * more than CURL_TIMEOUT_SECONDS.
  */
 //--------------------------------------------------------------------------------------------------
-#define CURL_TIMEOUT_SECONDS            1000L
+#define CURL_TIMEOUT_SECONDS            350L
 
 //--------------------------------------------------------------------------------------------------
 /**
