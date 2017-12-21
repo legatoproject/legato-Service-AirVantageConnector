@@ -527,7 +527,7 @@ static int EventHandler
             // automatically initiated (session is not stopped).
             if (LE_AVC_BOOTSTRAP_SESSION == le_avc_GetSessionType())
             {
-                avcServer_UpdateStatus(LE_AVC_AUTH_FAILED, LE_AVC_UNKNOWN_UPDATE,
+                avcServer_UpdateStatus(LE_AVC_SESSION_FAILED, LE_AVC_UNKNOWN_UPDATE,
                                        -1, -1, LE_AVC_ERR_NONE);
                 LE_ERROR("Session failure on bootstrap server");
                 le_event_Report(BsFailureEventId, NULL, 0);
