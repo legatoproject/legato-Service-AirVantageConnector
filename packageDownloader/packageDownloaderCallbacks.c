@@ -715,6 +715,8 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
             case CURLE_COULDNT_RESOLVE_HOST:
             case CURLE_OPERATION_TIMEDOUT:
             case CURLE_RECV_ERROR:
+            case CURLE_PARTIAL_FILE:
+                LE_DEBUG("Received error: %s", curl_easy_strerror(rc));
                 retry++;
                 break;
             case CURLE_COULDNT_CONNECT:
