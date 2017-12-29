@@ -944,9 +944,11 @@ static le_result_t AcceptPendingConnection
 
     CurrentState = AVC_CONNECTION_IN_PROGRESS;
 
-    if (LE_OK != avcClient_Connect())
+    le_result_t result = avcServer_StartSession();
+
+    if (LE_OK != result)
     {
-        LE_ERROR("Error accepting connection");
+        LE_ERROR("Error accepting connection: %s", LE_RESULT_TXT(result));
         return LE_FAULT;
     }
 
@@ -1668,7 +1670,7 @@ static void LaunchConnectExpiryHandler
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    avcClient_Connect();
+    avcServer_StartSession();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1754,7 +1756,7 @@ static void ConnectToServer
 )
 {
     // Start a session.
-    if (LE_DUPLICATE == avcClient_Connect())
+    if (LE_DUPLICATE == avcServer_StartSession())
     {
         // Session is already connected, but wireless network could have been de-provisioned
         // due to NAT timeout. Do a registration update to re-establish connection.
@@ -2340,7 +2342,7 @@ le_result_t avcServer_RequestSession
     else
     {
         LE_DEBUG("Unconditionally accepting request to open session.");
-        result = avcClient_Connect();
+        result = avcServer_StartSession();
     }
 
     return result;
@@ -2363,7 +2365,7 @@ le_result_t avcServer_StartSession
 {
     le_result_t result = avcClient_Connect();
 
-    if (LE_BUSY == result)  // Retry timer is active
+    if ((LE_BUSY == result) && avcClient_IsRetryTimerActive())  // Retry timer is active
     {
         avcClient_ResetRetryTimer();
         return avcClient_Connect();

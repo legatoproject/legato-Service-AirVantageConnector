@@ -166,6 +166,16 @@ void avcClient_ResetRetryTimer
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Checks whether retry timer is active
+ */
+//--------------------------------------------------------------------------------------------------
+bool avcClient_IsRetryTimerActive
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Initialize the AVC client sub-component.
  *
  * @note This function should be called during the initializaion phase of the AVC daemon.

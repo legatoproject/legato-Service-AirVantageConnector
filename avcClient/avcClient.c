@@ -540,6 +540,7 @@ static int EventHandler
                                    -1, -1, LE_AVC_ERR_NONE);
 
             SessionStarted = false;
+            AuthenticationPhase = false;
             break;
 
         case LWM2MCORE_EVENT_LWM2M_SESSION_TYPE_START:
@@ -595,6 +596,7 @@ static int EventHandler
             {
                 LE_WARN("Authentication to DM failed");
             }
+            AuthenticationPhase = false;
             avcServer_UpdateStatus(LE_AVC_AUTH_FAILED, LE_AVC_UNKNOWN_UPDATE,
                                    -1, -1, LE_AVC_ERR_NONE);
             break;
@@ -1099,6 +1101,26 @@ void avcClient_StopActivityTimer
                                        activityTimerFlag,
                                        NULL);
     }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Checks whether retry timer is active
+ */
+//--------------------------------------------------------------------------------------------------
+bool avcClient_IsRetryTimerActive
+(
+    void
+)
+{
+    bool isRetryTimerRunning = false;
+
+    if (NULL != RetryTimerRef)
+    {
+        isRetryTimerRunning = le_timer_IsRunning(RetryTimerRef);
+    }
+
+    return isRetryTimerRunning;
 }
 
 //--------------------------------------------------------------------------------------------------
