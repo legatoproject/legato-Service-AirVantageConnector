@@ -324,6 +324,14 @@ le_result_t packageDownloader_GetResumeInfo
         return result;
     }
 
+    if (*uriLenPtr >= LWM2MCORE_PACKAGE_URI_MAX_BYTES)
+    {
+        LE_ERROR("Uri length too big. Max allowed: %d, Found: %zd",
+                  LWM2MCORE_PACKAGE_URI_MAX_BYTES - 1,
+                  *uriLenPtr);
+        return LE_FAULT;
+    }
+
     size_t fileLen = sizeof(lwm2mcore_UpdateType_t);
     result = ReadFs(UPDATE_TYPE_FILENAME, (uint8_t*)typePtr, &fileLen);
     if ((LE_OK != result) || (sizeof(lwm2mcore_UpdateType_t) != fileLen))
@@ -1453,6 +1461,7 @@ le_result_t packageDownloader_BytesLeftToDownload
     size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
     lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
     avcApp_InternalState_t internalState;
+    memset(downloadUri, 0, sizeof(downloadUri));
 
     // Check if an update package URI is stored
     if (LE_OK == packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))

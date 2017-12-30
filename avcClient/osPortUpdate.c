@@ -918,7 +918,7 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
     lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
     bool downloadResume = false;
     uint64_t numBytesToDownload = 0;
-    memset(downloadUri, 0, uriLen);
+    memset(downloadUri, 0, sizeof(downloadUri));
 
     // Check if an update package URI is stored
     if (LE_OK != packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
