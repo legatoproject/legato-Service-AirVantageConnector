@@ -178,7 +178,7 @@ typedef struct
     le_avc_Status_t     updateStatus;   ///< Update status
     le_avc_UpdateType_t updateType;     ///< Update type
     int32_t             totalNumBytes;  ///< Total number of bytes to download
-    int32_t             dloadProgress;  ///< Download Progress in percent
+    int32_t             progress;       ///< Progress in percent
     le_avc_ErrorCode_t  errorCode;      ///< Error code
 }
 AvcUpdateStatusData_t;
@@ -192,7 +192,7 @@ typedef struct
 {
     le_avc_Status_t updateStatus;   ///< Update status
     int32_t totalNumBytes;          ///< Total number of bytes to download
-    int32_t downloadProgress;       ///< Download Progress in %
+    int32_t progress;               ///< Progress in percent
     void* contextPtr;               ///< Context
 }
 UpdateStatusData_t;
@@ -964,7 +964,7 @@ static void SendUpdateStatusEvent
 (
     le_avc_Status_t updateStatus,   ///< [IN] Update status
     int32_t totalNumBytes,          ///< [IN] Total number of bytes to download
-    int32_t downloadProgress,       ///< [IN] Download Progress in %
+    int32_t progress,               ///< [IN] Progress in percent
     void* contextPtr                ///< [IN] Context
 )
 {
@@ -973,12 +973,12 @@ static void SendUpdateStatusEvent
     // Initialize the event data
     eventData.updateStatus = updateStatus;
     eventData.totalNumBytes = totalNumBytes;
-    eventData.downloadProgress = downloadProgress;
+    eventData.progress = progress;
     eventData.contextPtr = contextPtr;
 
     LE_DEBUG("Reporting %s", AvcSessionStateToStr(updateStatus));
     LE_DEBUG("Number of bytes to download %d", eventData.totalNumBytes);
-    LE_DEBUG("Progress %d", eventData.downloadProgress);
+    LE_DEBUG("Progress %d", eventData.progress);
     LE_DEBUG("ContextPtr %p", eventData.contextPtr);
 
     // Send the event to interested applications
@@ -1369,7 +1369,7 @@ static void ProcessUpdateStatus
         case LE_AVC_DOWNLOAD_PENDING:
             LE_DEBUG("Update type for DOWNLOAD is %d", data->updateType);
             CurrentState = AVC_DOWNLOAD_PENDING;
-            CurrentDownloadProgress = data->dloadProgress;
+            CurrentDownloadProgress = data->progress;
             CurrentTotalNumBytes = data->totalNumBytes;
             if (LE_AVC_UNKNOWN_UPDATE != data->updateType)
             {
@@ -1380,7 +1380,7 @@ static void ProcessUpdateStatus
         case LE_AVC_DOWNLOAD_IN_PROGRESS:
             LE_DEBUG("Update type for DOWNLOAD is %d", data->updateType);
             CurrentTotalNumBytes = data->totalNumBytes;
-            CurrentDownloadProgress = data->dloadProgress;
+            CurrentDownloadProgress = data->progress;
             CurrentUpdateType = data->updateType;
 
             if ((LE_AVC_APPLICATION_UPDATE == data->updateType) && (data->totalNumBytes >= 0))
@@ -1401,14 +1401,14 @@ static void ProcessUpdateStatus
                 // Use last stored value
                 data->totalNumBytes = CurrentTotalNumBytes;
             }
-            if (data->dloadProgress > 0)
+            if (data->progress > 0)
             {
-                CurrentDownloadProgress = data->dloadProgress;
+                CurrentDownloadProgress = data->progress;
             }
             else
             {
                 // Use last stored value
-                data->dloadProgress = CurrentDownloadProgress;
+                data->progress = CurrentDownloadProgress;
             }
             CurrentUpdateType = data->updateType;
 
@@ -1512,7 +1512,7 @@ static void ProcessUpdateStatus
     }
 
     // Process user agreement or forward to control app if applicable.
-    ProcessUserAgreement(data->updateStatus, data->totalNumBytes, data->dloadProgress);
+    ProcessUserAgreement(data->updateStatus, data->totalNumBytes, data->progress);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1525,7 +1525,7 @@ void avcServer_UpdateStatus
     le_avc_Status_t updateStatus,   ///< Update status
     le_avc_UpdateType_t updateType, ///< Update type
     int32_t totalNumBytes,          ///< Total number of bytes to download (-1 if not set)
-    int32_t dloadProgress,          ///< Download Progress in percent (-1 if not set)
+    int32_t progress,               ///< Progress in percent (-1 if not set)
     le_avc_ErrorCode_t errorCode    ///< Error code
 )
 {
@@ -1534,7 +1534,7 @@ void avcServer_UpdateStatus
     updateStatusData.updateStatus  = updateStatus;
     updateStatusData.updateType    = updateType;
     updateStatusData.totalNumBytes = totalNumBytes;
-    updateStatusData.dloadProgress = dloadProgress;
+    updateStatusData.progress = progress;
     updateStatusData.errorCode     = errorCode;
 
     le_event_Report(AvcUpdateStatusEvent, &updateStatusData, sizeof(updateStatusData));
@@ -2435,7 +2435,7 @@ static void FirstLayerUpdateStatusHandler
 
     clientHandlerFunc(eventDataPtr->updateStatus,
                       eventDataPtr->totalNumBytes,
-                      eventDataPtr->downloadProgress,
+                      eventDataPtr->progress,
                       le_event_GetContextPtr());
 }
 

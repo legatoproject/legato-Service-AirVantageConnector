@@ -1143,13 +1143,18 @@ static le_result_t StartUninstall
 {
     LE_DEBUG("Application '%s' uninstall requested", appNamePtr);
 
+    LE_DEBUG("Uninstall in progress");
+    avcServer_UpdateStatus(LE_AVC_UNINSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
+                           -1, 0, LE_AVC_ERR_NONE);
+
+    // Update Daemon doesn't send any callback notification for single app removal. So returning
+    // LE_OK from the following function means app is removed successfully.
     le_result_t result = le_appRemove_Remove(appNamePtr);
 
     if (result == LE_OK)
     {
-        LE_DEBUG("Uninstall in progress");
         avcServer_UpdateStatus(LE_AVC_UNINSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
-                               -1, -1, LE_AVC_ERR_NONE);
+                               -1, 100, LE_AVC_ERR_NONE);
     }
     else
     {
@@ -1545,11 +1550,11 @@ static void UpdateProgressHandler
     switch (updateState)
     {
         case LE_UPDATE_STATE_UNPACKING:
-            LE_INFO("Unpacking package, percentDone: %d.", percentDone);
+            LE_DEBUG("Unpacking package, percentDone: %d.", percentDone);
             break;
 
         case LE_UPDATE_STATE_DOWNLOAD_SUCCESS:
-             SetObj9State(CurrentObj9,
+            SetObj9State(CurrentObj9,
                           LWM2MCORE_SW_UPDATE_STATE_DELIVERED,
                           LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED);
             LE_INFO("Package delivered");
@@ -1568,11 +1573,11 @@ static void UpdateProgressHandler
                                    percentDone,
                                    LE_AVC_ERR_NONE);
 
-            LE_INFO("Doing update.");
+            LE_DEBUG("Installation Progress: %d.", percentDone);
             break;
 
         case LE_UPDATE_STATE_SUCCESS:
-            LE_INFO("Install completed.");
+            LE_DEBUG("Install completed.");
             avcServer_UpdateStatus(LE_AVC_INSTALL_COMPLETE,
                                    LE_AVC_APPLICATION_UPDATE,
                                    -1,
@@ -1583,7 +1588,7 @@ static void UpdateProgressHandler
             break;
 
         case LE_UPDATE_STATE_FAILED:
-            LE_DEBUG("Install/uninstall failed.");
+            LE_ERROR("Install/uninstall failed.");
 
             // Get the error code.
             switch (le_update_GetErrorCode())
@@ -2333,11 +2338,9 @@ le_result_t avcApp_StartUpdate
        return LE_FAULT;
     }
 
-    // Start unpacking the downloaded file.
+    // Start unpacking the downloaded file. No need to close the readFd again as it will be closed
+    // by underlying messaging api.
     result = le_update_Start(readFd);
-
-    // Close fd
-    CloseFd(readFd);
 
     if (result != LE_OK)
     {

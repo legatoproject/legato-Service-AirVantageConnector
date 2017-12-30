@@ -405,12 +405,12 @@ static int PackageEventHandler
             if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
-                                       -1, -1, LE_AVC_ERR_NONE);
+                                       -1, 0, LE_AVC_ERR_NONE);
             }
             else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
-                                       -1, -1, LE_AVC_ERR_NONE);
+                                       -1, 0, LE_AVC_ERR_NONE);
             }
             else
             {

@@ -91,7 +91,7 @@ static void LaunchUpdate
         case LWM2MCORE_FW_UPDATE_TYPE:
             LE_DEBUG("Launch FW update");
             avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
-                                   -1, -1, LE_AVC_ERR_NONE);
+                                   -1, 0, LE_AVC_ERR_NONE);
             if (DWL_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING))
             {
                 LE_ERROR("Unable to set FW update state to UPDATING");
