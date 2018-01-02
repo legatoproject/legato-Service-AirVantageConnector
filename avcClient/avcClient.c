@@ -561,6 +561,17 @@ static int EventHandler
             AuthenticationPhase = false;
             break;
 
+        case LWM2MCORE_EVENT_LWM2M_SESSION_INACTIVE:
+            // There is no activity in CoAP layer at this point.
+            // If the session is not initiated by user and avc service is in idle i.e.,
+            // no SOTA or FOTA operation in progress then tear down the session.
+            if (avcServer_IsIdle() && !avcServer_IsUserSession())
+            {
+                LE_DEBUG("Disconnecting polling timer initiated session");
+                avcClient_Disconnect(true);
+            }
+            break;
+
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_DETAILS:
         case LWM2MCORE_EVENT_DOWNLOAD_PROGRESS:
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FINISHED:

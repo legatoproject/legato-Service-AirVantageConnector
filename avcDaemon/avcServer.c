@@ -456,6 +456,13 @@ static uint16_t RetryTimers[LE_AVC_NUM_RETRY_TIMERS] = {15, 60, 240, 480, 1440, 
 // ------------------------------------------------------------------------------------------------
 static le_timer_Ref_t PollingTimerRef = NULL;
 
+// -------------------------------------------------------------------------------------------------
+/**
+ * Is session initiated by user?
+ */
+// ------------------------------------------------------------------------------------------------
+static bool IsUserSession = false;
+
 
 //--------------------------------------------------------------------------------------------------
 // Local functions
@@ -2408,6 +2415,37 @@ le_result_t avcServer_ReleaseSession
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Is the current state AVC_IDLE?
+ */
+//--------------------------------------------------------------------------------------------------
+bool avcServer_IsIdle
+(
+    void
+)
+{
+    if (AVC_IDLE == CurrentState)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Is the current session initiated by user app?
+ */
+//--------------------------------------------------------------------------------------------------
+bool avcServer_IsUserSession
+(
+    void
+)
+{
+    return IsUserSession;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Reset the stored download agreement
  */
 //--------------------------------------------------------------------------------------------------
@@ -2628,6 +2666,7 @@ le_result_t le_avc_StartSession
     void
 )
 {
+    IsUserSession = true;
     StopDeferTimer(LE_AVC_USER_AGREEMENT_CONNECTION);
     return avcServer_StartSession();
 }
@@ -2646,6 +2685,7 @@ le_result_t le_avc_StopSession
     void
 )
 {
+    IsUserSession = false;
     return avcClient_Disconnect(true);
 }
 

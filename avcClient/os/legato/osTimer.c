@@ -15,7 +15,19 @@
 #include "legato.h"
 #include "interfaces.h"
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * LwM2M step timer
+ */
+//--------------------------------------------------------------------------------------------------
 static le_timer_Ref_t Lwm2mStepTimerRef = NULL;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Timer to monitor LwM2M inactivity
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t Lwm2mInactivityTimerRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -101,8 +113,53 @@ bool lwm2mcore_TimerSet
                     timerInterval.sec = time;
                     timerInterval.usec = 0;
 
-                    start = le_timer_SetInterval (Lwm2mStepTimerRef, timerInterval);
+                    le_timer_SetInterval (Lwm2mStepTimerRef, timerInterval);
                     start = le_timer_Start (Lwm2mStepTimerRef);
+                }
+            }
+            break;
+
+            case LWM2MCORE_TIMER_INACTIVITY:
+            {
+                if (Lwm2mInactivityTimerRef == NULL)
+                {
+                    timerInterval.sec = time;
+                    timerInterval.usec = 0;
+                    Lwm2mInactivityTimerRef = le_timer_Create ("lwm2mInactivityTimer");
+                    if (Lwm2mInactivityTimerRef)
+                    {
+                        if ((LE_OK != le_timer_SetInterval (Lwm2mInactivityTimerRef, timerInterval))
+                            || (LE_OK != le_timer_SetHandler (Lwm2mInactivityTimerRef, TimerHandler))
+                            || (LE_OK != le_timer_SetContextPtr(Lwm2mInactivityTimerRef, (void*) cb))
+                            || (LE_OK != le_timer_Start (Lwm2mInactivityTimerRef)))
+                        {
+                            start = LE_FAULT;
+                        }
+                        else
+                        {
+                            start = LE_OK;
+                        }
+                    }
+                }
+                else
+                {
+                    le_result_t stop = LE_FAULT;
+                    /* check if the timer is running */
+                    if (le_timer_IsRunning (Lwm2mInactivityTimerRef))
+                    {
+                        /* Stop the timer */
+                        stop = le_timer_Stop (Lwm2mInactivityTimerRef);
+                        if (stop != LE_OK)
+                        {
+                            LE_ERROR ("Error when stopping inactivity timer");
+                        }
+                    }
+
+                    timerInterval.sec = time;
+                    timerInterval.usec = 0;
+
+                    le_timer_SetInterval (Lwm2mInactivityTimerRef, timerInterval);
+                    start = le_timer_Start (Lwm2mInactivityTimerRef);
                 }
             }
             break;
@@ -149,6 +206,15 @@ bool lwm2mcore_TimerStop
             }
             break;
 
+            case LWM2MCORE_TIMER_INACTIVITY:
+            {
+                if (Lwm2mInactivityTimerRef != NULL)
+                {
+                    stop = le_timer_Stop (Lwm2mInactivityTimerRef);
+                }
+            }
+            break;
+
             default:
             break;
         }
@@ -189,13 +255,23 @@ bool lwm2mcore_TimerIsRunning
                     isRunning = le_timer_IsRunning  (Lwm2mStepTimerRef);
                 }
             }
+            LE_DEBUG ("LWM2MCORE_TIMER_STEP timer is running %d", isRunning);
+            break;
+
+            case LWM2MCORE_TIMER_INACTIVITY:
+            {
+                if (Lwm2mInactivityTimerRef != NULL)
+                {
+                    isRunning = le_timer_IsRunning  (Lwm2mInactivityTimerRef);
+                }
+            }
+            LE_DEBUG ("LWM2MCORE_TIMER_INACTIVITY timer is running %d", isRunning);
             break;
 
             default:
             break;
         }
     }
-    LE_DEBUG ("LWM2MCORE_TIMER_STEP timer is running %d", isRunning);
     return isRunning;
 }
 
