@@ -316,12 +316,15 @@ static bool IsHiddenApp
     {
         static char* appList[] =
             {
+                "atAirVantage",
+                "atQmiLinker",
                 "airvantage",
                 "audioService",
                 "avcService",
                 "cellNetService",
                 "dataConnectionService",
                 "modemService",
+                "portService",
                 "positioningService",
                 "powerMgr",
                 "secStore",
