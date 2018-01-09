@@ -295,7 +295,10 @@ static size_t GetOsVersion
         if (0 == uname(&linuxInfo))
         {
             LE_INFO("Linux Version: %s", linuxInfo.release);
-            returnedLen = snprintf(versionBufferPtr, len, linuxInfo.release, strlen(linuxInfo.release));
+            returnedLen = snprintf(versionBufferPtr,
+                                   len,
+                                   linuxInfo.release,
+                                   strlen(linuxInfo.release));
         }
         else
         {
@@ -652,7 +655,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceManufacturer
             break;
     }
 
-    LE_DEBUG("lwm2mcore_DeviceManufacturer result: %d", sID);
+    LE_DEBUG("Result: %d", sID);
     return sID;
 }
 
@@ -700,7 +703,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceModelNumber
             break;
     }
 
-    LE_DEBUG("lwm2mcore_DeviceModelNumber result: %d", sID);
+    LE_DEBUG("Result: %d", sID);
     return sID;
 }
 
@@ -748,7 +751,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceSerialNumber
             break;
     }
 
-    LE_DEBUG("lwm2mcore_DeviceSerialNumber result: %d", sID);
+    LE_DEBUG("Result: %d", sID);
     return sID;
 }
 
@@ -968,7 +971,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceImei
             break;
     }
 
-    LE_DEBUG("lwm2mcore_DeviceImei result: %d", sID);
+    LE_DEBUG("Result: %d", sID);
     return sID;
 }
 
@@ -992,6 +995,7 @@ lwm2mcore_Sid_t lwm2mcore_GetIccid
 {
     lwm2mcore_Sid_t sID;
     le_result_t result;
+    le_sim_Id_t simId = le_sim_GetSelectedCard();
     char iccid[LE_SIM_ICCID_BYTES];
     size_t iccidLen;
 
@@ -1000,9 +1004,15 @@ lwm2mcore_Sid_t lwm2mcore_GetIccid
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
+    // Check if SIM card is present
+    if (!le_sim_IsPresent(simId))
+    {
+        return LWM2MCORE_ERR_INVALID_STATE;
+    }
+
     memset(iccid, 0, sizeof(iccid));
 
-    result = le_sim_GetICCID(le_sim_GetSelectedCard(), iccid, sizeof(iccid));
+    result = le_sim_GetICCID(simId, iccid, sizeof(iccid));
     switch (result)
     {
         case LE_OK:
@@ -1034,7 +1044,7 @@ lwm2mcore_Sid_t lwm2mcore_GetIccid
             break;
     }
 
-    LE_DEBUG("lwm2mcore_DeviceIccid result: %d", sID);
+    LE_DEBUG("Result: %d", sID);
     return sID;
 }
 
@@ -1228,8 +1238,16 @@ lwm2mcore_Sid_t lwm2mcore_GetSubscriptionIdentity
     }
     else
     {
+        le_sim_Id_t simId = le_sim_GetSelectedCard();
+
+        // Check if SIM card is present
+        if (!le_sim_IsPresent(simId))
+        {
+            return LWM2MCORE_ERR_INVALID_STATE;
+        }
+
         // Retrieve the IMSI for GSM/UMTS/LTE
-        result = le_sim_GetIMSI(le_sim_GetSelectedCard(), imsi, sizeof(imsi));
+        result = le_sim_GetIMSI(simId, imsi, sizeof(imsi));
         switch (result)
         {
             case LE_OK:
@@ -1262,7 +1280,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSubscriptionIdentity
         }
     }
 
-    LE_DEBUG("lwm2mcore_DeviceSubscriptionIdentity result: %d", sID);
+    LE_DEBUG("Result: %d", sID);
     return sID;
 }
 
@@ -1286,6 +1304,7 @@ lwm2mcore_Sid_t lwm2mcore_GetMsisdn
 {
     lwm2mcore_Sid_t sID;
     le_result_t result;
+    le_sim_Id_t simId = le_sim_GetSelectedCard();
     char msisdn[LE_MDMDEFS_PHONE_NUM_MAX_BYTES];
     size_t msisdnLen;
 
@@ -1294,9 +1313,15 @@ lwm2mcore_Sid_t lwm2mcore_GetMsisdn
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
+    // Check if SIM card is present
+    if (!le_sim_IsPresent(simId))
+    {
+        return LWM2MCORE_ERR_INVALID_STATE;
+    }
+
     memset(msisdn, 0, sizeof(msisdn));
 
-    result = le_sim_GetSubscriberPhoneNumber(le_sim_GetSelectedCard(), msisdn, sizeof(msisdn));
+    result = le_sim_GetSubscriberPhoneNumber(simId, msisdn, sizeof(msisdn));
     switch (result)
     {
         case LE_OK:
@@ -1328,7 +1353,7 @@ lwm2mcore_Sid_t lwm2mcore_GetMsisdn
             break;
     }
 
-    LE_DEBUG("lwm2mcore_DeviceMsisdn result: %d", sID);
+    LE_DEBUG("Result: %d", sID);
     return sID;
 }
 
@@ -1371,7 +1396,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceTemperature
         sID = LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    LE_DEBUG("lwm2mCore_DeviceTemperature result: %d", sID);
+    LE_DEBUG("Result: %d", sID);
     return sID;
 }
 
