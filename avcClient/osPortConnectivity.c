@@ -409,7 +409,7 @@ static lwm2mcore_Sid_t GetCellularIpAddresses
         }
         i++;
     }
-    while (   (*ipAddrNbPtr <= CONN_MONITOR_IP_ADDRESSES_MAX_NB)
+    while (   (*ipAddrNbPtr < CONN_MONITOR_IP_ADDRESSES_MAX_NB)
            && (profileRef)
            && (LWM2MCORE_ERR_COMPLETED_OK == sID)
           );
@@ -501,7 +501,7 @@ static lwm2mcore_Sid_t GetCellularRouterIpAddresses
         }
         i++;
     }
-    while (   (*ipAddrNbPtr <= CONN_MONITOR_ROUTER_IP_ADDRESSES_MAX_NB)
+    while (   (*ipAddrNbPtr < CONN_MONITOR_ROUTER_IP_ADDRESSES_MAX_NB)
            && (profileRef)
            && (LWM2MCORE_ERR_COMPLETED_OK == sID)
           );
@@ -570,7 +570,7 @@ static lwm2mcore_Sid_t GetCellularApn
         }
         i++;
     }
-    while (   (*apnNbPtr <= CONN_MONITOR_APN_MAX_NB)
+    while (   (*apnNbPtr < CONN_MONITOR_APN_MAX_NB)
            && (profileRef)
            && (LWM2MCORE_ERR_COMPLETED_OK == sID)
           );
