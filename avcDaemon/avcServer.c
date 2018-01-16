@@ -3492,6 +3492,12 @@ le_result_t le_avc_SetPollingTimer
     // lifetime in the server object is in seconds and polling timer is in minutes
     uint32_t lifetime = pollingTimer * SECONDS_IN_A_MIN;
 
+    // 0 is not a valid value for lifetime, a specific value needs to be used
+    if (POLLING_TIMER_DISABLED == lifetime)
+    {
+        lifetime = LWM2MCORE_LIFETIME_VALUE_DISABLED;
+    }
+
     // set lifetime in lwm2mcore
     sid = lwm2mcore_SetLifetime(lifetime);
 
