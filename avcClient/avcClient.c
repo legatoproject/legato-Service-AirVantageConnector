@@ -149,6 +149,12 @@ static le_timer_Ref_t ActivityTimerRef = NULL;
 //--------------------------------------------------------------------------------------------------
 static le_mem_PoolRef_t ActivityTimerEventsPool;
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Flag used to indicate a retry pending
+ */
+//--------------------------------------------------------------------------------------------------
+static bool RetryPending = false;
 
 //--------------------------------------------------------------------------------------------------
 // Local functions
@@ -537,9 +543,13 @@ static int EventHandler
             break;
 
         case LWM2MCORE_EVENT_SESSION_FINISHED:
-            LE_DEBUG("Session finished");
-            avcServer_UpdateStatus(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
-                                   -1, -1, LE_AVC_ERR_NONE);
+            // If an AVC session retry is ongoing, do not report SESSION_STOPPED
+            if (!RetryPending)
+            {
+                LE_DEBUG("Session finished");
+                avcServer_UpdateStatus(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
+            }
 
             SessionStarted = false;
             AuthenticationPhase = false;
@@ -827,6 +837,14 @@ le_result_t avcClient_Connect
     // performed by stopping the previous data connection first.
     if (NULL != Lwm2mInstanceRef)
     {
+        // Disconnect LwM2M session
+        if (true == lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
+        {
+            RetryPending = true;
+            lwm2mcore_Disconnect(Lwm2mInstanceRef);
+            RetryPending = false;
+        }
+
         StopBearer();
     }
 
