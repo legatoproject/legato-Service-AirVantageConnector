@@ -1514,8 +1514,8 @@ static void ProcessUpdateStatus
             break;
 
         default:
-            LE_DEBUG("Unhandled updateStatus %d", data->updateStatus);
-            break;
+            LE_WARN("Unhandled updateStatus %d", data->updateStatus);
+            return;
     }
 
     // Process user agreement or forward to control app if applicable.

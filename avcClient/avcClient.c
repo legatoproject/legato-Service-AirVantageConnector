@@ -314,6 +314,8 @@ static void ConnectionStateHandler
             // Call the callback.
             BearerEventCb(connected, contextPtr);
             DataConnected = false;
+            SessionStarted = false;
+            AuthenticationPhase = false;
         }
     }
 }
