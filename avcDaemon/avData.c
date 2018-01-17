@@ -2601,6 +2601,12 @@ le_result_t le_avdata_GetInt
     int32_t* valuePtr ///< [OUT] Retrieved integer
 )
 {
+    if (valuePtr == NULL)
+    {
+        LE_KILL_CLIENT("valuePtr is NULL.");
+        return LE_FAULT;
+    }
+
     AssetValue_t assetValue;
     le_avdata_DataType_t type;
 
@@ -2664,6 +2670,12 @@ le_result_t le_avdata_GetFloat
     double* valuePtr  ///< [OUT] Retrieved float
 )
 {
+    if (valuePtr == NULL)
+    {
+        LE_KILL_CLIENT("valuePtr is NULL.");
+        return LE_FAULT;
+    }
+
     AssetValue_t assetValue;
     le_avdata_DataType_t type;
 
@@ -2727,6 +2739,12 @@ le_result_t le_avdata_GetBool
     bool* valuePtr    ///< [OUT] Retrieved bool
 )
 {
+    if (valuePtr == NULL)
+    {
+        LE_KILL_CLIENT("valuePtr is NULL.");
+        return LE_FAULT;
+    }
+
     AssetValue_t assetValue;
     le_avdata_DataType_t type;
 
@@ -2791,6 +2809,12 @@ le_result_t le_avdata_GetString
     size_t valueNumElements ///< [IN] String buffer size in bytes
 )
 {
+    if (value == NULL)
+    {
+        LE_KILL_CLIENT("value is NULL.");
+        return LE_FAULT;
+    }
+
     AssetValue_t assetValue;
     le_avdata_DataType_t type;
 
@@ -2855,6 +2879,12 @@ le_result_t le_avdata_GetBoolArg
     bool* boolArgPtr                             ///< [OUT] Retrieved bool arg
 )
 {
+    if (boolArgPtr == NULL)
+    {
+        LE_KILL_CLIENT("boolArgPtr is NULL.");
+        return LE_FAULT;
+    }
+
     Argument_t* argPtr = GetArg(argumentListRef, argName);
 
     if (argPtr != NULL)
@@ -2895,6 +2925,12 @@ le_result_t le_avdata_GetFloatArg
     double* floatArgPtr                          ///< [OUT] Retrieved float arg
 )
 {
+    if (floatArgPtr == NULL)
+    {
+        LE_KILL_CLIENT("floatArgPtr is NULL.");
+        return LE_FAULT;
+    }
+
     Argument_t* argPtr = GetArg(argumentListRef, argName);
 
     if (argPtr != NULL)
@@ -2936,6 +2972,12 @@ le_result_t le_avdata_GetIntArg
     int32_t* intArgPtr                           ///< [OUT] Retrieved int arg
 )
 {
+    if (intArgPtr == NULL)
+    {
+        LE_KILL_CLIENT("intArgPtr is NULL.");
+        return LE_FAULT;
+    }
+
     Argument_t* argPtr = GetArg(argumentListRef, argName);
     if (NULL == argPtr)
     {
@@ -2946,12 +2988,6 @@ le_result_t le_avdata_GetIntArg
     if (NULL == argName)
     {
         LE_ERROR("Argument name is NULL!");
-        return LE_NOT_FOUND;
-    }
-
-    if (NULL == intArgPtr)
-    {
-        LE_ERROR("intArgPtr is NULL!");
         return LE_NOT_FOUND;
     }
 
@@ -2984,6 +3020,12 @@ le_result_t le_avdata_GetStringArg
     size_t argNumElements                        ///< [IN] string arg buffer length
 )
 {
+    if (strArg == NULL)
+    {
+        LE_KILL_CLIENT("strArg is NULL.");
+        return LE_FAULT;
+    }
+
     Argument_t* argPtr = GetArg(argumentListRef, argName);
 
     if (argPtr != NULL)
@@ -3025,6 +3067,12 @@ le_result_t le_avdata_GetStringArgLength
     int32_t* strArgLenPtr ///< [OUT] Argument string length excluding terminating null byte
 )
 {
+    if (strArgLenPtr == NULL)
+    {
+        LE_KILL_CLIENT("strArgLenPtr is NULL.");
+        return LE_FAULT;
+    }
+
     Argument_t* argPtr = GetArg(argumentListRef, argName);
 
     if (argPtr != NULL)

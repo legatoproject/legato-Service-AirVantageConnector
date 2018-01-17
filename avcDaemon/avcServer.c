@@ -2964,6 +2964,12 @@ le_result_t le_avc_GetUpdateType
         ///< [OUT]
 )
 {
+    if (updateTypePtr == NULL)
+    {
+        LE_KILL_CLIENT("updateTypePtr is NULL.");
+        return LE_FAULT;
+    }
+
     if ( CurrentState == AVC_IDLE )
     {
         LE_ERROR("In AVC_IDLE state; no update pending or in progress");
@@ -3139,6 +3145,24 @@ le_result_t le_avc_GetApnConfig
     size_t userPasswordNumElements ///< [IN]  Password max bytes
 )
 {
+    if (apnName == NULL)
+    {
+        LE_KILL_CLIENT("apnName is NULL.");
+        return LE_FAULT;
+    }
+
+    if (userName == NULL)
+    {
+        LE_KILL_CLIENT("userName is NULL.");
+        return LE_FAULT;
+    }
+
+    if (userPassword == NULL)
+    {
+        LE_KILL_CLIENT("userPassword is NULL.");
+        return LE_FAULT;
+    }
+
     AvcConfigData_t config;
     le_result_t result;
 
@@ -3417,6 +3441,12 @@ le_result_t le_avc_GetPollingTimer
     uint32_t* pollingTimerPtr  ///< [OUT] Polling timer
 )
 {
+    if (pollingTimerPtr == NULL)
+    {
+        LE_KILL_CLIENT("pollingTimerPtr is NULL.");
+        return LE_FAULT;
+    }
+
     uint32_t pollingTimerCfg;
     uint32_t lifetime;
     lwm2mcore_Sid_t sid;
@@ -3552,6 +3582,12 @@ le_result_t le_avc_GetUserAgreement
     bool* isEnabledPtr                      ///< [OUT] true if enabled
 )
 {
+    if (isEnabledPtr == NULL)
+    {
+        LE_KILL_CLIENT("isEnabledPtr is NULL.");
+        return LE_FAULT;
+    }
+
     le_result_t result = LE_OK;
     AvcConfigData_t config;
 
