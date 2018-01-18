@@ -567,7 +567,7 @@ static int EventHandler
             // There is no activity in CoAP layer at this point.
             // If the session is not initiated by user and avc service is in idle i.e.,
             // no SOTA or FOTA operation in progress then tear down the session.
-            if (avcServer_IsIdle() && !avcServer_IsUserSession())
+            if (avcServer_IsIdle() && !avcServer_IsUserSession() && !AuthenticationPhase)
             {
                 LE_DEBUG("Disconnecting polling timer initiated session");
                 avcClient_Disconnect(true);
@@ -609,7 +609,6 @@ static int EventHandler
             {
                 LE_WARN("Authentication to DM failed");
             }
-            AuthenticationPhase = false;
             avcServer_UpdateStatus(LE_AVC_AUTH_FAILED, LE_AVC_UNKNOWN_UPDATE,
                                    -1, -1, LE_AVC_ERR_NONE);
             break;
