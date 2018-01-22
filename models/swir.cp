@@ -17,7 +17,7 @@
           <variable default-label="LAC" path="10" type="int"></variable>
           <variable default-label="TAC" path="11" type="int"></variable>
         </node>
-        <node default-label="Susbcription" path="10241">
+        <node default-label="Subscription" path="10241">
           <variable default-label="Module identity (IMEI)" path="0" type="string"></variable>
           <variable default-label="SIM card identifier (ICCID)" path="1" type="string"></variable>
           <variable default-label="Subscription identity (IMSI/ESN/MEID)" path="2" type="string"></variable>
