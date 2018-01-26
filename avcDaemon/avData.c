@@ -602,12 +602,13 @@ static bool IsAssetDataPathValid
 
     // The path cannot resemble a lwm2m object.
     char *savePtr = NULL;
-    char* pathDup = strdup(path);
+    char pathDup[LE_AVDATA_PATH_NAME_BYTES];
+    LE_ASSERT(le_utf8_Copy(pathDup, path, sizeof(pathDup), NULL) == LE_OK);
+
     char* firstLevelPath = strtok_r(pathDup, SLASH_DELIMITER_STRING, &savePtr);
 
     if (firstLevelPath == NULL)
     {
-        free(pathDup);
         return false;
     }
 
@@ -616,12 +617,10 @@ static bool IsAssetDataPathValid
     {
         if (strcmp(firstLevelPath, InvalidFirstLevelPathNames[i]) == 0)
         {
-            free(pathDup);
             return false;
         }
     }
 
-    free(pathDup);
     return true;
 }
 
@@ -1557,7 +1556,7 @@ static le_result_t EncodeMultiData
         return LE_FAULT;
     }
 
-    char* savedToken = ""; // initialized to an empty string.
+    char  savedToken[LE_AVDATA_PATH_NAME_BYTES] = ""; // initialized to an empty string.
     char* currToken = NULL;
     char* peekToken = NULL;
 
@@ -1567,7 +1566,8 @@ static le_result_t EncodeMultiData
     int i, j;
     for (i = minIndex; i <= maxIndex; i++)
     {
-        char* currStrCopy = strdup(list[i]);
+        char currStrCopy[LE_AVDATA_PATH_NAME_BYTES];
+        LE_ASSERT(le_utf8_Copy(currStrCopy, list[i], sizeof(currStrCopy), NULL) == LE_OK);
 
         // Getting the token of the current path level.
         currToken = strtok_r(currStrCopy, SLASH_DELIMITER_STRING, &savePtr);
@@ -1591,8 +1591,6 @@ static le_result_t EncodeMultiData
                     (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange,
                                               level+1, isClient, isNameSpaced)))
                 {
-                    free(currStrCopy);
-                    free(savedToken);
                     return LE_FAULT;
                 }
             }
@@ -1601,22 +1599,12 @@ static le_result_t EncodeMultiData
             if (NULL == currToken)
             {
                 LE_ERROR("currToken is NULL");
-                free(currStrCopy);
-                if (0 != strcmp(savedToken, ""))
-                {
-                    free(savedToken);
-                }
                 return LE_FAULT;
             }
 
             // Value name.
             if (CborNoError != cbor_encode_text_stringz(&mapNode, currToken))
             {
-                free(currStrCopy);
-                if (0 != strcmp(savedToken, ""))
-                {
-                    free(savedToken);
-                }
                 return LE_FAULT;
             }
 
@@ -1630,30 +1618,16 @@ static le_result_t EncodeMultiData
                 LE_ERROR("Fail to get asset data at [%s]. Result [%s]",
                          list[i], LE_RESULT_TXT(getValresult));
 
-                free(currStrCopy);
-                if (0 != strcmp(savedToken, ""))
-                {
-                    free(savedToken);
-                }
                 return LE_FAULT;
             }
 
             if (LE_OK != EncodeAssetData(type, assetValue, &mapNode))
             {
-                free(currStrCopy);
-                if (0 != strcmp(savedToken, ""))
-                {
-                    free(savedToken);
-                }
                 return LE_FAULT;
             }
 
             // Reset savedToken
-            if (0 != strcmp(savedToken, ""))
-            {
-                free(savedToken);
-            }
-            savedToken = "";
+            savedToken[0] = '\0';
         }
         else if (strcmp(currToken, savedToken) != 0)
         {
@@ -1667,8 +1641,6 @@ static le_result_t EncodeMultiData
                     (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange,
                                               level+1, isClient, isNameSpaced)))
                 {
-                    free(currStrCopy);
-                    free(savedToken);
                     return LE_FAULT;
                 }
             }
@@ -1677,18 +1649,13 @@ static le_result_t EncodeMultiData
             maxCurrRange = i;
 
             // Save the current token
-            if (0 != strcmp(savedToken, ""))
-            {
-                free(savedToken);
-            }
-            savedToken = strdup(currToken);
+            LE_ASSERT(le_utf8_Copy(savedToken, currToken, sizeof(savedToken), NULL) == LE_OK);
         }
         else
         {
             // Do nothing. We've encountered the same branch node.
         }
 
-        free(currStrCopy);
     }
 
     // This is to finish up the final range of branch nodes, in case the last path is not a leaf
@@ -1702,27 +1669,15 @@ static le_result_t EncodeMultiData
             (LE_OK != EncodeMultiData(list, &mapNode, minCurrRange, maxCurrRange,
                                       level+1, isClient, isNameSpaced)))
         {
-            if (0 != strcmp(savedToken, ""))
-            {
-                free(savedToken);
-            }
             return LE_FAULT;
         }
     }
 
     if (CborNoError != cbor_encoder_close_container(parentCborEncoder, &mapNode))
     {
-        if (0 != strcmp(savedToken, ""))
-        {
-            free(savedToken);
-        }
         return LE_FAULT;
     }
 
-    if (0 != strcmp(savedToken, ""))
-    {
-        free(savedToken);
-    }
     return LE_OK;
 }
 
