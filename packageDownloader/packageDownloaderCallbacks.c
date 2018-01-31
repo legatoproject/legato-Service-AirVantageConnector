@@ -259,6 +259,9 @@ static int GetDownloadInfo
     // just get the header, will always succeed
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOBODY, 1L);
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, NULL);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_XFERINFOFUNCTION, Progress);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_XFERINFODATA, (void *)pkgPtr);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOPROGRESS, 0L);
 
     // perform the download operation
     rc = curl_easy_perform(pkgPtr->curlPtr);
@@ -567,7 +570,14 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
 
     if (-1 == GetDownloadInfo(&pkg))
     {
-        return DWL_FAULT;
+        if ((DWL_ABORTED == pkg.result) || (DWL_SUSPEND == pkg.result))
+        {
+            return pkg.result;
+        }
+        else
+        {
+            return DWL_FAULT;
+        }
     }
 
     if (-1 == CheckHttpStatusCode(pkg.pkgInfo.httpRespCode))
