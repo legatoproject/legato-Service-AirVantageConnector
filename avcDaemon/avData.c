@@ -1917,7 +1917,7 @@ static le_result_t CreateArgList
                 argumentPtr->link = LE_DLS_LINK_INIT;
 
                 argumentPtr->argumentName = le_mem_ForceAlloc(StringPool);
-                strncpy(argumentPtr->argumentName, buf, LE_AVDATA_STRING_VALUE_BYTES);
+                le_utf8_Copy(argumentPtr->argumentName, buf, LE_AVDATA_STRING_VALUE_BYTES, NULL);
 
                 le_dls_Queue(argListRef, &(argumentPtr->link));
 
@@ -2754,6 +2754,7 @@ le_result_t le_avdata_SetBool
  * @return:
  *      - LE_BAD_PARAMETER - asset data being accessed is of the wrong data type
  *      - LE_UNAVAILABLE - asset data contains null value
+ *      - LE_OVERFLOW - asset data length exceeds the maximum length
  *      - others per GetVal
  */
 //--------------------------------------------------------------------------------------------------
@@ -2791,8 +2792,7 @@ le_result_t le_avdata_GetString
         return LE_BAD_PARAMETER;
     }
 
-    strncpy(value, assetValue.strValuePtr, valueNumElements);
-    return LE_OK;
+    return le_utf8_Copy(value, assetValue.strValuePtr, valueNumElements, NULL);
 }
 
 
@@ -2812,7 +2812,7 @@ le_result_t le_avdata_SetString
 {
     AssetValue_t assetValue;
     assetValue.strValuePtr = le_mem_ForceAlloc(StringPool);
-    strncpy(assetValue.strValuePtr, value, LE_AVDATA_STRING_VALUE_BYTES);
+    le_utf8_Copy(assetValue.strValuePtr, value, LE_AVDATA_STRING_VALUE_BYTES, NULL);
 
     return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_STRING, true, false);
 }
@@ -2964,7 +2964,8 @@ le_result_t le_avdata_GetIntArg
  *
  * @return:
  *      - LE_OK on success
- *      - LE_NOT_FOUND if argument doesn't exist, or its data type doesn't match the API.
+ *      - LE_NOT_FOUND if argument doesn't exist, or its data type doesn't match the API
+ *      - LE_OVERFLOW - argument length exceeds the maximum length
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avdata_GetStringArg
@@ -2987,8 +2988,7 @@ le_result_t le_avdata_GetStringArg
     {
         if (argPtr->argValType == LE_AVDATA_DATA_TYPE_STRING)
         {
-            strncpy(strArg, argPtr->argValue.strValuePtr, argNumElements);
-            return LE_OK;
+            return le_utf8_Copy(strArg, argPtr->argValue.strValuePtr, argNumElements, NULL);
         }
         else
         {
