@@ -8,5 +8,5 @@ requires:
 
 sources:
 {
-    sessionApp.c
+    main.c
 }

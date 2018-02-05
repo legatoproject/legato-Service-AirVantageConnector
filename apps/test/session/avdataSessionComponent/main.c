@@ -1,6 +1,6 @@
 //--------------------------------------------------------------------------------------------------
 /**
- * @file sessionApp.c
+ * @file main.c
  *
  * This component is used for testing the AirVantage request session feature.
  *

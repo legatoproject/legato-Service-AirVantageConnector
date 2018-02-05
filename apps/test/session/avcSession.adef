@@ -1,0 +1,18 @@
+
+executables:
+{
+    avcSessionApp = ( avcSessionComponent )
+}
+
+bindings:
+{
+    avcSessionApp.avcSessionComponent.le_avc -> avcService.le_avc
+}
+
+processes:
+{
+    run:
+    {
+        ( avcSessionApp )
+    }
+}

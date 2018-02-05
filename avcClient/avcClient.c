@@ -929,6 +929,10 @@ le_result_t avcClient_Disconnect
     {
         result = (lwm2mcore_Disconnect(Lwm2mInstanceRef)) ? LE_OK : LE_FAULT;
     }
+    else
+    {
+        result = LE_DUPLICATE;
+    }
 
     StopBearer();
 
