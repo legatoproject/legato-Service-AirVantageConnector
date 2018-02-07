@@ -27,7 +27,7 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Prefix to retrieve files from secStoreGlobal service.
+ * Prefix to retrieve files from secStore service.
  */
 //--------------------------------------------------------------------------------------------------
 #define SECURE_STORAGE_PREFIX   "/avms"
@@ -86,18 +86,18 @@ lwm2mcore_Sid_t lwm2mcore_GetCredential
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    char credsPathStr[SECSTOREGLOBAL_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+    char credsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
 
     LE_FATAL_IF(LE_OK != le_path_Concat("/",
                                         credsPathStr,
                                         sizeof(credsPathStr),
                                         CredentialLocations[credId],
                                         NULL), "Buffer is not long enough");
-    le_result_t result = secStoreGlobal_Read(credsPathStr, (uint8_t*)bufferPtr, lenPtr);
+    le_result_t result = le_secStore_Read(credsPathStr, (uint8_t*)bufferPtr, lenPtr);
     if (LE_OK != result)
     {
-        LE_ERROR("Unable to retrieve credentials for %d: %d %s",
-                 credId, result, LE_RESULT_TXT(result));
+        LE_ERROR("Unable to retrieve credentials for %d: %s: %d %s",
+                 credId, credsPathStr, result, LE_RESULT_TXT(result));
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
@@ -132,7 +132,7 @@ lwm2mcore_Sid_t lwm2mcore_SetCredential
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    char credsPathStr[SECSTOREGLOBAL_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+    char credsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
 
     LE_FATAL_IF(LE_OK != le_path_Concat("/",
                                         credsPathStr,
@@ -140,7 +140,7 @@ lwm2mcore_Sid_t lwm2mcore_SetCredential
                                         CredentialLocations[credId],
                                         NULL), "Buffer is not long enough");
 
-    le_result_t result = secStoreGlobal_Write(credsPathStr, (uint8_t*)bufferPtr, len);
+    le_result_t result = le_secStore_Write(credsPathStr, (uint8_t*)bufferPtr, len);
     if (LE_OK != result)
     {
         LE_ERROR("Unable to write credentials for %d", credId);
@@ -156,8 +156,8 @@ lwm2mcore_Sid_t lwm2mcore_SetCredential
 /**
  * Function to check if one credential is present in platform storage.
  *
- * Since there is no GetSize in the le_secStore.api (that provides secStoreGlobal), tries to
- * retrieve the credentials with a buffer too small.
+ * Since there is no GetSize in the le_secStore.api, tries to retrieve the credentials with a buffer
+ * too small.
  *
  * @return
  *      - true if the credential is present
@@ -213,7 +213,7 @@ bool lwm2mcore_DeleteCredential
         return LE_BAD_PARAMETER;
     }
 
-    char credsPathStr[SECSTOREGLOBAL_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+    char credsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
 
     LE_FATAL_IF(LE_OK != le_path_Concat("/",
                                         credsPathStr,
@@ -221,7 +221,7 @@ bool lwm2mcore_DeleteCredential
                                         CredentialLocations[credId],
                                         NULL), "Buffer is not long enough");
 
-    le_result_t result = secStoreGlobal_Delete(credsPathStr);
+    le_result_t result = le_secStore_Delete(credsPathStr);
     if ((LE_OK != result) && (LE_NOT_FOUND != result))
     {
         LE_ERROR("Unable to delete credentials for %d: %d %s",

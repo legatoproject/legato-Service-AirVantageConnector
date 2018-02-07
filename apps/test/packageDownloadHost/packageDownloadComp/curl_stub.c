@@ -224,7 +224,7 @@ CURLcode curl_easy_perform
         // to not re-send previous data
         if (lseek(fd, CurlTestHandler->dataOffset, SEEK_SET) == -1)
         {
-            LE_ERROR("Seek file to offset %zd failed.", CurlTestHandler->dataOffset);
+            LE_ERROR("Seek file to offset %d failed.", CurlTestHandler->dataOffset);
             close(fd);
             return LE_FAULT;
         }

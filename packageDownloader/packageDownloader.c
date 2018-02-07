@@ -899,7 +899,7 @@ static void* DownloadThread
     ret = LE_OK;
 
     // Connect to services used by this thread
-    secStoreGlobal_ConnectService();
+    le_secStore_ConnectService();
 
     pkgDwlPtr = (lwm2mcore_PackageDownloader_t*)ctxPtr;
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)pkgDwlPtr->ctxPtr;

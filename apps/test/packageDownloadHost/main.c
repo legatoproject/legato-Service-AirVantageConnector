@@ -162,7 +162,7 @@ static le_result_t CheckDownloadedFile
     // before starting comparison
     if (lseek(sourceFile.fd, CWE_IMAGE_START_OFFSET, SEEK_SET) == -1)
     {
-        LE_ERROR("Seek file to offset %zd failed.", CWE_IMAGE_START_OFFSET);
+        LE_ERROR("Seek file to offset %d failed.", CWE_IMAGE_START_OFFSET);
         close(sourceFile.fd);
         close(dwnldedFile.fd);
         return LE_FAULT;

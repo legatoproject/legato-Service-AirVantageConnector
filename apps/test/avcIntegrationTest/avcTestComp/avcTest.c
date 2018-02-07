@@ -753,13 +753,8 @@ static void* AvcThread
     void* contextPtr
 )
 {
-    LE_INFO("Connect to AVC, FW update, MRC, SIM and secStoreGlobal services");
+    LE_INFO("Connect to AVC service");
     le_avc_ConnectService();
-    le_fwupdate_ConnectService();
-    le_mrc_ConnectService();
-    le_sim_ConnectService();
-    secStoreGlobal_ConnectService();
-
 
     EventHandlerRef = le_event_AddHandler("MetaEventHandlerRef",
                                           AvcRegistrationEventId,

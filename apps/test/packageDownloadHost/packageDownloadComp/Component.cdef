@@ -5,7 +5,6 @@ requires:
         le_secStore.api                     [types-only]
         le_fwupdate.api                     [types-only]
         airVantage/le_avc.api               [types-only]
-        secureStorage/secStoreAdmin.api     [types-only]
         le_limit.api                        [types-only]
     }
     component:

@@ -23,7 +23,7 @@
  * This function is created automatically.
  */
 //--------------------------------------------------------------------------------------------------
-void secStoreGlobal_ConnectService
+void le_secStore_ConnectService
 (
     void
 )

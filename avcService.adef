@@ -80,6 +80,6 @@ bindings:
     avcDaemon.avcDaemon.le_temp -> modemService.le_temp
     avcDaemon.avcDaemon.le_pos -> positioningService.le_pos
     avcDaemon.avcDaemon.le_gnss -> positioningService.le_gnss
-    avcDaemon.avcDaemon.secStoreGlobal -> secStore.secStoreGlobal
+    avcDaemon.avcDaemon.le_secStore -> secStore.le_secStore
     avcDaemon.watchdogChain.le_wdog -> <root>.le_wdog
 }
