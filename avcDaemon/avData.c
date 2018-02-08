@@ -520,7 +520,7 @@ static le_result_t ConvertAccessModeToClientAccess
             break;
 
         case LE_AVDATA_ACCESS_SETTING:
-            mask = LE_AVDATA_ACCESS_READ;
+            mask = LE_AVDATA_ACCESS_READ | LE_AVDATA_ACCESS_WRITE;
             break;
 
         case LE_AVDATA_ACCESS_COMMAND:
