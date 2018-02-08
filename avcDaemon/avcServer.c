@@ -496,6 +496,7 @@ static char* AvcSessionStateToStr
         case LE_AVC_UNINSTALL_COMPLETE:     result = "Uninstall complete";      break;
         case LE_AVC_UNINSTALL_FAILED:       result = "Uninstall failed";        break;
         case LE_AVC_SESSION_STARTED:        result = "Session started";         break;
+        case LE_AVC_SESSION_FAILED:         result = "Session failed";          break;
         case LE_AVC_SESSION_BS_STARTED:     result = "Session with BS started"; break;
         case LE_AVC_SESSION_STOPPED:        result = "Session stopped";         break;
         case LE_AVC_REBOOT_PENDING:         result = "Reboot pending";          break;
@@ -1499,6 +1500,10 @@ static void ProcessUpdateStatus
             avcClient_StopActivityTimer();
             // These events do not cause a state transition
             avData_ReportSessionState(LE_AVDATA_SESSION_STOPPED);
+            break;
+
+        case LE_AVC_SESSION_FAILED:
+            LE_DEBUG("Session failed");
             break;
 
         case LE_AVC_AUTH_STARTED:
