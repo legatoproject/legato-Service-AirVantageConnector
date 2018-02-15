@@ -914,7 +914,7 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
 )
 {
     char downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
-    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
+    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN;
     lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
     bool downloadResume = false;
     uint64_t numBytesToDownload = 0;

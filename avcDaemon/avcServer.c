@@ -2100,7 +2100,7 @@ static void CheckNotificationToSend
         LE_DEBUG("Bytes left to download: %"PRIu64, numBytesToDownload);
 
         uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
-        size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
+        size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN;
         lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
         memset(downloadUri, 0, sizeof(downloadUri));
 
