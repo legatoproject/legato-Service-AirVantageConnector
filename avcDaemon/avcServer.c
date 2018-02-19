@@ -1518,6 +1518,14 @@ static void ProcessUpdateStatus
             LE_DEBUG("Session with bootstrap server started");
             break;
 
+        case LE_AVC_CERTIFICATION_OK:
+            LE_DEBUG("Package certified");
+            break;
+
+        case LE_AVC_CERTIFICATION_KO:
+            LE_DEBUG("Package not certified");
+            break;
+
         default:
             LE_WARN("Unhandled updateStatus %d", data->updateStatus);
             return;
