@@ -210,11 +210,11 @@ void PushData()
     if (lseek(fd, 0, SEEK_SET) < 0)
     {
         LE_ERROR("Failed to reposition the file offset.");
+        close(fd);
         exit(1);
     }
 
     LE_ASSERT(le_avdata_PushStream("Long string", fd, PushCallbackHandler, (void*)5) == LE_OK);
-    close(fd);
 }
 
 // pushing single element use dot as delimiter for resource path
