@@ -948,27 +948,14 @@ static void* DownloadThread
         {
             LE_ERROR("packageDownloadRun failed");
             ret = LE_FAULT;
-            // An error occurred, close the file descriptor in order to stop the Store thread
-            close(dwlCtxPtr->downloadFd);
-            dwlCtxPtr->downloadFd = -1;
         }
     }
 
-    if (   (DOWNLOAD_STATUS_ABORT == GetDownloadStatus())
-        || (DOWNLOAD_STATUS_SUSPEND == GetDownloadStatus()))
-    {
-        LE_DEBUG("Close download file descriptor to interrupt storage");
+    // Close the file descriptior as the downloaded data has been written to FIFO
+    LE_DEBUG("Close download file descriptor");
+    close(dwlCtxPtr->downloadFd);
+    dwlCtxPtr->downloadFd = -1;
 
-        // Signal update package download interruption by closing the file descriptor:
-        // - For a FOTA, this operation will stop the Store thread,
-        //   which will join with the main thread.
-        // - For a SOTA, this operation will stop the package storage through the fd events.
-        if (-1 != dwlCtxPtr->downloadFd)
-        {
-            close(dwlCtxPtr->downloadFd);
-            dwlCtxPtr->downloadFd = -1;
-        }
-    }
 
     // At this point, download has ended. Wait for the end of store thread used for FOTA
     if (LWM2MCORE_FW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
@@ -1025,14 +1012,6 @@ static void* DownloadThread
                 }
             }
         }
-    }
-
-    // Close the file descriptor if necessary.
-    if (-1 != dwlCtxPtr->downloadFd)
-    {
-        LE_DEBUG("Close download file descriptor");
-        close(dwlCtxPtr->downloadFd);
-        dwlCtxPtr->downloadFd = -1;
     }
 
     switch (GetDownloadStatus())
