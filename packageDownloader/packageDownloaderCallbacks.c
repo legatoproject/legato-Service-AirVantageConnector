@@ -17,6 +17,7 @@
 #include "packageDownloader.h"
 #include "packageDownloaderCallbacks.h"
 #include "avcServer.h"
+#include "file.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -436,7 +437,17 @@ le_result_t pkgDwlCb_GetPackageSize
     }
 
     // Set the path to CA bundle
-    rc= curl_easy_setopt(curlPtr, CURLOPT_CAINFO, PEMCERT_PATH);
+    if (file_Exists(PEMCERT_PATH))
+    {
+        rc= curl_easy_setopt(curlPtr, CURLOPT_CAINFO, PEMCERT_PATH);
+        if (CURLE_OK != rc)
+        {
+            LE_ERROR("Failed to set CA path: %s", curl_easy_strerror(rc));
+            goto easy_cleanup;
+        }
+    }
+
+    rc= curl_easy_setopt(curlPtr, CURLOPT_CAPATH, ROOTCERT_PATH);
     if (CURLE_OK != rc)
     {
         LE_ERROR("Failed to set CA path: %s", curl_easy_strerror(rc));
@@ -561,10 +572,20 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
     }
 
     // set the path to CA bundle
-    rc= curl_easy_setopt(pkg.curlPtr, CURLOPT_CAINFO, dwlCtxPtr->certPtr);
+    if (file_Exists(dwlCtxPtr->certPtr))
+    {
+        rc= curl_easy_setopt(pkg.curlPtr, CURLOPT_CAINFO, dwlCtxPtr->certPtr);
+        if (CURLE_OK != rc)
+        {
+            LE_ERROR("failed to set CA path: %s", curl_easy_strerror(rc));
+            return DWL_FAULT;
+        }
+    }
+
+    rc= curl_easy_setopt(pkg.curlPtr, CURLOPT_CAPATH, ROOTCERT_PATH);
     if (CURLE_OK != rc)
     {
-        LE_ERROR("failed to set CA path: %s", curl_easy_strerror(rc));
+        LE_ERROR("Failed to set CA path: %s", curl_easy_strerror(rc));
         return DWL_FAULT;
     }
 

@@ -51,6 +51,7 @@ ldflags:
 
 cflags:
 {
+    -I${LEGATO_ROOT}/framework/liblegato/linux
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcAppUpdate
