@@ -77,9 +77,9 @@ le_result_t le_fwupdate_Download
 
     le_fs_FileRef_t fileRef;
     le_result_t result;
-    int readCount = 0;
-    int totalCount = 0;
-    int fullImageLength = 0;
+    ssize_t readCount = 0;
+    size_t totalCount = 0;
+    size_t fullImageLength = 0;
     uint8_t bufPtr[512] = {0};
     uint32_t imageSize;
     int cweImageSizeOffset = CWE_IMAGE_SIZE_OFST;

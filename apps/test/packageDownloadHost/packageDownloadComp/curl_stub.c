@@ -151,7 +151,7 @@ CURLcode curl_easy_setopt
         case CURLOPT_URL:
         {
             // Get the size of the URL
-            int urlSize = strlen((const char*)paramPtr);
+            size_t urlSize = strlen((const char*)paramPtr);
             if ((0 == urlSize) || (LWM2MCORE_PACKAGE_URI_MAX_BYTES <= urlSize))
             {
                 va_end(arg);

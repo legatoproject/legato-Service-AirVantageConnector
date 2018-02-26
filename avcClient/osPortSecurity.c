@@ -650,7 +650,7 @@ lwm2mcore_Sid_t lwm2mcore_CancelSha1
 lwm2mcore_Sid_t lwm2mcore_UpdateSslCertificate
 (
     char*           certPtr,    ///< [IN] Certificate
-    int             len         ///< [IN] Certificate len
+    size_t          len         ///< [IN] Certificate len
 )
 {
     char cert[MAX_CERT_LEN] = {0};
@@ -664,7 +664,7 @@ lwm2mcore_Sid_t lwm2mcore_UpdateSslCertificate
 
     if (LWM2M_CERT_MAX_SIZE < len)
     {
-        LE_ERROR("Size %d is > than %d authorized", len, LWM2M_CERT_MAX_SIZE);
+        LE_ERROR("Size %zu is > than %d authorized", len, LWM2M_CERT_MAX_SIZE);
         return LWM2MCORE_ERR_INCORRECT_RANGE;
     }
 
@@ -681,14 +681,14 @@ lwm2mcore_Sid_t lwm2mcore_UpdateSslCertificate
 
     memcpy(cert, certPtr, len);
 
-    len = ssl_LayOutPEM(cert, len);
-    if (-1 == len)
+    int pemLen = ssl_LayOutPEM(cert, len);
+    if (-1 == pemLen)
     {
         LE_ERROR("ssl_LayOutPEM failed");
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    result = WriteFs(SSLCERT_PATH, (uint8_t *)cert, len);
+    result = WriteFs(SSLCERT_PATH, (uint8_t *)cert, pemLen);
     if (LE_OK != result)
     {
         LE_ERROR("Failed to update certificate file");
