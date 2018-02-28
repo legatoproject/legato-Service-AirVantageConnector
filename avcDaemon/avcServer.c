@@ -2362,6 +2362,9 @@ le_result_t avcServer_RequestSession
     else
     {
         LE_DEBUG("Unconditionally accepting request to open session.");
+
+        // Session initiated by user.
+        IsUserSession = true;
         result = avcServer_StartSession();
     }
 
@@ -2420,6 +2423,9 @@ le_result_t avcServer_ReleaseSession
     else
     {
         LE_DEBUG("Releasing session opened by user app.");
+
+        // Session closed by user.
+        IsUserSession = false;
         result = avcClient_Disconnect(true);
     }
 
