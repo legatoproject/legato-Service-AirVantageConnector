@@ -20,7 +20,6 @@
             <action impl="LWM2M_LEGATO_SYSTEM_UPDATE"/>
         </dm>
         <include>
-            <file name="legatofwk.cp"/>
             <file name="oma.cp"/>
             <file name="swir.cp"/>
         </include>
