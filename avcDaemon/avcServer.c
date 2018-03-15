@@ -2099,22 +2099,26 @@ static void CheckNotificationToSend
     {
         LE_DEBUG("Bytes left to download: %"PRIu64, numBytesToDownload);
 
-        uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
-        size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN;
+        char downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
+        size_t uriSize = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
         lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
         memset(downloadUri, 0, sizeof(downloadUri));
 
         // Retrieve resume information if download is not complete
         if (numBytesToDownload)
         {
-            packageDownloader_GetResumeInfo((char*)downloadUri, &uriLen, &updateType);
+            if (LE_OK != packageDownloader_GetResumeInfo(downloadUri, &uriSize, &updateType))
+            {
+                LE_DEBUG("No download to resume.");
+                return;
+            }
         }
 
         // Request user agreement for download
         avcServer_QueryDownload(packageDownloader_StartDownload,
                                 numBytesToDownload,
                                 updateType,
-                                (char*)downloadUri,
+                                downloadUri,
                                 true);
         return;
     }

@@ -305,32 +305,34 @@ void packageDownloader_DeleteFwUpdateInfo
 le_result_t packageDownloader_GetResumeInfo
 (
     char* uriPtr,                       ///< [INOUT] package URI
-    size_t* uriLenPtr,                  ///< [INOUT] package URI length
+    size_t* uriSizePtr,                  ///< [INOUT] package URI length
     lwm2mcore_UpdateType_t* typePtr     ///< [INOUT] Update type
 )
 {
-    if (   (!uriPtr) || (!uriLenPtr) || (!typePtr)
-        || (*uriLenPtr < LWM2MCORE_PACKAGE_URI_MAX_BYTES)
+    if (   (!uriPtr) || (!uriSizePtr) || (!typePtr)
+        || (*uriSizePtr < LWM2MCORE_PACKAGE_URI_MAX_BYTES)
        )
     {
         return LE_BAD_PARAMETER;
     }
 
     le_result_t result;
-    result = ReadFs(PACKAGE_URI_FILENAME, (uint8_t*)uriPtr, uriLenPtr);
+    result = ReadFs(PACKAGE_URI_FILENAME, (uint8_t*)uriPtr, uriSizePtr);
     if (LE_OK != result)
     {
         LE_ERROR("Failed to read %s: %s", PACKAGE_URI_FILENAME, LE_RESULT_TXT(result));
         return result;
     }
 
-    if (*uriLenPtr >= LWM2MCORE_PACKAGE_URI_MAX_BYTES)
+    if (*uriSizePtr > LWM2MCORE_PACKAGE_URI_MAX_LEN)
     {
         LE_ERROR("Uri length too big. Max allowed: %d, Found: %zd",
-                  LWM2MCORE_PACKAGE_URI_MAX_BYTES - 1,
-                  *uriLenPtr);
+                  LWM2MCORE_PACKAGE_URI_MAX_LEN,
+                  *uriSizePtr);
         return LE_FAULT;
     }
+
+    uriPtr[*uriSizePtr] = '\0';
 
     size_t fileLen = sizeof(lwm2mcore_UpdateType_t);
     result = ReadFs(UPDATE_TYPE_FILENAME, (uint8_t*)typePtr, &fileLen);

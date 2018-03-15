@@ -333,7 +333,7 @@ void packageDownloader_DeleteFwUpdateInfo
 le_result_t packageDownloader_GetResumeInfo
 (
     char* uriPtr,                       ///< [INOUT] package URI
-    size_t* uriLenPtr,                  ///< [INOUT] package URI length
+    size_t* uriSizePtr,                 ///< [INOUT] package URI size
     lwm2mcore_UpdateType_t* typePtr     ///< [INOUT] Update type
 );
 

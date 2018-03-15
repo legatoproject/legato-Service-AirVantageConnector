@@ -914,14 +914,14 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
 )
 {
     char downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
-    size_t uriLen = LWM2MCORE_PACKAGE_URI_MAX_LEN;
+    size_t uriSize = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
     lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
     bool downloadResume = false;
     uint64_t numBytesToDownload = 0;
     memset(downloadUri, 0, sizeof(downloadUri));
 
     // Check if an update package URI is stored
-    if (LE_OK != packageDownloader_GetResumeInfo(downloadUri, &uriLen, &updateType))
+    if (LE_OK != packageDownloader_GetResumeInfo(downloadUri, &uriSize, &updateType))
     {
         LE_DEBUG("No download to resume");
         return LWM2MCORE_ERR_COMPLETED_OK;
