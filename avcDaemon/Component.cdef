@@ -41,12 +41,19 @@ requires:
         ${LEGATO_ROOT}/components/3rdParty/lwm2mcore
         ${LEGATO_ROOT}/components/3rdParty/wakaama
         ${LEGATO_ROOT}/components/3rdParty/tinycbor
+        ${LEGATO_ROOT}/components/3rdParty/openssl
+        ${LEGATO_ROOT}/components/3rdParty/curl
+        ${LEGATO_ROOT}/components/3rdParty/zlib
         ${LEGATO_ROOT}/components/appCfg
         ${LEGATO_ROOT}/components/watchdogChain
     }
 
     lib:
     {
+        curl
+        z
+        ssl
+        crypto
         liblwm2mcore.so
         libtinydtls.a
         libwakaama.so
@@ -115,9 +122,5 @@ cflags:
 
 ldflags:
 {
-    -lcurl
-    -lz
-    -lssl
-    -lcrypto
     -L${LEGATO_BUILD}/3rdParty/lib
 }

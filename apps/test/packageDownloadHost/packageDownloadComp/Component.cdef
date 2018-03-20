@@ -7,9 +7,19 @@ requires:
         airVantage/le_avc.api               [types-only]
         le_limit.api                        [types-only]
     }
+
     component:
     {
         ${LEGATO_ROOT}/components/3rdParty/tinydtls
+        ${LEGATO_ROOT}/components/3rdParty/openssl
+        ${LEGATO_ROOT}/components/3rdParty/zlib
+    }
+
+    lib:
+    {
+        ssl
+        crypto
+        z
     }
 }
 
@@ -31,7 +41,6 @@ sources:
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/examples/linux/clientConfig.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/examples/linux/platform.c
 
-
     // Stubbed files in the AVC
     avcAppUpdate_stub.c
     avcClient_stub.c
@@ -40,13 +49,6 @@ sources:
     fwupdateServer_stub.c
     secStorage_stub.c
     lwm2mcoreSession_stub.c
-}
-
-ldflags:
-{
-    -lz
-    -lssl
-    -lcrypto
 }
 
 cflags:
