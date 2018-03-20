@@ -133,6 +133,24 @@ le_result_t push_Init
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Retry pushing items queued in the list after AV connection reset
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_NOT_FOUND      If nothing to be retried
+ *  - LE_FAULT          On any other errors
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t push_Retry
+(
+    void
+)
+{
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Initialization function avcApp. Should be called only once.
  */
 //--------------------------------------------------------------------------------------------------

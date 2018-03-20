@@ -1493,6 +1493,9 @@ static void ProcessUpdateStatus
             // Update object9 list managed by legato to lwm2mcore
             avcApp_NotifyObj9List();
             avData_ReportSessionState(LE_AVDATA_SESSION_STARTED);
+
+            // Push items waiting in queue
+            push_Retry();
             break;
 
         case LE_AVC_SESSION_STOPPED:

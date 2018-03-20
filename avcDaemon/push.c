@@ -208,9 +208,11 @@ le_result_t PushBuffer
         {
             LE_DEBUG("Data has been queued.");
             pDataPtr->isSent = false;
-            memcpy(pDataPtr->buffer, bufferPtr, bufferLength);
-            pDataPtr->bufferLength = bufferLength;
         }
+
+        // Save data to send
+        pDataPtr->bufferLength = bufferLength;
+        memcpy(pDataPtr->buffer, bufferPtr, bufferLength);
 
         pDataPtr->handlerPtr = handlerPtr;
         pDataPtr->callbackContextPtr = contextPtr;
@@ -229,6 +231,64 @@ le_result_t PushBuffer
     return result;
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retry pushing items queued in the list after AV connection reset
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_NOT_FOUND      If nothing to be retried
+ *  - LE_FAULT          On any other errors
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t push_Retry
+(
+    void
+)
+{
+    le_result_t result = LE_NOT_FOUND;
+    uint16_t mid;
+
+    // Clean the queue for the one in progress
+    le_dls_Link_t* linkPtr = le_dls_Peek(&PushDataList);
+
+    LE_INFO("Push Retry");
+
+    // Return callback with associated message id
+    while (linkPtr != NULL)
+    {
+        PushData_t* pDataPtr = CONTAINER_OF(linkPtr, PushData_t, link);
+        if (pDataPtr->isSent == true)
+        {
+            // Retry push again
+            result = avcClient_Push(pDataPtr->buffer,
+                                    pDataPtr->bufferLength,
+                                    pDataPtr->contentType,
+                                    &mid);
+
+            // Retry is successful, otherwise we need to keep it in the queue until next try
+            if (LE_OK == result)
+            {
+                LE_DEBUG("Failed mid = %d. Retry mid = %d", pDataPtr->mid, mid);
+                pDataPtr->mid = mid;
+                IsPushing = true;
+            }
+
+            // Retry is busy, but already in queue. Indicate item yet to be sent.
+            if (LE_BUSY == result)
+            {
+                LE_DEBUG("Re-send failed mid %d later", pDataPtr->mid);
+                pDataPtr->isSent = false;
+            }
+
+            break;
+        }
+
+        linkPtr = le_dls_PeekNext(&PushDataList, linkPtr);
+    }
+
+    return result;
+}
 
 //--------------------------------------------------------------------------------------------------
 /**

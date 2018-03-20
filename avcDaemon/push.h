@@ -51,6 +51,22 @@ LE_SHARED le_result_t PushBuffer
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Retry pushing items queued in the list after AV connection reset
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_NOT_FOUND      If nothing to be retried
+ *  - LE_FAULT          On any other errors
+ */
+//--------------------------------------------------------------------------------------------------
+LE_SHARED le_result_t push_Retry
+(
+    void
+);
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Init push subcomponent
  */
 //--------------------------------------------------------------------------------------------------
