@@ -2058,10 +2058,19 @@ static void CheckNotificationToSend
             return;
         }
 
-        // Something is already going on, no need to check the notification to send
         LE_DEBUG("Current state is %s, not checking notification to send",
                  ConvertAvcStateToString(CurrentState));
-        return;
+
+        // Something is already going on, no need to check the notification to send
+        if ((CurrentState != AVC_DOWNLOAD_PENDING) &&
+            (CurrentState != AVC_INSTALL_PENDING) &&
+            (CurrentState != AVC_CONNECTION_PENDING))
+        {
+            return;
+        }
+
+        // Resend the notification as earlier notification might have been lost if
+        // a receiving application was not yet listening.
     }
 
     // 1. Check if a connection is required to finish an ongoing FOTA:
@@ -2114,12 +2123,22 @@ static void CheckNotificationToSend
             }
         }
 
-        // Request user agreement for download
-        avcServer_QueryDownload(packageDownloader_StartDownload,
-                                numBytesToDownload,
-                                updateType,
-                                downloadUri,
-                                true);
+        if (QueryDownloadHandlerRef == NULL)
+        {
+            // Request user agreement for download
+            avcServer_QueryDownload(packageDownloader_StartDownload,
+                                    numBytesToDownload,
+                                    updateType,
+                                    downloadUri,
+                                    true);
+        } else {
+            LE_DEBUG("Resending the download indication");
+            avcServer_UpdateStatus(LE_AVC_DOWNLOAD_PENDING,
+                                   ConvertToAvcType(PkgDownloadCtx.type),
+                                   PkgDownloadCtx.bytesToDownload,
+                                   0,
+                                   LE_AVC_ERR_NONE);
+        }
         return;
     }
 }
@@ -2193,17 +2212,15 @@ void avcServer_QueryInstall
     uint16_t instanceId                         ///< [IN] instance id (0 for fw install).
 )
 {
-    if (NULL != QueryInstallHandlerRef)
+    if (NULL == QueryInstallHandlerRef)
     {
-        LE_ERROR("Duplicate install attempt");
-        return;
+        // Update install handler
+        CurrentUpdateType = ConvertToAvcType(type);
+        PkgInstallCtx.type = type;
+        PkgInstallCtx.instanceId = instanceId;
+        QueryInstallHandlerRef = handlerRef;
     }
 
-    // Update install handler
-    CurrentUpdateType = ConvertToAvcType(type);
-    PkgInstallCtx.type = type;
-    PkgInstallCtx.instanceId = instanceId;
-    QueryInstallHandlerRef = handlerRef;
 
     avcServer_UpdateStatus(LE_AVC_INSTALL_PENDING,
                            ConvertToAvcType(PkgInstallCtx.type),
