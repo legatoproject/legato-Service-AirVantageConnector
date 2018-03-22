@@ -297,3 +297,25 @@ uint16_t lwm2mcore_ObjectRegister
     return 0;
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read a resource from the object table
+ *
+ * @return
+ *      - true if resource is found and read succeeded
+ *      - else false
+ */
+//--------------------------------------------------------------------------------------------------
+bool lwm2mcore_ResourceRead
+(
+    uint16_t objectId,                 ///< [IN] object identifier
+    uint16_t objectInstanceId,         ///< [IN] object instance identifier
+    uint16_t resourceId,               ///< [IN] resource identifier
+    uint16_t resourceInstanceId,       ///< [IN] resource instance identifier
+    char*    dataPtr,                  ///< [OUT] Array of requested resources to be read
+    size_t*  dataSizePtr               ///< [IN/OUT] Size of the array
+)
+{
+    return true;
+}
+

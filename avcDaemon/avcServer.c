@@ -3650,6 +3650,46 @@ le_result_t le_avc_GetUserAgreement
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Function to read a resource from a LwM2M object
+ *
+ * @return
+ *      - LE_OK on success.
+ *      - LE_FAULT if failed.
+ *      - LE_UNSUPPORTED if unsupported.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avc_ReadLwm2mResource
+(
+   uint16_t objectId,               ///< [IN] Object identifier
+   uint16_t objectInstanceId,       ///< [IN] Object instance identifier
+   uint16_t resourceId,             ///< [IN] Resource identifier
+   uint16_t resourceInstanceId,     ///< [IN] Resource instance identifier
+   char* dataPtr,                   ///< [IN/OUT] String of requested resources to be read
+   size_t dataSize                  ///< [IN/OUT] Size of the array
+)
+{
+   size_t size = dataSize;
+
+   if (!lwm2mcore_ResourceRead(objectId, objectInstanceId, resourceId, resourceInstanceId, dataPtr,
+                               &size))
+   {
+        LE_ERROR("Unable to read the specified resource");
+        return LE_FAULT;
+   }
+
+   if (0 == size)
+   {
+        LE_ERROR("Empty resource");
+        return LE_FAULT;
+   }
+
+   dataPtr[size] = '\0';
+
+   return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Function to set the user agreement state
  *
  * @return
