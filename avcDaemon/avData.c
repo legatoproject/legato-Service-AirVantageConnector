@@ -925,17 +925,19 @@ static le_result_t GetVal
 )
 {
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
-
+    char pathCopy[LE_AVDATA_PATH_NAME_LEN] = {0};
+    strncpy(pathCopy, path, LE_AVDATA_PATH_NAME_LEN);
+    pathCopy[LE_AVDATA_PATH_NAME_LEN - 1]= '\0';
     // Format the path with correct delimiter
-    FormatPath((char*)path);
+    FormatPath(pathCopy);
 
     if (!isNameSpaced)
     {
-        GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
+        GetNamespacedPath(pathCopy, namespacedPath, sizeof(namespacedPath));
     }
     else
     {
-        le_utf8_Copy(namespacedPath, path, sizeof(namespacedPath), NULL);
+        le_utf8_Copy(namespacedPath, pathCopy, sizeof(namespacedPath), NULL);
     }
 
     AssetData_t* assetDataPtr = GetAssetData(namespacedPath);
@@ -1041,17 +1043,19 @@ static le_result_t SetVal
 )
 {
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
-
+    char pathCopy[LE_AVDATA_PATH_NAME_LEN] = {0};
+    strncpy(pathCopy, path, LE_AVDATA_PATH_NAME_LEN);
+    pathCopy[LE_AVDATA_PATH_NAME_LEN - 1]= '\0';
     // Format the path with correct delimiter
-    FormatPath((char*)path);
+    FormatPath(pathCopy);
 
     if (isClient)
     {
-        GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
+        GetNamespacedPath(pathCopy, namespacedPath, sizeof(namespacedPath));
     }
     else
     {
-        le_utf8_Copy(namespacedPath, path, sizeof(namespacedPath), NULL);
+        le_utf8_Copy(namespacedPath, pathCopy, sizeof(namespacedPath), NULL);
     }
 
     AssetData_t* assetDataPtr = GetAssetData(namespacedPath);
@@ -2438,13 +2442,16 @@ le_avdata_ResourceEventHandlerRef_t le_avdata_AddResourceEventHandler
     const char* key;
     void* handlerRef = NULL;
     AssetData_t* assetDataPtr = NULL;
+    char pathCopy[LE_AVDATA_PATH_NAME_LEN] = {0};
+    strncpy(pathCopy, path, LE_AVDATA_PATH_NAME_LEN);
+    pathCopy[LE_AVDATA_PATH_NAME_LEN - 1]= '\0';
 
     // Format the path with correct delimiter
-    FormatPath((char*)path);
+    FormatPath(pathCopy);
 
     // Get namespaced path which is namespaced under the application name
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
-    GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
+    GetNamespacedPath(pathCopy, namespacedPath, sizeof(namespacedPath));
 
     le_hashmap_It_Ref_t iter = le_hashmap_GetIterator(AssetDataMap);
 
@@ -2464,11 +2471,11 @@ le_avdata_ResourceEventHandlerRef_t le_avdata_AddResourceEventHandler
 
             if (NULL == handlerRef)
             {
-                LE_INFO("Handler registered on path %s", path);
+                LE_INFO("Handler registered on path %s", pathCopy);
                 char* assetDataHandlerPtr = le_mem_ForceAlloc(AssetDataHandlerPool);
 
                 // Copy path and use the path as a reference to the handler.
-                LE_ASSERT(le_utf8_Copy(assetDataHandlerPtr, path, LE_AVDATA_PATH_NAME_BYTES, NULL) == LE_OK);
+                LE_ASSERT(le_utf8_Copy(assetDataHandlerPtr, pathCopy, LE_AVDATA_PATH_NAME_BYTES, NULL) == LE_OK);
 
                 // Create reference to the handler.
                 handlerRef = le_ref_CreateRef(ResourceEventHandlerMap, assetDataHandlerPtr);
@@ -2551,20 +2558,23 @@ le_result_t le_avdata_CreateResource
     le_avdata_AccessMode_t accessMode ///< [IN] Asset data access mode
 )
 {
+    char pathCopy[LE_AVDATA_PATH_NAME_LEN] = {0};
+    strncpy(pathCopy, path, LE_AVDATA_PATH_NAME_LEN);
+    pathCopy[LE_AVDATA_PATH_NAME_LEN - 1]= '\0';
+
     // Format the path with correct delimiter
-    FormatPath((char*)path);
+    FormatPath(pathCopy);
 
     // Check if the asset data path is legal.
-    if (IsAssetDataPathValid(path) != true)
+    if (IsAssetDataPathValid(pathCopy) != true)
     {
-        LE_ERROR("Invalid asset data path [%s].", path);
+        LE_ERROR("Invalid asset data path [%s].", pathCopy);
         return LE_FAULT;
     }
 
     // Get namespaced path which is namespaced under the application name
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
-    GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
-
+    GetNamespacedPath(pathCopy, namespacedPath, sizeof(namespacedPath));
     return InitResource(namespacedPath, accessMode, le_avdata_GetClientSessionRef());
 }
 

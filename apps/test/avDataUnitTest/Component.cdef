@@ -1,0 +1,14 @@
+requires:
+{
+    api:
+    {
+        airVantage/le_avdata.api                         [types-only]
+        airVantage/le_avc.api                            [types-only]
+        le_cfg.api                                       [types-only]
+    }
+}
+
+sources:
+{
+    main.c
+}

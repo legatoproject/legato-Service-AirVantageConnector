@@ -590,7 +590,7 @@ static size_t GetEncodedDataSize
     }
     else
     {
-        cborStreamSize = cbor_encoder_get_buffer_size(&recRef->mapRef, recRef->bufferPtr);
+        cborStreamSize = cbor_encoder_get_buffer_size(&recRef->streamRef, recRef->bufferPtr);
     }
 
     return cborStreamSize;

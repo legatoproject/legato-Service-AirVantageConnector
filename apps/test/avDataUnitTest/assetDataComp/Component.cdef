@@ -1,0 +1,39 @@
+requires:
+{
+    api:
+    {
+        airVantage/le_avc.api                               [types-only]
+        airVantage/le_avdata.api                            [types-only]
+        le_cfg.api                                          [types-only]
+    }
+    component:
+    {
+
+        ${LEGATO_ROOT}/components/3rdParty/zlib
+    }
+
+    lib:
+    {
+        z
+    }
+}
+
+sources:
+{
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avData.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/push.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/timeseriesData.c
+    assetData_stub.c
+}
+
+cflags:
+{
+    -w
+    -std=gnu99
+    -DWITH_SHA256
+    -fvisibility=default
+    -Dle_msg_AddServiceCloseHandler=MyAddServiceCloseHandler
+    -Dle_msg_AddServiceOpenHandler=MyAddServiceOpenHandler
+    -Dle_msg_GetClientUserCreds=MsgGetClientUserCreds
+    -lz
+}

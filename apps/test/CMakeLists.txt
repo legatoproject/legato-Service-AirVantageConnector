@@ -30,12 +30,15 @@ if((LEGATO_TARGET MATCHES "ar7") OR (LEGATO_TARGET MATCHES "ar86"))
     # So, find a way to get this variable value from this file scope.
 else()
     add_subdirectory(packageDownloadHost)
+
+    # avData unit test
+    add_subdirectory(avDataUnitTest)
 endif()
 
 # AirVantageConnector unitary test
 add_subdirectory(airVantageConnectorUnitTest)
 
-# assetData unit test
+# assetData test
 add_subdirectory(assetDataTest)
 
 if(EXISTS ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tests)
