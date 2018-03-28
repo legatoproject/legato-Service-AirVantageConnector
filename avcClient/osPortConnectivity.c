@@ -527,7 +527,6 @@ static lwm2mcore_Sid_t GetCellularApn
 )
 {
     le_mdc_ProfileRef_t profileRef;
-    le_mdc_ConState_t state = LE_MDC_DISCONNECTED;
     uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile(LE_MDC_DEFAULT_PROFILE));
     lwm2mcore_Sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
     le_result_t result;
@@ -542,10 +541,7 @@ static lwm2mcore_Sid_t GetCellularApn
         LE_DEBUG("Profile index: %d", i);
         profileRef = le_mdc_GetProfile(i);
 
-        if (   (profileRef)
-            && (LE_OK == le_mdc_GetSessionState(profileRef, &state))
-            && (LE_MDC_CONNECTED == state)
-           )
+        if (profileRef)
         {
             result = le_mdc_GetAPN(profileRef, apnList[*apnNbPtr], sizeof(apnList[*apnNbPtr]));
             switch (result)
