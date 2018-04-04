@@ -141,7 +141,7 @@ static void PushCallBackHandler
 
         if (!pDataPtr->isSent)
         {
-            uint16_t mid;
+            uint16_t mid = 0;
             le_result_t result;
             result = avcClient_Push(pDataPtr->buffer,
                                     pDataPtr->bufferLength,
@@ -183,7 +183,7 @@ le_result_t PushBuffer
     void* contextPtr
 )
 {
-    uint16_t mid;
+    uint16_t mid = 0;
     le_result_t result;
 
     if (le_dls_NumLinks(&PushDataList) >= MAX_PUSH_QUEUE)
@@ -247,7 +247,7 @@ le_result_t push_Retry
 )
 {
     le_result_t result = LE_NOT_FOUND;
-    uint16_t mid;
+    uint16_t mid = 0;
 
     // Clean the queue for the one in progress
     le_dls_Link_t* linkPtr = le_dls_Peek(&PushDataList);
