@@ -205,6 +205,14 @@ static le_dls_List_t AssetDataClientList;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Asset data handler pool.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_mem_PoolRef_t AssetDataHandlerPool;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Structure representing a client of asset data and what namespace they follow.
  */
 //--------------------------------------------------------------------------------------------------
@@ -733,7 +741,10 @@ static AssetData_t* GetAssetData
 
     while (le_hashmap_NextNode(iter) == LE_OK)
     {
-        if (strcmp(path, le_hashmap_GetKey(iter)) == 0)
+        const char* key = le_hashmap_GetKey(iter);
+        LE_ASSERT(NULL != key);
+
+        if (strcmp(path, key) == 0)
         {
             assetDataPtr = le_hashmap_GetValue(iter);
             break;
@@ -2384,7 +2395,7 @@ static void AvServerRequestHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Registeres a handler function to a asset data path when a resource event (read/write/execute)
+ * Registers a handler function to a asset data path when a resource event (read/write/execute)
  * occurs.
  *
  * @return:
@@ -2399,6 +2410,8 @@ le_avdata_ResourceEventHandlerRef_t le_avdata_AddResourceEventHandler
     void* contextPtr                            ///< [IN] context pointer
 )
 {
+    const char* key;
+    void* handlerRef = NULL;
     AssetData_t* assetDataPtr = NULL;
 
     // Format the path with correct delimiter
@@ -2410,20 +2423,35 @@ le_avdata_ResourceEventHandlerRef_t le_avdata_AddResourceEventHandler
 
     le_hashmap_It_Ref_t iter = le_hashmap_GetIterator(AssetDataMap);
 
+    // Add handler to all children under this path
     while (le_hashmap_NextNode(iter) == LE_OK)
     {
-        if (strcmp(namespacedPath, le_hashmap_GetKey(iter)) == 0)
+        key = le_hashmap_GetKey(iter);
+        LE_ASSERT(NULL != key);
+
+        if ((strcmp(namespacedPath, key) == 0) ||
+            le_path_IsSubpath(namespacedPath, key, "/"))
         {
+            LE_INFO("Registering handler on %s", key);
             assetDataPtr = le_hashmap_GetValue(iter);
             assetDataPtr->handlerPtr = handlerPtr;
             assetDataPtr->contextPtr = contextPtr;
 
-            return le_ref_CreateRef(ResourceEventHandlerMap, assetDataPtr);
+            if (NULL == handlerRef)
+            {
+                LE_INFO("Handler registered on path %s", path);
+                char* assetDataHandlerPtr = le_mem_ForceAlloc(AssetDataHandlerPool);
+
+                // Copy path and use the path as a reference to the handler.
+                LE_ASSERT(le_utf8_Copy(assetDataHandlerPtr, path, LE_AVDATA_PATH_NAME_BYTES, NULL) == LE_OK);
+
+                // Create reference to the handler.
+                handlerRef = le_ref_CreateRef(ResourceEventHandlerMap, assetDataHandlerPtr);
+            }
         }
     }
 
-    LE_WARN("Non-existing asset data path %s", namespacedPath);
-    return NULL;
+    return handlerRef;
 }
 
 
@@ -2437,14 +2465,45 @@ void le_avdata_RemoveResourceEventHandler
     le_avdata_ResourceEventHandlerRef_t addHandlerRef ///< [IN] resource event handler ref
 )
 {
-    AssetData_t* assetDataPtr = le_ref_Lookup(ResourceEventHandlerMap, addHandlerRef);
+    const char* key;
+    AssetData_t* assetDataPtr = NULL;
+    char* path = le_ref_Lookup(ResourceEventHandlerMap, addHandlerRef);
 
-    if (assetDataPtr != NULL)
+    if (NULL == path)
     {
-        le_ref_DeleteRef(ResourceEventHandlerMap, addHandlerRef);
-        assetDataPtr->handlerPtr = NULL;
-        assetDataPtr->contextPtr = NULL;
+        LE_WARN("Invalid reference");
+        return;
     }
+
+    // Format the path with correct delimiter
+    FormatPath((char*)path);
+
+    // Get namespaced path which is namespaced under the application name
+    char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
+    GetNamespacedPath(path, namespacedPath, sizeof(namespacedPath));
+
+    // Remove handlers from all resources under this node
+    le_hashmap_It_Ref_t iter = le_hashmap_GetIterator(AssetDataMap);
+
+    while (le_hashmap_NextNode(iter) == LE_OK)
+    {
+        key = le_hashmap_GetKey(iter);
+        LE_ASSERT(NULL != key);
+
+        if ((strcmp(namespacedPath, key) == 0) ||
+             le_path_IsSubpath(namespacedPath, key, "/"))
+        {
+            LE_INFO("Removing handler from %s", key);
+            assetDataPtr = le_hashmap_GetValue(iter);
+
+            assetDataPtr->handlerPtr = NULL;
+            assetDataPtr->contextPtr = NULL;
+        }
+    }
+
+    // Delete the handler reference
+    le_ref_DeleteRef(ResourceEventHandlerMap, addHandlerRef);
+    le_mem_Release(path);
 }
 
 
@@ -3753,6 +3812,7 @@ void avData_Init
     StringPool = le_mem_CreatePool("AssetData string", LE_AVDATA_STRING_VALUE_BYTES);
     ArgumentPool = le_mem_CreatePool("AssetData Argument_t", sizeof(Argument_t));
     RecordRefDataPoolRef = le_mem_CreatePool("Record ref data pool", sizeof(RecordRefData_t));
+    AssetDataHandlerPool = le_mem_CreatePool("AssetData Handlers", LE_AVDATA_PATH_NAME_BYTES);
 
     // Initialize the asset data client list
     AssetDataClientList = LE_DLS_LIST_INIT;
