@@ -792,9 +792,8 @@ static void avcClient_RetryTimer
  *
  * @return
  *      - LE_OK if connection request has been sent.
- *      - LE_DUPLICATE if already connected.
  *      - LE_BUSY if currently retrying or authenticating.
- *      - LE_NOT_PERMITTED if device is in airplane mode
+ *      - LE_DUPLICATE if already connected to AirVantage server.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcClient_Connect
@@ -802,13 +801,6 @@ le_result_t avcClient_Connect
     void
 )
 {
-    le_onoff_t radioStatus;
-    if ((LE_OK == le_mrc_GetRadioPower(&radioStatus)) && (LE_OFF == radioStatus))
-    {
-        LE_INFO("Device in airplane mode");
-        return LE_NOT_PERMITTED;
-    }
-
     // Check if a session is already started.
     if (SessionStarted)
     {

@@ -27,10 +27,9 @@
  *
  * @return
  *      - LE_OK if connection request has been sent.
- *      - LE_DUPLICATE if already connected.
  *      - LE_BUSY if currently retrying or authenticating.
- *      - LE_NOT_PERMITTED if device is in airplane mode
- */
+ *      - LE_DUPLICATE if already connected to AirVantage server.
+*/
 //--------------------------------------------------------------------------------------------------
 le_result_t avcClient_Connect
 (
