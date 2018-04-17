@@ -28,7 +28,7 @@
  * Maximum expected number of asset data.
  */
 //--------------------------------------------------------------------------------------------------
-#define MAX_EXPECTED_ASSETDATA 10000
+#define MAX_EXPECTED_ASSETDATA 20000
 
 
 //--------------------------------------------------------------------------------------------------
@@ -985,10 +985,15 @@ static void StoreData
 (
     const char* path,              ///< [IN] Asset data path
     AssetValue_t value,            ///< [IN] Asset value
-    le_avdata_DataType_t dataType  ///< [IN] Asset value data type
+    le_avdata_DataType_t dataType, ///< [IN] Asset value data type
+    le_cfg_IteratorRef_t iterRef   ///< [IN] Iterator to config tree setting
 )
 {
-    le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_ASSET_SETTING_PATH);
+    if (NULL == iterRef)
+    {
+        LE_DEBUG("Asset data setting not stored to config tree");
+        return;
+    }
 
     switch (dataType)
     {
@@ -1010,8 +1015,6 @@ static void StoreData
             LE_ERROR("Invalid data type.");
             break;
     }
-
-    le_cfg_CommitTxn(iterRef);
 }
 
 
@@ -1032,8 +1035,9 @@ static le_result_t SetVal
     AssetValue_t value,            ///< [IN] Asset value
     le_avdata_DataType_t dataType, ///< [IN] Asset value data type
     bool isClient,                 ///< [IN] Is it client or server access
-    bool isDryRun                  ///< [IN] When this flag is set, no write is performed on
+    bool isDryRun,                 ///< [IN] When this flag is set, no write is performed on
                                    ///<      assetData, rather it checks the validity of input data.
+    le_cfg_IteratorRef_t iterRef   ///< [IN] Iterator to config tree setting
 )
 {
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
@@ -1098,7 +1102,7 @@ static le_result_t SetVal
         if ((assetDataPtr->accessMode == LE_AVDATA_ACCESS_SETTING) &&
             IsRestored)
         {
-            StoreData(namespacedPath, value, dataType);
+            StoreData(namespacedPath, value, dataType, iterRef);
         }
     }
 
@@ -1210,7 +1214,8 @@ static void RecursiveRestore
                                assetValue,
                                LE_AVDATA_DATA_TYPE_INT,
                                false,
-                               false);
+                               false,
+                               NULL);
                         break;
                     case LE_CFG_TYPE_FLOAT:
                         assetValue.floatValue = le_cfg_GetFloat(iterRef, strBuffer, 0);
@@ -1218,7 +1223,8 @@ static void RecursiveRestore
                                assetValue,
                                LE_AVDATA_DATA_TYPE_FLOAT,
                                false,
-                               false);
+                               false,
+                               NULL);
                         break;
                     case LE_CFG_TYPE_BOOL:
                         assetValue.boolValue = le_cfg_GetBool(iterRef, strBuffer, 0);
@@ -1226,7 +1232,8 @@ static void RecursiveRestore
                                assetValue,
                                LE_AVDATA_DATA_TYPE_BOOL,
                                false,
-                               false);
+                               false,
+                               NULL);
                         break;
                     case LE_CFG_TYPE_STRING:
                         assetValue.strValuePtr = le_mem_ForceAlloc(StringPool);
@@ -1235,7 +1242,8 @@ static void RecursiveRestore
                                assetValue,
                                LE_AVDATA_DATA_TYPE_STRING,
                                false,
-                               false);
+                               false,
+                               NULL);
                         break;
                     default:
                         LE_ERROR("Invalid type.");
@@ -1713,8 +1721,9 @@ static le_result_t DecodeMultiData
                          ///<       function call.
     char* path,          ///< [IN] base path.
     size_t maxPathBytes, ///< [IN] Max allowed length of path including null character
-    bool isDryRun        ///< [IN] When this flag is set, no write is performed on assetData,
+    bool isDryRun,       ///< [IN] When this flag is set, no write is performed on assetData,
                          ///<      rather it checks the validity of input data.
+    le_cfg_IteratorRef_t iterRef ///< [IN] Iterator to config data setting.
 )
 {
     // Entering a CBOR map.
@@ -1770,7 +1779,7 @@ static le_result_t DecodeMultiData
             // The value is a map
             if (cbor_value_is_map(&map))
             {
-                if (LE_OK != DecodeMultiData(&map, path, maxPathBytes, isDryRun))
+                if (LE_OK != DecodeMultiData(&map, path, maxPathBytes, isDryRun, iterRef))
                 {
                     return LE_FAULT;
                 }
@@ -1804,7 +1813,7 @@ static le_result_t DecodeMultiData
             }
 
             setValresult = (type == LE_AVDATA_DATA_TYPE_NONE) ?
-                           LE_UNSUPPORTED : SetVal(path, assetValue, type, false, isDryRun);
+                           LE_UNSUPPORTED : SetVal(path, assetValue, type, false, isDryRun, iterRef);
 
             if (setValresult != LE_OK)
             {
@@ -2124,6 +2133,7 @@ static void ProcessAvServerWriteRequest
 
     CborParser parser;
     CborValue value;
+    le_cfg_IteratorRef_t iterRef;
 
     if (CborNoError != cbor_parser_init(payload, payloadLen, 0, &parser, &value))
     {
@@ -2174,7 +2184,8 @@ static void ProcessAvServerWriteRequest
                     le_result_t result = DecodeMultiData(&value,
                                                          pathBuff,
                                                          LE_AVDATA_PATH_NAME_BYTES,
-                                                         true);
+                                                         true,
+                                                         NULL);
                     if (LE_OK != result)
                     {
                         RespondToAvServer(COAP_BAD_REQUEST, NULL, 0);
@@ -2192,11 +2203,19 @@ static void ProcessAvServerWriteRequest
                         return;
                     }
 
+                    // Create write transaction
+                    iterRef = le_cfg_CreateWriteTxn(CFG_ASSET_SETTING_PATH);
+
                     // Now decode and save to assetData
                     result = DecodeMultiData(&checkedValue,
                                              pathBuff,
                                              LE_AVDATA_PATH_NAME_BYTES,
-                                             false);
+                                             false,
+                                             iterRef);
+
+                    LE_INFO("Commit transaction");
+                    // Write setting to config tree
+                    le_cfg_CommitTxn(iterRef);
 
                     // Data is already checked. So any failure means something bad happened.
                     LE_CRIT_IF(result != LE_OK,
@@ -2236,8 +2255,14 @@ static void ProcessAvServerWriteRequest
         }
         else
         {
+            // Create write transaction
+            iterRef = le_cfg_CreateWriteTxn(CFG_ASSET_SETTING_PATH);
+
             result = (type == LE_AVDATA_DATA_TYPE_NONE) ?
-                     LE_UNSUPPORTED : SetVal(path, assetValue, type, false, false);
+                     LE_UNSUPPORTED : SetVal(path, assetValue, type, false, false, iterRef);
+
+            // Write setting to config tree
+            le_cfg_CommitTxn(iterRef);
 
             switch (result)
             {
@@ -2592,10 +2617,19 @@ le_result_t le_avdata_SetNull
     const char* path ///< [IN] Asset data path
 )
 {
+    le_cfg_IteratorRef_t iterRef;
     AssetValue_t assetValue;
     memset(&assetValue, 0, sizeof(AssetValue_t));
 
-    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_NONE, true, false);
+    // Create write transaction
+    iterRef = le_cfg_CreateWriteTxn(CFG_ASSET_SETTING_PATH);
+
+    le_result_t result = SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_NONE, true, false, iterRef);
+
+    // Write setting to config tree
+    le_cfg_CommitTxn(iterRef);
+
+    return result;
 }
 
 
@@ -2661,10 +2695,19 @@ le_result_t le_avdata_SetInt
     int32_t value     ///< [IN] integer to be set
 )
 {
+    le_cfg_IteratorRef_t iterRef;
     AssetValue_t assetValue;
     assetValue.intValue = value;
 
-    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_INT, true, false);
+    // Create write transaction
+    iterRef = le_cfg_CreateWriteTxn(CFG_ASSET_SETTING_PATH);
+
+    le_result_t result =  SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_INT, true, false, iterRef);
+
+    // Write setting to config tree
+    le_cfg_CommitTxn(iterRef);
+
+    return result;
 }
 
 
@@ -2730,10 +2773,19 @@ le_result_t le_avdata_SetFloat
     double value       ///< [IN] float to be set
 )
 {
+    le_cfg_IteratorRef_t iterRef;
     AssetValue_t assetValue;
     assetValue.floatValue = value;
 
-    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_FLOAT, true, false);
+    // Create write transaction
+    iterRef = le_cfg_CreateWriteTxn(CFG_ASSET_SETTING_PATH);
+
+    le_result_t result = SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_FLOAT, true, false, iterRef);
+
+    // Write setting to config tree
+    le_cfg_CommitTxn(iterRef);
+
+    return result;
 }
 
 
@@ -2799,10 +2851,19 @@ le_result_t le_avdata_SetBool
     bool value        ///< [IN] bool to be set
 )
 {
+    le_cfg_IteratorRef_t iterRef;
     AssetValue_t assetValue;
     assetValue.boolValue = value;
 
-    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_BOOL, true, false);
+    // Create write transaction
+    iterRef = le_cfg_CreateWriteTxn(CFG_ASSET_SETTING_PATH);
+
+    le_result_t result = SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_BOOL, true, false, iterRef);
+
+    // Write setting to config tree
+    le_cfg_CommitTxn(iterRef);
+
+    return result;
 }
 
 
@@ -2869,11 +2930,20 @@ le_result_t le_avdata_SetString
     const char* value ///< [IN] string to be set
 )
 {
+    le_cfg_IteratorRef_t iterRef;
     AssetValue_t assetValue;
     assetValue.strValuePtr = le_mem_ForceAlloc(StringPool);
     le_utf8_Copy(assetValue.strValuePtr, value, LE_AVDATA_STRING_VALUE_BYTES, NULL);
 
-    return SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_STRING, true, false);
+    // Create write transaction
+    iterRef = le_cfg_CreateWriteTxn(CFG_ASSET_SETTING_PATH);
+
+    le_result_t result = SetVal(path, assetValue, LE_AVDATA_DATA_TYPE_STRING, true, false, iterRef);
+
+    // Write setting to config tree
+    le_cfg_CommitTxn(iterRef);
+
+    return result;
 }
 
 
