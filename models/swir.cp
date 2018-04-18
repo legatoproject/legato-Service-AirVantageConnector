@@ -22,6 +22,10 @@
           <variable default-label="SIM card identifier (ICCID)" path="1" type="string"></variable>
           <variable default-label="Subscription identity (IMSI/ESN/MEID)" path="2" type="string"></variable>
           <variable default-label="Subscription phone number (MSISDN)" path="3" type="string"></variable>
+          <command default-label="Change SIM mode" path="4"><parameter id="1" default-value="0" type="int"></parameter></command>
+          <variable default-label="Current SIM card" path="5" type="int"></variable>
+          <variable default-label="Current SIM mode" path="6" type="int"></variable>
+          <variable default-label="Last SIM switch status" path="7" type="int"></variable>
         </node>
 
         <node default-label="SSL certificates" path="10243">

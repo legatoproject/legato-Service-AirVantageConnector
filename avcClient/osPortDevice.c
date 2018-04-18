@@ -15,6 +15,7 @@
 #include <sys/utsname.h>
 #include "avcAppUpdate.h"
 #include "avcServer.h"
+#include "avcSim.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -172,7 +173,8 @@ typedef struct
 {
     char* tagPtr;               ///< Component tag
     getVersion_t funcPtr;       ///< Function to read the component version
-}ComponentVersion_t;
+}
+ComponentVersion_t;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1053,8 +1055,6 @@ lwm2mcore_Sid_t lwm2mcore_GetIccid
  * Retrieve the currently used SIM card
  * This API needs to have a procedural treatment
  *
- * @note
- *      This function is stubbed
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
@@ -1062,7 +1062,7 @@ lwm2mcore_Sid_t lwm2mcore_GetIccid
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetCurrentSimCard
 (
-    int*   currentSimPtr  ///< [OUT]    Currently used SIM card
+    uint8_t*   currentSimPtr  ///< [OUT]    Currently used SIM card
 )
 {
     if (!currentSimPtr)
@@ -1070,7 +1070,7 @@ lwm2mcore_Sid_t lwm2mcore_GetCurrentSimCard
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    *currentSimPtr = 0;
+    *currentSimPtr = GetCurrentSimCard();
     LE_DEBUG("lwm2mcore_GetCurrentSimCard: %d", *currentSimPtr);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
@@ -1081,10 +1081,9 @@ lwm2mcore_Sid_t lwm2mcore_GetCurrentSimCard
  * Set SIM mode
  * This API needs to have a procedural treatment
  *
- * @note
- *      This function is stubbed
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  */
 //--------------------------------------------------------------------------------------------------
@@ -1094,31 +1093,78 @@ lwm2mcore_Sid_t lwm2mcore_SetSimMode
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
 )
 {
+    char* savePtr = NULL;
+    char* token = NULL;
+    SimMode_t mode = MODE_MAX;
+
     if ((!bufferPtr) || (!lenPtr))
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    LE_DEBUG("lwm2mcore_SetSimMode: %s", bufferPtr);
+    // Received parameter format is: ['1'='x']. So, extract the value of x from the string.
+    if (NULL != strtok_r(bufferPtr, "=", &savePtr))
+    {
+        token = strtok_r(NULL, "'", &savePtr);
+        if (token)
+        {
+            mode = atoi(token);
+        }
+    }
+
+    if ((mode >= MODE_MAX) || (mode <= MODE_IN_PROGRESS))
+    {
+        LE_ERROR("Invalid mode: %d", mode);
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    SimModeInit();
+    SetSimMode(mode);
+
+    LE_DEBUG("lwm2mcore_SetSimMode: %x", mode);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Retrieve the SIM switch status
+ * Retrieve the current SIM mode
  * This API needs to have a procedural treatment
  *
- * @note
- *      This function is stubbed
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetSimSwitchStatus
+lwm2mcore_Sid_t lwm2mcore_GetCurrentSimMode
 (
-    int*   switchStatusPtr  ///< [OUT]    SIM switch status
+    uint8_t*   simModePtr  ///< [OUT]    SIM mode pointer
+)
+{
+    if (!simModePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    *simModePtr = GetCurrentSimMode();
+    LE_DEBUG("lwm2mcore_GetCurrentSimMode: %d", *simModePtr);
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the last SIM switch procedure status
+ * This API needs to have a procedural treatment
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetLastSimSwitchStatus
+(
+    uint8_t*   switchStatusPtr  ///< [OUT]    SIM switch status
 )
 {
     if (!switchStatusPtr)
@@ -1126,8 +1172,8 @@ lwm2mcore_Sid_t lwm2mcore_GetSimSwitchStatus
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    *switchStatusPtr = 0;
-    LE_DEBUG("lwm2mcore_GetSimSwitchStatus: %d", *switchStatusPtr);
+    *switchStatusPtr = GetLastSimSwitchStatus();
+    LE_DEBUG("lwm2mcore_GetLastSimSwitchStatus: %d", *switchStatusPtr);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }

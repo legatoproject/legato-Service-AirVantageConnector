@@ -82,4 +82,5 @@ bindings:
     avcDaemon.avcDaemon.le_gnss -> positioningService.le_gnss
     avcDaemon.avcDaemon.le_secStore -> secStore.le_secStore
     avcDaemon.watchdogChain.le_wdog -> <root>.le_wdog
+    avcDaemon.avcDaemon.le_cellnet -> cellNetService.le_cellnet
 }

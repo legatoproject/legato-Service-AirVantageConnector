@@ -31,6 +31,7 @@ requires:
         le_update.api
         le_framework.api
         le_secStore.api
+        le_cellnet.api
     }
 
     component:
@@ -62,6 +63,7 @@ sources:
     push.c
     avcFs.c
     avcComm.c
+    avcSim.c
 
     // AVC
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/avcClient.c
