@@ -19,13 +19,6 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Define for LK version length
- */
-//--------------------------------------------------------------------------------------------------
-#define LK_VERSION_LENGTH   10
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Define for FW version buffer length
  */
 //--------------------------------------------------------------------------------------------------
@@ -110,13 +103,6 @@
 
 //--------------------------------------------------------------------------------------------------
  /**
- *  Path to the file that stores the LK version number string.
- */
-//--------------------------------------------------------------------------------------------------
-#define LK_VERSION_FILE "/proc/cmdline"
-
-//--------------------------------------------------------------------------------------------------
- /**
  *  Path to the file that stores the root FS version number string.
  */
 //--------------------------------------------------------------------------------------------------
@@ -128,13 +114,6 @@
  */
 //--------------------------------------------------------------------------------------------------
 #define UFS_VERSION_FILE "/opt/userfsver.txt"
-
-//--------------------------------------------------------------------------------------------------
- /**
- *  String to be check in file which stores the LK version
- */
-//--------------------------------------------------------------------------------------------------
-#define LK_STRING_FILE "lkversion="
 
 //--------------------------------------------------------------------------------------------------
  /**
@@ -231,48 +210,24 @@ static size_t GetLkVersion
 )
 {
     size_t returnedLen = 0;
+
     if (NULL != versionBufferPtr)
     {
-        char tmpLkBufferPtr[FW_BUFFER_LENGTH];
-        char* tokenPtr;
-        char* savePtr;
-        FILE* fpPtr;
-        fpPtr = fopen(LK_VERSION_FILE, "r");
-        if ((NULL != fpPtr)
-         && (NULL != fgets(tmpLkBufferPtr, FW_BUFFER_LENGTH, fpPtr)))
-        {
-            tokenPtr = strtok_r(tmpLkBufferPtr, SPACE, &savePtr);
-            /* Look for "lkversion=" */
-            while (NULL != tokenPtr)
-            {
-                tokenPtr = strtok_r(NULL, SPACE, &savePtr);
-                if (NULL == tokenPtr)
-                {
-                    returnedLen = snprintf(versionBufferPtr,
-                                           len,
-                                           "%s",
-                                           UNKNOWN_VERSION);
-                    break;
-                }
-                if (0 == strncmp(tokenPtr, LK_STRING_FILE, LK_VERSION_LENGTH))
-                {
-                    tokenPtr += LK_VERSION_LENGTH;
-                    returnedLen = snprintf(versionBufferPtr, len, "%s", tokenPtr);
-                    break;
-                }
-            }
-        }
-        else
+        le_result_t result = le_fwupdate_GetAppBootloaderVersion(versionBufferPtr, len);
+        if (LE_OK != result)
         {
             returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
-
-        if (NULL != fpPtr)
+        else
         {
-            fclose(fpPtr);
+            returnedLen = strlen(versionBufferPtr);
         }
-        LE_INFO("lkVersion %s, len %zd", versionBufferPtr, returnedLen);
     }
+    else
+    {
+        LE_ERROR("Buffer pointer is NULL");
+    }
+    LE_INFO("App Bootloader version %s, returnedLen %zd", versionBufferPtr, returnedLen);
     return returnedLen;
 }
 
