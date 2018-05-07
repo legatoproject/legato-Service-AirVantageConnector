@@ -1854,13 +1854,23 @@ static void PollingTimerExpiryHandler
 
     // Restart the timer for the next interval
     uint32_t pollingTimerInterval;
-    LE_ASSERT(LE_OK == le_avc_GetPollingTimer(&pollingTimerInterval));
+    if (LE_OK != le_avc_GetPollingTimer(&pollingTimerInterval))
+    {
+        LE_ERROR("Unable to get the polling time interval");
+        return;
+    }
 
-    LE_INFO("A connection to server will be made in %d minutes", pollingTimerInterval);
-
-    le_clk_Time_t interval = {.sec = pollingTimerInterval * SECONDS_IN_A_MIN};
-    LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
-    LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
+    if (POLLING_TIMER_DISABLED != pollingTimerInterval)
+    {
+        LE_INFO("A connection to server will be made in %d minutes", pollingTimerInterval);
+        le_clk_Time_t interval = {.sec = pollingTimerInterval * SECONDS_IN_A_MIN};
+        LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
+        LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
+    }
+    else
+    {
+        LE_INFO("Polling disabled");
+    }
 }
 
 //-------------------------------------------------------------------------------------------------
