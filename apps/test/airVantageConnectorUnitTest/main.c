@@ -5,8 +5,9 @@
  */
 
 #include "legato.h"
+#include"packageDownloader.h"
 #include "interfaces.h"
-
+#include"avcServer.h"
 
 //--------------------------------------------------------------------------------------------------
 // Symbol and Enum definitions
@@ -245,7 +246,29 @@ static void Testle_avc_StartSession
     LE_ASSERT_OK(le_avc_StartSession());
     le_sem_Post(appCtxPtr->appSemaphore);
 }
-
+//--------------------------------------------------------------------------------------------------
+/**
+ * Test: le_avc_StartDownload().
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+static void Testle_avc_StartDownload
+(
+    void* param11Ptr, /// Value to be passed as param1Ptr to the function
+    void* param12Ptr /// Value to be passed as param2Ptr to the function
+)
+{
+    LE_INFO("======== Test le_avc_StartDownload ========");
+    AppContext_t* appCtxPtr = (AppContext_t*) param11Ptr;
+    uint64_t bytesToDownload = 10;
+    lwm2mcore_UpdateType_t type = LWM2MCORE_SW_UPDATE_TYPE;
+    avcServer_QueryDownload(packageDownloader_StartDownload,
+                            bytesToDownload,
+                            type,
+                            "http://airvantage.net",
+                            true);
+    le_sem_Post(appCtxPtr->appSemaphore);
+}
 //--------------------------------------------------------------------------------------------------
 /**
  * Test: le_avc_StopSession().
@@ -385,12 +408,17 @@ static void* AirVantageUnitTestThread
     le_event_QueueFunctionToThread(AppCtx.appThreadRef,
                                    Testle_avc_StartSession, &AppCtx, NULL);
     SynchronizeTest();
-    sleep(1);
-
-    le_avcTest_SimulateLwm2mEvent(LWM2MCORE_EVENT_DOWNLOAD_PROGRESS,
-                                  LWM2MCORE_PKG_SW, 1024, 10);
+    // Start dowload
+    le_event_QueueFunctionToThread(AppCtx.appThreadRef,
+                                   Testle_avc_StartDownload, &AppCtx, NULL);
     SynchronizeTest();
-
+    int i=0;
+    for(i = 0; i <= 10; i++)
+    {
+        le_avcTest_SimulateLwm2mEvent(LWM2MCORE_EVENT_DOWNLOAD_PROGRESS,
+                                      LWM2MCORE_PKG_SW, 1024, 10*i);
+        SynchronizeTest();
+    }
     // Test get update type
     le_event_QueueFunctionToThread(AppCtx.appThreadRef,
                                    GetUpdateType, &AppCtx, NULL);

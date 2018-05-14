@@ -309,8 +309,8 @@ le_result_t packageDownloader_BytesLeftToDownload
                                 ///<       Otherwise undefined.
 )
 {
-    *numBytes = 10;
-    return LE_OK;
+    *numBytes = 0;
+    return LE_FAULT;
 }
 
 //--------------------------------------------------------------------------------------------------
