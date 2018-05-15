@@ -902,3 +902,68 @@ le_result_t le_fwupdate_GetUpdateStatus
 {
     return LE_OK;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Register an handler function for SMS message reception.
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+le_sms_RxMessageHandlerRef_t le_sms_AddRxMessageHandler
+(
+    le_sms_RxMessageHandlerFunc_t handlerFuncPtr, ///< [IN] The handler function for message
+    ///  reception.
+    void*                         contextPtr      ///< [IN] The handler's context.
+)
+{
+    return NULL;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the message format.
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+le_sms_Format_t le_sms_GetFormat
+(
+    le_sms_MsgRef_t msgRef
+        ///< [IN] Reference to the message object.
+)
+{
+   return LE_SMS_FORMAT_TEXT;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the text Message.
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_sms_GetText
+(
+    le_sms_MsgRef_t msgRef,
+        ///< [IN] Reference to the message object.
+    char* text,
+        ///< [OUT] SMS text.
+    size_t textSize
+        ///< [IN]
+)
+{
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete an SMS message from the storage area.
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_sms_DeleteFromStorage
+(
+    le_sms_MsgRef_t msgRef
+        ///< [IN] Reference to the message object.
+)
+{
+    return LE_OK;
+}

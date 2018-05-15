@@ -104,6 +104,29 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Text content of the wakeup SMS
+ */
+//--------------------------------------------------------------------------------------------------
+#define WAKEUP_SMS_TEXT "LWM2MWAKEUP"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Ratelimit interval of the wakeup SMS
+ */
+//--------------------------------------------------------------------------------------------------
+static const le_clk_Time_t WakeUpSmsInterval = {.sec = 60, .usec = 0};
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * WakeUp SMS timeout
+ *
+ * SMS received before this timeout, will be ignored.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_clk_Time_t WakeUpSmsTimeout = {0, 0};
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Current internal state.
  *
  * Used mainly to ensure that API functions don't do anything if in the wrong state.
@@ -3805,6 +3828,61 @@ static bool IsFotaInstalling
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Handler function for wake-up SMS message reception.
+ *
+ */
+//--------------------- ----------------------------------------------------------------------------
+void RxMessageHandler
+(
+    le_sms_MsgRef_t msgRef,     ///< [IN] Message object received from the modem.
+    void*           contextPtr  ///< [IN] The handler's context.
+)
+{
+    char text[LE_SMS_TEXT_MAX_BYTES] = {0};
+
+    le_sms_Format_t Format = le_sms_GetFormat(msgRef);
+
+    switch(Format)
+    {
+        case LE_SMS_FORMAT_TEXT :
+            le_sms_GetText(msgRef, text, sizeof(text));
+            if (strncmp(text, WAKEUP_SMS_TEXT, sizeof(text)) == 0)
+            {
+                le_clk_Time_t CurrentTime = le_clk_GetRelativeTime();
+                if (le_clk_GreaterThan(CurrentTime, WakeUpSmsTimeout))
+                {
+                    LE_INFO("Wakeup SMS received - starting AV session");
+
+                    // Update the ratelimiting timeout.
+                    WakeUpSmsTimeout = le_clk_Add(CurrentTime, WakeUpSmsInterval);
+
+                    // Start the AV session. If there is no activity, it will be
+                    // torn down after 20 seconds.
+                    if (LE_OK != avcServer_StartSession())
+                    {
+                        LE_ERROR("Failed to start a new session");
+                    }
+
+                    // Cleanup - the wakeup message doesn't need to be stored.
+                    if (LE_OK != le_sms_DeleteFromStorage(msgRef))
+                    {
+                        LE_ERROR("Error deleting wakeup SMS from storage");
+                    }
+                }
+                else
+                {
+                    LE_INFO("Wakeup SMS rate exceeds limit - ignoring");
+                }
+            }
+            // If this is not a wakeup message - do nothing.
+            break;
+        default :
+            break;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Initialization function for AVC Daemon
  */
 //--------------------------------------------------------------------------------------------------
@@ -3816,6 +3894,9 @@ COMPONENT_INIT
 
     // Register handler for AVC service update status
     le_event_AddHandler("AVC Update Status event", AvcUpdateStatusEvent, ProcessUpdateStatus);
+
+    // Register handler for SMS wakeup
+    le_sms_AddRxMessageHandler(RxMessageHandler, NULL);
 
     // Create safe reference map for block references. The size of the map should be based on
     // the expected number of simultaneous block requests, so take a reasonable guess.
