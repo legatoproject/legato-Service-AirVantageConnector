@@ -1142,6 +1142,7 @@ lwm2mcore_Sid_t lwm2mcore_GetLastSimSwitchStatus
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
@@ -1162,6 +1163,11 @@ lwm2mcore_Sid_t lwm2mcore_GetSubscriptionIdentity
     if ((!bufferPtr) || (!lenPtr))
     {
         return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    if (LE_DATA_CELLULAR != le_data_GetTechnology())
+    {
+        return LWM2MCORE_ERR_INVALID_STATE;
     }
 
     if (LE_OK != le_mrc_GetRadioAccessTechInUse(&currentRat))
