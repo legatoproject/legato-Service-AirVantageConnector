@@ -29,6 +29,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Number of seconds in a minute
+ */
+//--------------------------------------------------------------------------------------------------
+#define SECONDS_IN_A_MIN 60
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Function to check if the lifetime is within acceptable limits
  *
  * @return
@@ -54,4 +61,33 @@ bool lwm2mcore_CheckLifetimeLimit
     }
 
     return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the Polling Timer
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if succeeds
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE parameter out of range
+ *      - LWM2MCORE_ERR_GENERAL_ERROR other failure
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_SetPollingTimer
+(
+    uint32_t interval   ///< [IN] Polling Timer interval in seconds
+)
+{
+    LE_INFO("Setting polling timer to %d seconds", interval);
+    if (false == lwm2mcore_CheckLifetimeLimit(interval))
+    {
+        return LWM2MCORE_ERR_INCORRECT_RANGE;
+    }
+
+    if (LE_OK != le_avc_SetPollingTimer(interval / SECONDS_IN_A_MIN))
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
