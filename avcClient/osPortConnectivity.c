@@ -345,7 +345,7 @@ static lwm2mcore_Sid_t GetCellularIpAddresses
 {
     le_mdc_ProfileRef_t profileRef;
     le_mdc_ConState_t state = LE_MDC_DISCONNECTED;
-    uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile(LE_MDC_DEFAULT_PROFILE));
+    int i = 1;
     lwm2mcore_Sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
     le_result_t result;
 
@@ -409,7 +409,8 @@ static lwm2mcore_Sid_t GetCellularIpAddresses
         }
         i++;
     }
-    while (   (*ipAddrNbPtr < CONN_MONITOR_IP_ADDRESSES_MAX_NB)
+    while (   (i <= le_mdc_NumProfiles())
+           && (*ipAddrNbPtr < CONN_MONITOR_IP_ADDRESSES_MAX_NB)
            && (profileRef)
            && (LWM2MCORE_ERR_COMPLETED_OK == sID)
           );
@@ -437,7 +438,7 @@ static lwm2mcore_Sid_t GetCellularRouterIpAddresses
 {
     le_mdc_ProfileRef_t profileRef;
     le_mdc_ConState_t state = LE_MDC_DISCONNECTED;
-    uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile(LE_MDC_DEFAULT_PROFILE));
+    uint32_t i = 1;
     lwm2mcore_Sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
     le_result_t result;
 
@@ -501,7 +502,8 @@ static lwm2mcore_Sid_t GetCellularRouterIpAddresses
         }
         i++;
     }
-    while (   (*ipAddrNbPtr < CONN_MONITOR_ROUTER_IP_ADDRESSES_MAX_NB)
+    while (   (i <= le_mdc_NumProfiles())
+           && (*ipAddrNbPtr < CONN_MONITOR_ROUTER_IP_ADDRESSES_MAX_NB)
            && (profileRef)
            && (LWM2MCORE_ERR_COMPLETED_OK == sID)
           );
@@ -527,7 +529,7 @@ static lwm2mcore_Sid_t GetCellularApn
 )
 {
     le_mdc_ProfileRef_t profileRef;
-    uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile(LE_MDC_DEFAULT_PROFILE));
+    int i = 1;
     lwm2mcore_Sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
     le_result_t result;
 
@@ -566,7 +568,8 @@ static lwm2mcore_Sid_t GetCellularApn
         }
         i++;
     }
-    while (   (*apnNbPtr < CONN_MONITOR_APN_MAX_NB)
+    while (   (i <= le_mdc_NumProfiles())
+           && (*apnNbPtr < CONN_MONITOR_APN_MAX_NB)
            && (profileRef)
            && (LWM2MCORE_ERR_COMPLETED_OK == sID)
           );
