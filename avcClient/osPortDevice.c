@@ -68,10 +68,17 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Define for Legato tag in FW version string
+ * Define for Legato baseline tag in FW version string
  */
 //--------------------------------------------------------------------------------------------------
 #define LEGATO_TAG ",LE="
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Define for Legato override tag in FW version string
+ */
+//--------------------------------------------------------------------------------------------------
+#define LEGATO_OVERRIDE_TAG ",LEO="
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -96,10 +103,17 @@
 
 //--------------------------------------------------------------------------------------------------
  /**
- *  Path to the file that stores the Legato version number string.
+ *  Path to the file that stores the Legato baseline version number string.
  */
 //--------------------------------------------------------------------------------------------------
-#define LEGATO_VERSION_FILE "/legato/systems/current/version"
+#define LEGATO_BASELINE_VERSION_FILE "/mnt/legato/system/version"
+
+//--------------------------------------------------------------------------------------------------
+ /**
+ *  Path to the file that stores the Legato override version number string.
+ */
+//--------------------------------------------------------------------------------------------------
+#define LEGATO_OVERRIDE_VERSION_FILE "/legato/systems/current/version"
 
 //--------------------------------------------------------------------------------------------------
  /**
@@ -363,19 +377,20 @@ static size_t GetUfsVersion
  *      - written buffer length
  */
 //--------------------------------------------------------------------------------------------------
-static size_t GetLegatoVersion
+static size_t ReadLegatoVersion
 (
+    const char* fileName,           ///< [IN] File name
     char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
     size_t len                      ///< [IN] Buffer length
 )
 {
     size_t returnedLen = 0;
-    if (NULL != versionBufferPtr)
+    if ((NULL != versionBufferPtr) && (NULL != fileName))
     {
-        FILE* versionFilePtr = fopen(LEGATO_VERSION_FILE, "r");
+        FILE* versionFilePtr = fopen(fileName, "r");
         if (NULL == versionFilePtr)
         {
-            LE_INFO("Could not open Legato version file.");
+            LE_INFO("Could not open Legato version file %s", fileName);
             returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
             return returnedLen;
         }
@@ -403,6 +418,40 @@ static size_t GetLegatoVersion
         LE_INFO("Legato version = %s, len %zd", versionBufferPtr, returnedLen);
     }
     return returnedLen;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the Legato baseline version string from the file system.
+ *
+ * @return
+ *      - written buffer length
+ */
+//--------------------------------------------------------------------------------------------------
+static size_t GetLegatoBaselineVersion
+(
+    char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
+    size_t len                      ///< [IN] Buffer length
+)
+{
+    return ReadLegatoVersion(LEGATO_BASELINE_VERSION_FILE, versionBufferPtr, len);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the Legato override version string from the file system.
+ *
+ * @return
+ *      - written buffer length
+ */
+//--------------------------------------------------------------------------------------------------
+static size_t GetLegatoOverrideVersion
+(
+    char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
+    size_t len                      ///< [IN] Buffer length
+)
+{
+    return ReadLegatoVersion(LEGATO_OVERRIDE_VERSION_FILE, versionBufferPtr, len);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -712,15 +761,16 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
     uint32_t i = 0;
     ComponentVersion_t versionInfo[] =
     {
-      { MODEM_TAG,              GetModemVersion         },
-      { LK_TAG,                 GetLkVersion            },
-      { LINUX_TAG,              GetOsVersion            },
-      { ROOT_FS_TAG,            GetRfsVersion           },
-      { USER_FS_TAG,            GetUfsVersion           },
-      { LEGATO_TAG,             GetLegatoVersion        },
-      { CUSTOMER_PRI_TAG,       GetCustomerPriVersion   },
-      { CARRIER_PRI_TAG,        GetCarrierPriVersion    },
-      { MCU_TAG,                GetMcuVersion           }
+      { MODEM_TAG,              GetModemVersion             },
+      { LK_TAG,                 GetLkVersion                },
+      { LINUX_TAG,              GetOsVersion                },
+      { ROOT_FS_TAG,            GetRfsVersion               },
+      { USER_FS_TAG,            GetUfsVersion               },
+      { LEGATO_TAG,             GetLegatoBaselineVersion    },
+      { LEGATO_OVERRIDE_TAG,    GetLegatoOverrideVersion    },
+      { CUSTOMER_PRI_TAG,       GetCustomerPriVersion       },
+      { CARRIER_PRI_TAG,        GetCarrierPriVersion        },
+      { MCU_TAG,                GetMcuVersion               }
     };
 
     if ((!bufferPtr) || (!lenPtr))
