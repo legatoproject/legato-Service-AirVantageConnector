@@ -213,7 +213,6 @@ static void CellNetStateHandler
 
         default:
             break;
-
     }
 }
 
@@ -268,9 +267,17 @@ static void SimModeExecHandler
 )
 {
     le_result_t status = LE_FAULT;
+    le_sim_Id_t prevCard = le_sim_GetSelectedCard();
 
     le_avc_StopSession();
 
+    // Disable automatic SIM selection if already enabled
+    if (SimHandlerPtr->previousMode == MODE_PREF_EXTERNAL_SIM)
+    {
+        le_sim_SetAutomaticSelection(false);
+    }
+
+    // Select SIM card based on the requested mode
     switch (SimHandlerPtr->modeRequest)
     {
         case MODE_EXTERNAL_SIM:
@@ -282,8 +289,7 @@ static void SimModeExecHandler
             break;
 
         case MODE_PREF_EXTERNAL_SIM:
-            LE_ERROR("Mode 3 is not supported");
-            status = LE_FAULT;
+            status = le_sim_SetAutomaticSelection(true);
             break;
 
         default:
@@ -299,6 +305,19 @@ static void SimModeExecHandler
     }
     else
     {
+        // Switching between automatic SIM selection and static SIM may keep the same SIM card
+        // selected. In this case, request a connection to AVC server and exit.
+        if (le_sim_GetSelectedCard() == prevCard)
+        {
+            if (LE_OK != le_avc_StartSession())
+            {
+                LE_ERROR("Unable to start AVC session");
+                SimHandlerPtr->status = SIM_SWITCH_ERROR;
+            }
+            return;
+        }
+
+        // A new SIM card has been selected, wait for network attach and request AVC session
         SimHandlerPtr->avcConnectionRequest = true;
         le_timer_Start(ModeRollbackTimer);
     }
@@ -317,9 +336,18 @@ SimMode_t GetCurrentSimMode
     void
 )
 {
+    le_result_t status;
+    bool autoMode;
+
     if (SimHandlerPtr->mode == MODE_IN_PROGRESS)
     {
         return MODE_IN_PROGRESS;
+    }
+
+    status = le_sim_GetAutomaticSelection(&autoMode);
+    if ((status == LE_OK) && (autoMode))
+    {
+        return MODE_PREF_EXTERNAL_SIM;
     }
 
     if (le_sim_GetSelectedCard() == LE_SIM_EXTERNAL_SLOT_1)
@@ -393,22 +421,15 @@ le_result_t SetSimMode
         return LE_BAD_PARAMETER;
     }
 
-    // Mode 3 will be implemented later
-    if (simMode == MODE_PREF_EXTERNAL_SIM)
-    {
-        LE_ERROR("Mode 3 is not supported");
-        return LE_FAULT;
-    }
+    SimMode_t currentSimMode = GetCurrentSimMode();
 
-    SimHandlerPtr->mode = GetCurrentSimMode();
-
-    if (SimHandlerPtr->mode == MODE_IN_PROGRESS)
+    if (currentSimMode == MODE_IN_PROGRESS)
     {
         LE_WARN("Mode switch in progress");
         return LE_FAULT;
     }
 
-    if (SimHandlerPtr->mode == simMode)
+    if (currentSimMode == simMode)
     {
         LE_INFO("Mode already enabled");
         return LE_OK;
@@ -419,7 +440,7 @@ le_result_t SetSimMode
 
     SimHandlerPtr->modeRequest = simMode;
     SimHandlerPtr->rollbackRequest = false;
-    SimHandlerPtr->previousMode = SimHandlerPtr->mode;
+    SimHandlerPtr->previousMode = currentSimMode;
     SimHandlerPtr->mode = MODE_IN_PROGRESS;
 
     return LE_OK;
