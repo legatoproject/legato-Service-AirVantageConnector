@@ -139,6 +139,7 @@ typedef enum
     AVC_IDLE,                   ///< No updates pending or in progress
     AVC_DOWNLOAD_PENDING,       ///< Received pending download; no response sent yet
     AVC_DOWNLOAD_IN_PROGRESS,   ///< Accepted download, and in progress
+    AVC_DOWNLOAD_COMPLETE,      ///< Download is complete
     AVC_INSTALL_PENDING,        ///< Received pending install; no response sent yet
     AVC_INSTALL_IN_PROGRESS,    ///< Accepted install, and in progress
     AVC_UNINSTALL_PENDING,      ///< Received pending uninstall; no response sent yet
@@ -1365,8 +1366,27 @@ static le_result_t ProcessUserAgreement
             break;
 
         case LE_AVC_REBOOT_PENDING:
-             result = RespondToRebootPending();
-             break;
+            result = RespondToRebootPending();
+            break;
+
+        case LE_AVC_SESSION_STOPPED:
+            // Forward notifications unrelated to user agreement to interested applications.
+            SendUpdateStatusEvent(updateStatus,
+                                  totalNumBytes,
+                                  dloadProgress,
+                                  StatusHandlerContextPtr);
+
+            // Report download pending user agreement again if the network was dropped when the
+            // download was complete but was unable to send the update result to the server.
+            if (CurrentState == AVC_DOWNLOAD_COMPLETE)
+            {
+                CurrentState = AVC_DOWNLOAD_PENDING;
+                SendUpdateStatusEvent(LE_AVC_DOWNLOAD_PENDING,
+                                      -1,
+                                      -1,
+                                      StatusHandlerContextPtr);
+            }
+            break;
 
         default:
             // Forward notifications unrelated to user agreement to interested applications.
@@ -1454,7 +1474,7 @@ static void ProcessUpdateStatus
             }
             CurrentUpdateType = data->updateType;
 
-            CurrentState = AVC_IDLE;
+            CurrentState = AVC_DOWNLOAD_COMPLETE;
             avcClient_StartActivityTimer();
             DownloadAgreement = false;
 
