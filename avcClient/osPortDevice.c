@@ -124,13 +124,6 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Timer used to launch the device reboot after the acknowledgment is sent to the server
- */
-//--------------------------------------------------------------------------------------------------
-static le_timer_Ref_t LaunchRebootTimer;
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Function pointer to get a component version
  *
  * @return
@@ -549,23 +542,6 @@ static void LaunchReboot
     sync();
     // Reboot the system
     reboot(RB_AUTOBOOT);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Called when the reboot timer expires.
- */
-//--------------------------------------------------------------------------------------------------
-static void LaunchRebootTimerExpiryHandler
-(
-    le_timer_Ref_t timerRef    ///< Timer that expired
-)
-{
-    // Timer used to delay reboot after command acknowledgment is not necessary anymore
-    le_timer_Delete(timerRef);
-
-    // Check if reboot can be launched now
-    avcServer_QueryReboot(LaunchReboot);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1489,18 +1465,8 @@ lwm2mcore_Sid_t lwm2mcore_RebootDevice
     void
 )
 {
-    le_clk_Time_t interval = {.sec = 2};
-
-    LaunchRebootTimer = le_timer_Create("launch reboot timer");
-
-    // Acknowledge the reboot command and launch the actual reboot later
-    if (   (LE_OK != le_timer_SetHandler(LaunchRebootTimer, LaunchRebootTimerExpiryHandler))
-        || (LE_OK != le_timer_SetInterval(LaunchRebootTimer, interval))
-        || (LE_OK != le_timer_Start(LaunchRebootTimer))
-       )
-    {
-        return LWM2MCORE_ERR_GENERAL_ERROR;
-    }
+    // Check if reboot can be launched now
+    avcServer_QueryReboot(LaunchReboot);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }

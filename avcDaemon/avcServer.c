@@ -439,6 +439,13 @@ static le_timer_Ref_t LaunchConnectTimer;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Launch reboot timer
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t LaunchRebootTimer;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Error occurred during update via airvantage.
  */
 //--------------------------------------------------------------------------------------------------
@@ -940,12 +947,16 @@ static le_result_t AcceptDeviceReboot
 
     StopDeferTimer(LE_AVC_USER_AGREEMENT_REBOOT);
 
-    // Notify the registered handler to proceed with the reboot; only called once.
+    // Run the reset timer to proceed with the reboot on expiry
     if (QueryRebootHandlerRef != NULL)
     {
         CurrentState = AVC_REBOOT_IN_PROGRESS;
-        QueryRebootHandlerRef();
-        QueryRebootHandlerRef = NULL;
+
+        // Launch reboot function after 2 seconds
+        le_clk_Time_t interval = { .sec = 2 };
+
+        le_timer_SetInterval(LaunchRebootTimer, interval);
+        le_timer_Start(LaunchRebootTimer);
     }
     else
     {
@@ -1721,6 +1732,24 @@ static void LaunchConnectExpiryHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Called when the launch reboot timer expires
+ */
+//--------------------------------------------------------------------------------------------------
+static void LaunchRebootExpiryHandler
+(
+    le_timer_Ref_t timerRef    ///< Timer that expired
+)
+{
+    LE_DEBUG("Rebooting the device...");
+    if (QueryRebootHandlerRef != NULL)
+    {
+        QueryRebootHandlerRef();
+        QueryRebootHandlerRef = NULL;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Write avc configuration parameter to platform memory
  *
  * @return
@@ -2312,8 +2341,9 @@ void avcServer_QueryDownload
  *
  * If a reboot can't proceed right away, then the handlerRef function will be called when it is
  * okay to proceed with a reboot. Note that handlerRef will be called at most once.
- * If a reboot can proceed right away, it will be launched.
  *
+ * If a reboot can proceed right away, a 2-second timer is immediatly launched and the handlerRef
+ * function will be called when the timer expires.
  * @return None
  */
 //--------------------------------------------------------------------------------------------------
@@ -2967,6 +2997,9 @@ le_result_t le_avc_DeferUninstall
 //--------------------------------------------------------------------------------------------------
 /**
  * Accept the currently pending reboot
+ *
+ * @note When this function is called, a 2-second timer is launched and the reboot function is
+ * called when the timer expires.
  *
  * @return
  *      - LE_OK on success
@@ -3920,6 +3953,9 @@ COMPONENT_INIT
 
     ConnectDeferTimer = le_timer_Create("connect defer timer");
     le_timer_SetHandler(ConnectDeferTimer, ConnectTimerExpiryHandler);
+
+    LaunchRebootTimer = le_timer_Create("launch reboot timer");
+    le_timer_SetHandler(LaunchRebootTimer, LaunchRebootExpiryHandler);
 
     LaunchConnectTimer = le_timer_Create("launch connection timer");
     le_timer_SetHandler(LaunchConnectTimer, LaunchConnectExpiryHandler);

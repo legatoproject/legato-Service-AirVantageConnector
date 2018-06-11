@@ -21,6 +21,7 @@
  */
 //--------------------------------------------------------------------------------------------------
 static le_timer_Ref_t Lwm2mStepTimerRef = NULL;
+const static char Lwm2mStepTimerName[] = "lwm2mStepTimer";
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -28,6 +29,15 @@ static le_timer_Ref_t Lwm2mStepTimerRef = NULL;
  */
 //--------------------------------------------------------------------------------------------------
 static le_timer_Ref_t Lwm2mInactivityTimerRef = NULL;
+const static char Lwm2mInactivityTimerName[] = "lwm2mInactivityTimer";
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Reboot on expiry timer
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t Lwm2mLaunchRebootRef = NULL;
+const static char Lwm2mLaunchRebootName[] = "lwm2mLaunchReboot";
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -39,7 +49,7 @@ static void TimerHandler
     le_timer_Ref_t timerRef
 )
 {
-    lwm2mcore_TimerCallback_t timerCallbackPtr = le_timer_GetContextPtr(timerRef) ;
+    lwm2mcore_TimerCallback_t timerCallbackPtr = le_timer_GetContextPtr(timerRef);
     if (timerCallbackPtr)
     {
         timerCallbackPtr();
@@ -68,105 +78,77 @@ bool lwm2mcore_TimerSet
     le_result_t start = LE_FAULT;
     bool result = false;
     le_clk_Time_t timerInterval;
+    le_timer_Ref_t timerRef;
+    const char* timerName;
 
     LE_DEBUG ("lwm2mcore_TimerSet %d time %d sec", timer, time);
-    if (timer < LWM2MCORE_TIMER_MAX)
+
+    if (timer >= LWM2MCORE_TIMER_MAX)
     {
-        switch (timer)
+        return false;
+    }
+
+    switch (timer)
+    {
+        case LWM2MCORE_TIMER_STEP:
+            timerRef = Lwm2mStepTimerRef;
+            timerName = Lwm2mStepTimerName;
+            break;
+
+        case LWM2MCORE_TIMER_INACTIVITY:
+            timerRef = Lwm2mInactivityTimerRef;
+            timerName = Lwm2mInactivityTimerName;
+            break;
+
+        case LWM2MCORE_TIMER_REBOOT:
+            timerRef = Lwm2mLaunchRebootRef;
+            timerName = Lwm2mLaunchRebootName;
+            break;
+
+        default:
+            LE_ERROR("Unhandled timer reference");
+            return false;
+    }
+
+    if (timerRef == NULL)
+    {
+        timerInterval.sec = time;
+        timerInterval.usec = 0;
+        timerRef = le_timer_Create(timerName);
+        if (timerRef)
         {
-            case LWM2MCORE_TIMER_STEP:
+            if ((LE_OK != le_timer_SetInterval(timerRef, timerInterval))
+                || (LE_OK != le_timer_SetHandler(timerRef, TimerHandler))
+                || (LE_OK != le_timer_SetContextPtr(timerRef, (void*) cb))
+                || (LE_OK != le_timer_Start(timerRef)))
             {
-                if (Lwm2mStepTimerRef == NULL)
-                {
-                    timerInterval.sec = time;
-                    timerInterval.usec = 0;
-                    Lwm2mStepTimerRef = le_timer_Create ("lwm2mStepTimer");
-                    if (Lwm2mStepTimerRef)
-                    {
-                        if ((LE_OK != le_timer_SetInterval (Lwm2mStepTimerRef, timerInterval))
-                            || (LE_OK != le_timer_SetHandler (Lwm2mStepTimerRef, TimerHandler))
-                            || (LE_OK != le_timer_SetContextPtr(Lwm2mStepTimerRef, (void*) cb))
-                            || (LE_OK != le_timer_Start (Lwm2mStepTimerRef)))
-                        {
-                            start = LE_FAULT;
-                        }
-                        else
-                        {
-                            start = LE_OK;
-                        }
-                    }
-                }
-                else
-                {
-                    le_result_t stop = LE_FAULT;
-                    /* check if the timer is running */
-                    if (le_timer_IsRunning (Lwm2mStepTimerRef))
-                    {
-                        /* Stop the timer */
-                        stop = le_timer_Stop (Lwm2mStepTimerRef);
-                        if (stop != LE_OK)
-                        {
-                            LE_ERROR ("Error when stopping step timer");
-                        }
-                    }
-
-                    timerInterval.sec = time;
-                    timerInterval.usec = 0;
-
-                    le_timer_SetInterval (Lwm2mStepTimerRef, timerInterval);
-                    start = le_timer_Start (Lwm2mStepTimerRef);
-                }
+                start = LE_FAULT;
             }
-            break;
-
-            case LWM2MCORE_TIMER_INACTIVITY:
+            else
             {
-                if (Lwm2mInactivityTimerRef == NULL)
-                {
-                    timerInterval.sec = time;
-                    timerInterval.usec = 0;
-                    Lwm2mInactivityTimerRef = le_timer_Create ("lwm2mInactivityTimer");
-                    if (Lwm2mInactivityTimerRef)
-                    {
-                        if ((LE_OK != le_timer_SetInterval (Lwm2mInactivityTimerRef, timerInterval))
-                            || (LE_OK != le_timer_SetHandler (Lwm2mInactivityTimerRef, TimerHandler))
-                            || (LE_OK != le_timer_SetContextPtr(Lwm2mInactivityTimerRef, (void*) cb))
-                            || (LE_OK != le_timer_Start (Lwm2mInactivityTimerRef)))
-                        {
-                            start = LE_FAULT;
-                        }
-                        else
-                        {
-                            start = LE_OK;
-                        }
-                    }
-                }
-                else
-                {
-                    le_result_t stop = LE_FAULT;
-                    /* check if the timer is running */
-                    if (le_timer_IsRunning (Lwm2mInactivityTimerRef))
-                    {
-                        /* Stop the timer */
-                        stop = le_timer_Stop (Lwm2mInactivityTimerRef);
-                        if (stop != LE_OK)
-                        {
-                            LE_ERROR ("Error when stopping inactivity timer");
-                        }
-                    }
-
-                    timerInterval.sec = time;
-                    timerInterval.usec = 0;
-
-                    le_timer_SetInterval (Lwm2mInactivityTimerRef, timerInterval);
-                    start = le_timer_Start (Lwm2mInactivityTimerRef);
-                }
+                start = LE_OK;
             }
-            break;
-
-            default:
-            break;
         }
+    }
+    else
+    {
+        le_result_t stop = LE_FAULT;
+        /* check if the timer is running */
+        if (le_timer_IsRunning(timerRef))
+        {
+            /* Stop the timer */
+            stop = le_timer_Stop(timerRef);
+            if (stop != LE_OK)
+            {
+                LE_ERROR ("Error when stopping step timer");
+            }
+        }
+
+        timerInterval.sec = time;
+        timerInterval.usec = 0;
+
+        le_timer_SetInterval(timerRef, timerInterval);
+        start = le_timer_Start(timerRef);
     }
 
     if (start == LE_OK)
@@ -198,25 +180,22 @@ bool lwm2mcore_TimerStop
         switch (timer)
         {
             case LWM2MCORE_TIMER_STEP:
-            {
+
                 if (Lwm2mStepTimerRef != NULL)
                 {
-                    stop = le_timer_Stop (Lwm2mStepTimerRef);
+                    stop = le_timer_Stop(Lwm2mStepTimerRef);
                 }
-            }
-            break;
+                break;
 
             case LWM2MCORE_TIMER_INACTIVITY:
-            {
                 if (Lwm2mInactivityTimerRef != NULL)
                 {
-                    stop = le_timer_Stop (Lwm2mInactivityTimerRef);
+                    stop = le_timer_Stop(Lwm2mInactivityTimerRef);
                 }
-            }
-            break;
+                break;
 
             default:
-            break;
+                break;
         }
     }
 
@@ -249,27 +228,23 @@ bool lwm2mcore_TimerIsRunning
         switch (timer)
         {
             case LWM2MCORE_TIMER_STEP:
-            {
                 if (Lwm2mStepTimerRef != NULL)
                 {
-                    isRunning = le_timer_IsRunning  (Lwm2mStepTimerRef);
+                    isRunning = le_timer_IsRunning (Lwm2mStepTimerRef);
                 }
-            }
-            LE_DEBUG ("LWM2MCORE_TIMER_STEP timer is running %d", isRunning);
-            break;
+                LE_DEBUG("LWM2MCORE_TIMER_STEP timer is running %d", isRunning);
+                break;
 
             case LWM2MCORE_TIMER_INACTIVITY:
-            {
                 if (Lwm2mInactivityTimerRef != NULL)
                 {
-                    isRunning = le_timer_IsRunning  (Lwm2mInactivityTimerRef);
+                    isRunning = le_timer_IsRunning(Lwm2mInactivityTimerRef);
                 }
-            }
-            LE_DEBUG ("LWM2MCORE_TIMER_INACTIVITY timer is running %d", isRunning);
-            break;
+                LE_DEBUG("LWM2MCORE_TIMER_INACTIVITY timer is running %d", isRunning);
+                break;
 
             default:
-            break;
+                break;
         }
     }
     return isRunning;
