@@ -323,7 +323,6 @@ static bool IsHiddenApp
                 "avcService",
                 "cellNetService",
                 "dataConnectionService",
-                "devMode",
                 "fwupdateService",
                 "gpioService",
                 "modemService",
