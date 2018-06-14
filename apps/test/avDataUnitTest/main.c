@@ -359,7 +359,7 @@ static void TestAirVantageServerAPIs
     LE_INFO("================ Test AirVantage Server APIS =================");
 
     LE_ASSERT_OK(le_avdata_CreateResource(NUM_DOGS_VAR_RES, LE_AVDATA_ACCESS_VARIABLE));
-    le_avdata_SetInt(NUM_DOGS_VAR_RES, 44);
+    LE_ASSERT_OK(le_avdata_SetInt(NUM_DOGS_VAR_RES, 44));
 
     LE_INFO("================ push resource to the server =================");
 
