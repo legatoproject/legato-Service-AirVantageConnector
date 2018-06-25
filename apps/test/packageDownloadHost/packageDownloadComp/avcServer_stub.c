@@ -19,11 +19,13 @@
 //--------------------------------------------------------------------------------------------------
 void avcServer_UpdateStatus
 (
-    le_avc_Status_t updateStatus,   ///< Update status
-    le_avc_UpdateType_t updateType, ///< Update type
-    int32_t totalNumBytes,          ///< Total number of bytes to download (-1 if not set)
-    int32_t dloadProgress,          ///< Download Progress in percent (-1 if not set)
-    le_avc_ErrorCode_t errorCode    ///< Error code
+    le_avc_Status_t updateStatus,                ///< Update status
+    le_avc_UpdateType_t updateType,              ///< Update type
+    int32_t totalNumBytes,                       ///< Total number of bytes to download (-1 if not set)
+    int32_t dloadProgress,                       ///< Download Progress in percent (-1 if not set)
+    le_avc_ErrorCode_t errorCode,                ///< Error code
+    le_avc_StatusHandlerFunc_t statusHandlerPtr, ///< Pointer on handler function
+    void* contextPtr                             ///< Context
 )
 {
     DownloadResult_t result;
@@ -132,7 +134,9 @@ void avcServer_QueryDownload
     uint64_t bytesToDownload,                       ///< [IN] Number of bytes to download
     lwm2mcore_UpdateType_t type,                    ///< [IN] Update type
     char* uriPtr,                                   ///< [IN] Update package URI
-    bool resume                                     ///< [IN] Is it a download resume?
+    bool resume,                                    ///< [IN] Is it a download resume?
+    le_avc_StatusHandlerFunc_t statusHandlerPtr,    ///< Pointer on handler function
+    void*                      contextPtr           ///< Context
 )
 {
     LE_DEBUG("Stub");

@@ -91,7 +91,7 @@ static void LaunchUpdate
         case LWM2MCORE_FW_UPDATE_TYPE:
             LE_DEBUG("Launch FW update");
             avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
-                                   -1, 0, LE_AVC_ERR_NONE);
+                                   -1, 0, LE_AVC_ERR_NONE, NULL, NULL);
             if (DWL_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING))
             {
                 LE_ERROR("Unable to set FW update state to UPDATING");
@@ -109,7 +109,7 @@ static void LaunchUpdate
             if (LE_OK != le_fwupdate_Install())
             {
                  avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
-                                        -1, -1, LE_AVC_ERR_INTERNAL);
+                                        -1, -1, LE_AVC_ERR_INTERNAL, NULL, NULL);
                  packageDownloader_SetFwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_INSTALL_FAILURE);
             }
             break;
@@ -183,7 +183,10 @@ static void StartDownloadTimerExpiryHandler
                             packageSize,
                             startDwlCtxPtr->type,
                             (char*)startDwlCtxPtr->uri,
-                            false);
+                            false,
+                            NULL,
+                            NULL
+                           );
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -959,7 +962,10 @@ lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
                             numBytesToDownload,
                             updateType,
                             downloadUri,
-                            downloadResume);
+                            downloadResume,
+                            NULL,
+                            NULL
+                           );
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }

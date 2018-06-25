@@ -266,7 +266,10 @@ static void Testle_avc_StartDownload
                             bytesToDownload,
                             type,
                             "http://airvantage.net",
-                            true);
+                            true,
+                            NULL,
+                            NULL
+                           );
     le_sem_Post(appCtxPtr->appSemaphore);
 }
 //--------------------------------------------------------------------------------------------------

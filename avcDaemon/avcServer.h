@@ -130,7 +130,10 @@ LE_SHARED void avcServer_QueryDownload
     uint64_t bytesToDownload,                       ///< [IN] Number of bytes to download
     lwm2mcore_UpdateType_t type,                    ///< [IN] Update type
     char* uriPtr,                                   ///< [IN] Update package URI
-    bool resume                                     ///< [IN] Is it a download resume?
+    bool resume,                                    ///< [IN] Is it a download resume?
+    le_avc_StatusHandlerFunc_t statusHandlerPtr,    ///< [IN] Pointer on handler function
+    void*                      contextPtr           ///< [IN] Context
+
 );
 
 
@@ -204,7 +207,9 @@ LE_SHARED void avcServer_UpdateStatus
     le_avc_UpdateType_t updateType,
     int32_t totalNumBytes,
     int32_t dloadProgress,
-    le_avc_ErrorCode_t errorCode
+    le_avc_ErrorCode_t errorCode,
+    le_avc_StatusHandlerFunc_t statusHandlerPtr,
+    void* contextPtr
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -262,7 +267,9 @@ LE_SHARED le_result_t avcServer_ReleaseSession
 //--------------------------------------------------------------------------------------------------
 LE_SHARED void avcServer_QueryConnection
 (
-    le_avc_UpdateType_t updateType
+    le_avc_UpdateType_t        updateType,        ///< [IN] Update type
+    le_avc_StatusHandlerFunc_t statusHandlerPtr,  ///< [IN] Pointer on handler function
+    void*                      contextPtr         ///< [IN] Context
 );
 
 //--------------------------------------------------------------------------------------------------

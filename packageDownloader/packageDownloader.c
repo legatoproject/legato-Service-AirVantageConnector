@@ -993,7 +993,10 @@ static void* DownloadThread
                                            LE_AVC_FIRMWARE_UPDATE,
                                            -1,
                                            -1,
-                                           LE_AVC_ERR_BAD_PACKAGE);
+                                           LE_AVC_ERR_BAD_PACKAGE,
+                                           NULL,
+                                           NULL
+                                          );
                 }
             }
             else
@@ -1010,7 +1013,10 @@ static void* DownloadThread
                                            LE_AVC_FIRMWARE_UPDATE,
                                            -1,
                                            -1,
-                                           LE_AVC_ERR_NONE);
+                                           LE_AVC_ERR_NONE,
+                                           NULL,
+                                           NULL
+                                          );
                 }
             }
         }
@@ -1045,7 +1051,10 @@ static void* DownloadThread
                                     numBytesToDownload,
                                     pkgDwlPtr->data.updateType,
                                     pkgDwlPtr->data.packageUri,
-                                    true);
+                                    true,
+                                    NULL,
+                                    NULL
+                                   );
 
             le_fwupdate_DisconnectService();
         }

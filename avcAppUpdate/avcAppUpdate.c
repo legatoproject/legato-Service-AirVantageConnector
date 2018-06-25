@@ -991,7 +991,7 @@ static void AppUninstallHandler
 
         LE_DEBUG("Uninstall of application completed.");
         avcServer_UpdateStatus(LE_AVC_UNINSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
-                               -1, -1, LE_AVC_ERR_NONE);
+                               -1, -1, LE_AVC_ERR_NONE, NULL, NULL);
     }
     else
     {
@@ -1144,7 +1144,7 @@ static le_result_t StartUninstall
 
     LE_DEBUG("Uninstall in progress");
     avcServer_UpdateStatus(LE_AVC_UNINSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
-                           -1, 0, LE_AVC_ERR_NONE);
+                           -1, 0, LE_AVC_ERR_NONE, NULL, NULL);
 
     // Update Daemon doesn't send any callback notification for single app removal. So returning
     // LE_OK from the following function means app is removed successfully.
@@ -1153,13 +1153,13 @@ static le_result_t StartUninstall
     if (result == LE_OK)
     {
         avcServer_UpdateStatus(LE_AVC_UNINSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
-                               -1, 100, LE_AVC_ERR_NONE);
+                               -1, 100, LE_AVC_ERR_NONE, NULL, NULL);
     }
     else
     {
         LE_ERROR("Uninstall of application failed (%s).", LE_RESULT_TXT(result));
         avcServer_UpdateStatus(LE_AVC_UNINSTALL_FAILED, LE_AVC_APPLICATION_UPDATE,
-                               -1, -1, LE_AVC_ERR_INTERNAL);
+                               -1, -1, LE_AVC_ERR_INTERNAL, NULL, NULL);
     }
 
     return result;
@@ -1529,7 +1529,7 @@ static void RequestConnection
 )
 {
     SetSwUpdateInternalState(INTERNAL_STATE_CONNECTION_REQUESTED);
-    avcServer_QueryConnection(LE_AVC_APPLICATION_UPDATE);
+    avcServer_QueryConnection(LE_AVC_APPLICATION_UPDATE, NULL, NULL);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1570,7 +1570,9 @@ static void UpdateProgressHandler
                                    LE_AVC_APPLICATION_UPDATE,
                                    -1,
                                    percentDone,
-                                   LE_AVC_ERR_NONE);
+                                   LE_AVC_ERR_NONE,
+                                   NULL,
+                                   NULL);
 
             LE_DEBUG("Installation Progress: %d.", percentDone);
             break;
@@ -1581,7 +1583,9 @@ static void UpdateProgressHandler
                                    LE_AVC_APPLICATION_UPDATE,
                                    -1,
                                    100,
-                                   LE_AVC_ERR_NONE);
+                                   LE_AVC_ERR_NONE,
+                                   NULL,
+                                   NULL);
             RequestConnection();
             le_update_End();
             break;
@@ -1614,7 +1618,9 @@ static void UpdateProgressHandler
                                    LE_AVC_APPLICATION_UPDATE,
                                    -1,
                                    percentDone,
-                                   avcErrorCode);
+                                   avcErrorCode,
+                                   NULL,
+                                   NULL);
 
             // Now end the update and set the UpdateStarted flag false before calling SetObj9State()
             // function (otherwise, SetObj9State() may call le_update_End() again if it notices
