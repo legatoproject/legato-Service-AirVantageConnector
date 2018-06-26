@@ -74,6 +74,13 @@ static le_avc_StatusEventHandlerRef_t AvcStatusEventRef;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Reference to the SIM state changer event handler
+ */
+//--------------------------------------------------------------------------------------------------
+static le_sim_NewStateHandlerRef_t SimStateEventRef;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * SIM mode handler
  */
 //--------------------------------------------------------------------------------------------------
@@ -207,6 +214,31 @@ static void CellNetStateHandler
         default:
             break;
 
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Handler function for SIM states Notifications.
+ */
+//--------------------------------------------------------------------------------------------------
+static void SimStateHandler
+(
+    le_sim_Id_t     simId,
+    le_sim_States_t simState,
+    void*           contextPtr
+)
+{
+    if (!SimHandlerPtr->avcConnectionRequest)
+    {
+        return;
+    }
+
+    if (LE_SIM_ABSENT == simState)
+    {
+        LE_WARN("SIM card is absent. Perform a rollback");
+        SimHandlerPtr->status = SIM_SWITCH_ERROR;
+        SimModeRollback();
     }
 }
 
@@ -430,7 +462,10 @@ le_result_t SimModeInit
     CellNetStateEventRef = le_cellnet_AddStateEventHandler(CellNetStateHandler, NULL);
 
     // Register a handler for AVC events
-    AvcStatusEventRef  = le_avc_AddStatusEventHandler(AvcStatusHandler, NULL);
+    AvcStatusEventRef = le_avc_AddStatusEventHandler(AvcStatusHandler, NULL);
+
+    // Register for SIM state changes
+    SimStateEventRef = le_sim_AddNewStateHandler(SimStateHandler, NULL);
 
     // Get the current SIM mode
     SimHandlerPtr->mode = GetCurrentSimMode();
@@ -463,6 +498,7 @@ void SimModeDeinit
     // Remove event handlers
     le_cellnet_RemoveStateEventHandler(CellNetStateEventRef);
     le_avc_RemoveStatusEventHandler(AvcStatusEventRef);
+    le_sim_RemoveNewStateHandler(SimStateEventRef);
 
     SimHandlerPtr->isInit = false;
 }
