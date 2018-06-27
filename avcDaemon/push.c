@@ -55,7 +55,7 @@ static bool IsPushing = false;
 typedef struct
 {
     uint16_t mid;
-    uint8_t buffer[4096];
+    uint8_t buffer[MAX_PUSH_BUFFER_BYTES];
     size_t bufferLength;
     lwm2mcore_PushContent_t contentType;
     bool isSent;
@@ -169,8 +169,9 @@ static void PushCallBackHandler
  *
  * @return
  *  - LE_OK             The function succeeded
- *  - LE_BUSY           Data queued for push
- *  - LE_NOT_POSSIBLE   Data queue is full, try pushing data again later
+ *  - LE_BUSY           Push service is busy. Data added to queue list for later push
+ *  - LE_OVERFLOW       Data size exceeds the maximum allowed size
+ *  - LE_NO_MEMORY      Data queue is full, try pushing data again later
  *  - LE_FAULT          On any other errors
  */
 //--------------------------------------------------------------------------------------------------
@@ -186,9 +187,14 @@ le_result_t PushBuffer
     uint16_t mid = 0;
     le_result_t result;
 
+    if (bufferLength > MAX_PUSH_BUFFER_BYTES)
+    {
+        return LE_OVERFLOW;
+    }
+
     if (le_dls_NumLinks(&PushDataList) >= MAX_PUSH_QUEUE)
     {
-        return LE_NOT_POSSIBLE;
+        return LE_NO_MEMORY;
     }
 
     result = avcClient_Push(bufferPtr, bufferLength, contentType, &mid);

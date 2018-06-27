@@ -120,6 +120,42 @@ static void PushCallbackHandler
     }
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Write to a file descriptor
+ */
+//--------------------------------------------------------------------------------------------------
+static int FdWrite
+(
+    int     fd,
+    void*   bufPtr,
+    size_t  size
+)
+{
+    ssize_t count;
+
+    while (size)
+    {
+        count = write(fd, bufPtr, size);
+        if (-1 == count && (EINTR == errno))
+        {
+            continue;
+        }
+        if (-1 == count)
+        {
+            LE_ERROR("write failed: %m");
+            return -1;
+        }
+        if (0 <= count)
+        {
+            size -= count;
+            bufPtr += count;
+        }
+    }
+
+    return 0;
+}
+
 //-------------------------------------------------------------------------------------------------
 /**
  * Setting data handler.
@@ -549,6 +585,68 @@ static void TestTimeseries
     LE_INFO("============= Test avdata with times series passed==============");
 }
 
+
+//-------------------------------------------------------------------------------------------------
+/**
+ * Test Airvantage server APIs:  le_avdata_PushStream()
+ */
+//-------------------------------------------------------------------------------------------------
+static void TestPushStream
+(
+    void
+)
+{
+    int fd;
+    char dummyData[512];
+
+    LE_INFO("============= Test le_avdata_PushStream() API ==============");
+
+    // Use an invalid file descriptor
+    fd = -5;
+    LE_ASSERT(LE_FAULT == le_avdata_PushStream("data", fd, PushCallbackHandler, NULL));
+
+    fd = 10;
+    LE_ASSERT(LE_FAULT == le_avdata_PushStream("data", fd, PushCallbackHandler, NULL));
+
+    //Push a huge amount of data
+    fd = open("/dev/urandom", O_RDONLY);
+    if (-1 == fd)
+    {
+        LE_ERROR("Failed to open file descriptor, errno %d.", errno);
+        return;
+    }
+
+    LE_ASSERT(LE_OVERFLOW == le_avdata_PushStream("data", fd, PushCallbackHandler, NULL));
+    close(fd);
+
+    // Create a file and populate it with data, then push it.
+    fd = open("/tmp/PushSteamFile.txt", O_RDWR | O_CREAT | O_TRUNC, 0644);
+    if (-1 == fd)
+    {
+        LE_ERROR("Failed to create file, errno %d.", errno);
+        return;
+    }
+
+    if (-1 == FdWrite(fd, dummyData, sizeof(dummyData)))
+    {
+        LE_ERROR("Unable to write buffer in file, errno %d.", errno);
+        goto end;
+    }
+
+    if (-1 == lseek(fd, 0, SEEK_SET))
+    {
+        LE_ERROR("Unable to reach start of the file, errno %d.", errno);
+        goto end;
+    }
+
+    LE_ASSERT_OK(le_avdata_PushStream("data", fd, PushCallbackHandler, NULL));
+    LE_ASSERT(LE_NO_MEMORY == le_avdata_PushStream("data", fd, PushCallbackHandler, NULL));
+
+end:
+    close(fd);
+    remove("/tmp/PushSteamFile.txt");
+}
+
 //--------------------------------------------------------------------------------------------------
 /**
  * main of the test
@@ -557,6 +655,9 @@ static void TestTimeseries
 COMPONENT_INIT
 {
     LE_INFO("=============== Start avDataUnitTest =====================");
+
+    // Test - le_avdata_PushStream() API
+    TestPushStream();
 
     // Test - using dot as delimiter
     // Check if uncreated resources return LE_NOT_FOUND

@@ -30,22 +30,12 @@
 //--------------------------------------------------------------------------------------------------
 #define MAX_EXPECTED_ASSETDATA 20000
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Buffer size in bytes for a CBOR decoder.
  */
 //--------------------------------------------------------------------------------------------------
 #define CBOR_DECODER_BUFFER_BYTES 1024
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Maximum bytes that can be pushed to the server.
- */
-//--------------------------------------------------------------------------------------------------
-#define MAX_PUSH_BUFFER_BYTES 20000
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -3234,11 +3224,12 @@ void le_avdata_ReplyExecResult
 /**
  * Push asset data to the server
  *
-* @return:
- *      - LE_OK on success.
- *      - LE_NOT_FOUND if path doesn't exist.
- *      - LE_BUSY if push is queued and will pushed later
- *      - LE_NOT_POSSIBLE if push queue is full, try again later
+ * @return:
+ *      - LE_OK on success
+ *      - LE_NOT_FOUND if the provided path doesn't exist
+ *      - LE_BUSY if push service is busy. Data added to queue list for later push
+ *      - LE_OVERFLOW if data size exceeds the maximum allowed size
+ *      - LE_NO_MEMORY if push queue is full, try again later
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
@@ -3343,9 +3334,11 @@ le_result_t le_avdata_Push
 /**
  * Push data dump to a specified path on the server.
  *
- * @return:
- *      - LE_OK on success.
- *      - LE_BUSY if the service is busy pushing other data, try again later
+ * @return
+ *      - LE_OK on success
+ *      - LE_BUSY if push service is busy. Data added to queue list for later push
+ *      - LE_OVERFLOW if data size exceeds the maximum allowed size
+ *      - LE_NO_MEMORY if push queue is full, try again later
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------
@@ -3360,7 +3353,7 @@ le_result_t le_avdata_PushStream
     // Service is busy, notify user to try another time
     if (IsPushBusy())
     {
-        return LE_NOT_POSSIBLE;
+        return LE_NO_MEMORY;
     }
 
     if (fd < 0)
@@ -3383,7 +3376,7 @@ le_result_t le_avdata_PushStream
             if (bytesRead > MAX_PUSH_BUFFER_BYTES)
             {
                 LE_ERROR("Data dump exceeds maximum buffer size.");
-                return LE_FAULT;
+                return LE_OVERFLOW;
             }
         }
 
@@ -3687,8 +3680,10 @@ le_result_t le_avdata_RecordString
  * Push record to the server
  *
 * @return:
- *      - LE_OK on success.
- *      - LE_BUSY if push is queued and will pushed later
+ *      - LE_OK on success
+ *      - LE_BUSY if push service is busy. Data added to queue list for later push
+ *      - LE_OVERFLOW if data size exceeds the maximum allowed size
+ *      - LE_NO_MEMORY if push queue is full, try again later
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------

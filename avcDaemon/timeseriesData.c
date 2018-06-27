@@ -1548,6 +1548,9 @@ le_result_t timeSeries_AddString
  *
  * @return:
  *      - LE_OK on success
+ *      - LE_BUSY if push service is busy. Data added to queue list for later push
+ *      - LE_OVERFLOW if data size exceeds the maximum allowed size
+ *      - LE_NO_MEMORY if push queue is full, try again later
  *      - LE_FAULT on any other error
  */
 //--------------------------------------------------------------------------------------------------

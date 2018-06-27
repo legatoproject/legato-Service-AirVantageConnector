@@ -16,6 +16,13 @@
 //--------------------------------------------------------------------------------------------------
 #define MAX_CBOR_BUFFER_NUMBYTES 4096 // TODO: verify value
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Maximum bytes that can be pushed to the server.
+ */
+//--------------------------------------------------------------------------------------------------
+#define MAX_PUSH_BUFFER_BYTES 20000
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -34,8 +41,9 @@ LE_SHARED bool IsPushBusy
  *
  * @return
  *  - LE_OK             The function succeeded
- *  - LE_BUSY           Data queued for push
- *  - LE_NOT_POSSIBLE   Data queue is full, try pushing data again later
+ *  - LE_BUSY           Push service is busy. Data added to queue list for later push
+ *  - LE_OVERFLOW       Data size exceeds the maximum allowed size
+ *  - LE_NO_MEMORY      Data queue is full, try pushing data again later
  *  - LE_FAULT          On any other errors
  */
 //--------------------------------------------------------------------------------------------------

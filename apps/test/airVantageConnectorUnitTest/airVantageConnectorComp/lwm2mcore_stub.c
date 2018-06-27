@@ -224,6 +224,7 @@ lwm2mcore_CredentialStatus_t lwm2mcore_GetCredentialStatus
  *
  * @return
  *      - LWM2MCORE_PUSH_INITIATED if data push transaction is initiated
+ *      - LWM2MCORE_PUSH_BUSY if state machine is busy doing a block transfer
  *      - LWM2MCORE_PUSH_FAILED if data push transaction failed
  */
 //--------------------------------------------------------------------------------------------------
