@@ -83,17 +83,12 @@
 /**
  * Default setting for user agreement
  *
- * NOTE: User agreement is enabled by default, if not configured
+ * @note User agreement is disabled by default which means that avcDaemon automatically accepts
+ *       requests from the server without requesting user approval. Default value is used when
+ *       there is no configuration file stored in the target.
  */
 //--------------------------------------------------------------------------------------------------
-#define USER_AGREEMENT_DEFAULT  1
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Default user agreement setting for connection notifications
- */
-//--------------------------------------------------------------------------------------------------
-#define DISABLE_CONNECTION_NOTIFICATION  0
+#define USER_AGREEMENT_DEFAULT  0
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1063,7 +1058,7 @@ static le_result_t RespondToConnectionPending
     {
         // Use default configuration if read fails
         LE_WARN("Using default user agreement configuration");
-        isUserAgreementEnabled = DISABLE_CONNECTION_NOTIFICATION;
+        isUserAgreementEnabled = USER_AGREEMENT_DEFAULT;
     }
 
     if (!isUserAgreementEnabled)
@@ -2723,7 +2718,7 @@ static void SetDefaultConfig
     }
 
     // set user agreement to default
-    avcConfig.ua.connect = DISABLE_CONNECTION_NOTIFICATION;
+    avcConfig.ua.connect = USER_AGREEMENT_DEFAULT;
     avcConfig.ua.download = USER_AGREEMENT_DEFAULT;
     avcConfig.ua.install = USER_AGREEMENT_DEFAULT;
     avcConfig.ua.uninstall = USER_AGREEMENT_DEFAULT;
