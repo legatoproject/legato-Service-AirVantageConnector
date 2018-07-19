@@ -35,6 +35,7 @@
           <variable default-label="Radio Signal Strength" path="2" type="int"></variable>
           <variable default-label="Link Quality" path="3" type="string"></variable>
           <variable default-label="IP addresses" path="4" type="string"></variable>
+          <variable default-label="Router IP Addresses" path="5" type="string"></variable>
           <variable default-label="APN" path="7" type="string"></variable>
           <variable default-label="Cell ID" path="8" type="int"></variable>
           <variable default-label="SMNC" path="9" type="int"></variable>
