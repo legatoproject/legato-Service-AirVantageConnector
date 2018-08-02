@@ -78,13 +78,19 @@ lwm2mcore_Sid_t lwm2mcore_SetPollingTimer
     uint32_t interval   ///< [IN] Polling Timer interval in seconds
 )
 {
+    uint32_t value = interval;
     LE_INFO("Setting polling timer to %d seconds", interval);
     if (false == lwm2mcore_CheckLifetimeLimit(interval))
     {
         return LWM2MCORE_ERR_INCORRECT_RANGE;
     }
 
-    if (LE_OK != le_avc_SetPollingTimer(interval / SECONDS_IN_A_MIN))
+    if (LWM2MCORE_LIFETIME_VALUE_DISABLED == interval)
+    {
+        value = 0;
+    }
+
+    if (LE_OK != le_avc_SetPollingTimer(value / SECONDS_IN_A_MIN))
     {
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }

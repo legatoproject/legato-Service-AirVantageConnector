@@ -23,6 +23,13 @@ static lwm2mcore_StatusCb_t EventCb;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Simulated lifetime
+ */
+//--------------------------------------------------------------------------------------------------
+uint32_t Lifetime = LWM2MCORE_LIFETIME_VALUE_DISABLED;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Simulate a new Lwm2m event
  */
 //--------------------------------------------------------------------------------------------------
@@ -81,6 +88,7 @@ lwm2mcore_Sid_t lwm2mcore_SetLifetime
     uint32_t lifetime               ///< [IN] Lifetime in seconds
 )
 {
+    Lifetime = lifetime;
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
@@ -95,6 +103,11 @@ lwm2mcore_Sid_t lwm2mcore_GetLifetime
     uint32_t* lifetimePtr           ///< [OUT] Lifetime in seconds
 )
 {
+    if(!lifetimePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+    *lifetimePtr = Lifetime;
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
 

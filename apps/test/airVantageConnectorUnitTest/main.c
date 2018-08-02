@@ -314,6 +314,38 @@ static void RemoveStatusEventHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Test: Polling
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+static void Testle_avc_Polling
+(
+    void* param1Ptr, /// Value to be passed as param1Ptr to the function
+    void* param2Ptr  /// Value to be passed as param2Ptr to the function
+)
+{
+    uint32_t pollingValue = 0;
+    AppContext_t* appCtxPtr = (AppContext_t*) param1Ptr;
+
+    LE_INFO("======== Test polling ========");
+    LE_ASSERT_OK(le_avc_GetPollingTimer(&pollingValue));
+    LE_ASSERT(0 == pollingValue);
+
+    pollingValue = 15;
+    LE_ASSERT_OK(le_avc_SetPollingTimer(pollingValue));
+    LE_ASSERT_OK(le_avc_GetPollingTimer(&pollingValue));
+    LE_ASSERT(15 == pollingValue);
+
+    pollingValue = 0;
+    LE_ASSERT_OK(le_avc_SetPollingTimer(pollingValue));
+    LE_ASSERT_OK(le_avc_GetPollingTimer(&pollingValue));
+    LE_ASSERT(0 == pollingValue);
+
+    le_sem_Post(appCtxPtr->appSemaphore);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Test: le_avc_GetUpdateType().
  *
  */
@@ -444,6 +476,11 @@ static void* AirVantageUnitTestThread
     // Test avc stop session
     le_event_QueueFunctionToThread(AppCtx.appThreadRef,
                                    Testle_avc_StopSession, &AppCtx, NULL);
+    SynchronizeTest();
+
+    // Test polling
+    le_event_QueueFunctionToThread(AppCtx.appThreadRef,
+                                   Testle_avc_Polling, &AppCtx, NULL);
     SynchronizeTest();
 
     LE_INFO("======== UnitTest of airVantage Connector Passed ========");
