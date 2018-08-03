@@ -3542,7 +3542,7 @@ le_result_t le_avc_SetApnConfig
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_GetRetryTimers
 (
-    uint16_t* timerValuePtr,  ///< [OUT] Retry timer array
+    uint16_t* timerValuePtr,  ///< [OUT] Array of retry timer intervals, minutes.
     size_t* numTimers         ///< [IN/OUT] Max num of timers to get/num of timers retrieved
 )
 {
@@ -3616,7 +3616,7 @@ le_result_t le_avc_GetRetryTimers
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_SetRetryTimers
 (
-    const uint16_t* timerValuePtr, ///< [IN] Retry timer array
+    const uint16_t* timerValuePtr, ///< [IN] Array of retry timer intervals, minutes.
     size_t numTimers               ///< [IN] Number of retry timers
 )
 {
@@ -3681,7 +3681,7 @@ le_result_t le_avc_SetRetryTimers
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_GetPollingTimer
 (
-    uint32_t* pollingTimerPtr  ///< [OUT] Polling timer
+    uint32_t* pollingTimerPtr  ///< [OUT] Polling timer interval, minutes
 )
 {
     if (pollingTimerPtr == NULL)
@@ -3738,11 +3738,12 @@ le_result_t le_avc_GetPollingTimer
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_SetPollingTimer
 (
-    uint32_t pollingTimer ///< [IN] Polling timer
+    uint32_t pollingTimer ///< [IN] Polling timer interval, minutes
 )
 {
     le_result_t result = LE_OK;
     lwm2mcore_Sid_t sid;
+    bool disabled = false;
 
     // Stop polling timer if running
     if (PollingTimerRef != NULL)
@@ -3753,22 +3754,23 @@ le_result_t le_avc_SetPollingTimer
         }
     }
 
-    // check if this configuration is allowed
-    if ((pollingTimer < LE_AVC_POLLING_TIMER_MIN_VAL) ||
-        (pollingTimer > LE_AVC_POLLING_TIMER_MAX_VAL))
+    // lifetime in the server object is in seconds and polling timer is in minutes
+    uint32_t lifetime = pollingTimer * SECONDS_IN_A_MIN;
+
+    // Disabled state is represented by either of 2 constants: 0 or 7300 days (20 years).
+    if ((POLLING_TIMER_DISABLED == pollingTimer) ||
+        (LWM2MCORE_LIFETIME_VALUE_DISABLED == lifetime))
+    {
+        disabled = true;
+        // 0 is not a valid value for lifetime, a specific value (7300 days) has to be used
+        lifetime = LWM2MCORE_LIFETIME_VALUE_DISABLED;
+    }
+    else if ((pollingTimer < LE_AVC_POLLING_TIMER_MIN_VAL) ||
+             (pollingTimer > LE_AVC_POLLING_TIMER_MAX_VAL))
     {
         LE_ERROR("Attemping to set an out-of-range Polling Timer value of %d. Min %d, Max %d.",
                  pollingTimer, LE_AVC_POLLING_TIMER_MIN_VAL, LE_AVC_POLLING_TIMER_MAX_VAL);
         return LE_OUT_OF_RANGE;
-    }
-
-    // lifetime in the server object is in seconds and polling timer is in minutes
-    uint32_t lifetime = pollingTimer * SECONDS_IN_A_MIN;
-
-    // 0 is not a valid value for lifetime, a specific value needs to be used
-    if (POLLING_TIMER_DISABLED == lifetime)
-    {
-        lifetime = LWM2MCORE_LIFETIME_VALUE_DISABLED;
     }
 
     // set lifetime in lwm2mcore
@@ -3789,15 +3791,13 @@ le_result_t le_avc_SetPollingTimer
     }
 
     // Start the polling timer if enabled
-    if (pollingTimer != POLLING_TIMER_DISABLED)
+    if (!disabled)
     {
-        uint32_t pollingTimeSeconds = pollingTimer * SECONDS_IN_A_MIN;
-
         LE_INFO("Polling Timer is set to start AVC session every %d minutes.", pollingTimer);
-        LE_INFO("A connection to server will be made in %d seconds.", pollingTimeSeconds);
+        LE_INFO("A connection to server will be made in %d seconds.", lifetime);
 
         // Set a timer to start the next session.
-        le_clk_Time_t interval = {.sec = pollingTimeSeconds};
+        le_clk_Time_t interval = {.sec = lifetime};
 
         LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
         LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
