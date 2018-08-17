@@ -99,10 +99,24 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Text content of the wakeup SMS
+ * Prefix pattern of the wakeup SMS
  */
 //--------------------------------------------------------------------------------------------------
-#define WAKEUP_SMS_TEXT "LWM2MWAKEUP"
+#define WAKEUP_SMS_PREFIX "LWM2M"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Command pattern of the wakeup SMS
+ */
+//--------------------------------------------------------------------------------------------------
+#define WAKEUP_COMMAND "WAKEUP"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Size of the decoded data buffer
+ */
+//--------------------------------------------------------------------------------------------------
+#define WAKEUP_SMS_DECODED_DATA_BUF_SIZE    64
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -119,6 +133,14 @@ static const le_clk_Time_t WakeUpSmsInterval = {.sec = 60, .usec = 0};
  */
 //--------------------------------------------------------------------------------------------------
 static le_clk_Time_t WakeUpSmsTimeout = {0, 0};
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Time stamp of the previously received wake-up SMS
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+static int32_t LastSmsTimeStamp = 0;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -3848,6 +3870,203 @@ le_result_t le_avc_GetUserAgreement
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Function to verify the wake-up SMS digital signature.
+ *
+ * @return
+ *      - true if this message is a valid wakeup SMS
+ *      - false otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+bool VerifyWakeupSmsSignature
+(
+    uint8_t*    data,           ///< [IN] Digitally signed data
+    size_t      dataLen,        ///< [IN] Data length
+    uint8_t*    signature,      ///< [IN] Digital signature
+    size_t      signatureLen    ///< [IN] Digital signature length
+)
+{
+    uint8_t     digest[WAKEUP_SMS_DECODED_DATA_BUF_SIZE] = {0};
+    size_t      digestLen = sizeof(digest);
+
+    // Calculate the HMAC SHA256 digest
+    if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_ComputeHmacSHA256(data, dataLen,
+                                                            LWM2MCORE_CREDENTIAL_DM_SECRET_KEY,
+                                                            digest, &digestLen))
+    {
+        LE_ERROR("Error calculating HMAC SHA256 for the wake-up SMS");
+        return false;
+    }
+
+    // Check whether the digest matches the signature provided
+    if (signatureLen != digestLen)
+    {
+        LE_ERROR("Signature length doesn't match expected: %zu, %zu", signatureLen, digestLen);
+        return false;
+    }
+    if (0 == memcmp(signature, digest, signatureLen))
+    {
+        return true;
+    }
+
+    return false;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to process the SMS and check whether it's a valid wakeup command.
+ *
+ * @return
+ *      - true if this message is a valid wakeup SMS
+ *      - false otherwise
+ *
+ * @note Wake-up SMS Format:
+ *       "LWM2M" + base64("WAKEUP" + '\0' + timestamp + hmac_sha256_signature)
+ *       The "WAKEUP" order is followed by a null byte. This allows to support other orders than
+ *       WAKEUP which may have a different size.
+ *       Time stamp is a signed int32, representing epoch time in seconds. We do not expect
+ *       to support this beyond 2038.
+ *       The signature applies to the concatenation of the order (WAKEUP), the null byte and the
+ *       timestamp.
+ *       The key is the DM Pre-Shared Key (LWM2MCORE_CREDENTIAL_DM_SECRET_KEY).
+ *       Signed data length is 11 bytes, signature size is 32 bytes.
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+bool ProcessWakeupSms
+(
+    le_sms_MsgRef_t msgRef     ///< [IN] Message object received from the modem.
+)
+{
+    char            text[LE_SMS_TEXT_MAX_BYTES] = {0};
+    bool            isValid = false;
+    le_clk_Time_t   CurrentTime = le_clk_GetRelativeTime();
+    char            *encodedText;
+    uint8_t         decodedData[WAKEUP_SMS_DECODED_DATA_BUF_SIZE] = {0};
+    size_t          decodedLen;
+    char*           commandPtr;
+    int32_t         timeStamp;
+    uint8_t         *signaturePtr;
+    size_t          dataLen;
+    size_t          signatureLen;
+
+    if (LE_OK != le_sms_GetText(msgRef, text, sizeof(text)))
+    {
+        LE_ERROR("Can't get SMS text");
+        return false;
+    }
+
+    // Check whether SMS starts with LWM2M
+    if ((strlen(text) > strlen(WAKEUP_SMS_PREFIX)) &&
+        (strncmp(text, WAKEUP_SMS_PREFIX, strlen(WAKEUP_SMS_PREFIX)) != 0))
+    {
+        LE_INFO("Prefix does not match pattern '%s', ignoring", WAKEUP_SMS_PREFIX);
+        return false;
+    }
+
+    // Decode the part of SMS that goes after prefix
+    encodedText = text + strlen(WAKEUP_SMS_PREFIX);
+    decodedLen = sizeof(decodedData);
+
+    if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_Base64Decode(encodedText, decodedData, &decodedLen))
+    {
+        LE_ERROR("Error Decoding data");
+        return false;
+    }
+
+    // Check the command (located first in the decoded content)
+    commandPtr = (char *) decodedData;
+    LE_INFO("Message decoded: length %zu", decodedLen);
+    if (strncmp(commandPtr, WAKEUP_COMMAND, strlen(WAKEUP_COMMAND)) != 0)
+    {
+        LE_INFO("Not a wakeup SMS - ignoring");
+        return false;
+    }
+
+    // Extract the timestamp: located after the command and terminating zero.
+    memcpy(&timeStamp, commandPtr + strlen(commandPtr) + 1, sizeof(timeStamp));
+
+    // Convert the timestamp from little endian to host endianness if necessary.
+    timeStamp = le32toh(timeStamp);
+
+    LE_INFO("Wakeup SMS detected: timestamp is %d (last %d)", timeStamp, LastSmsTimeStamp);
+
+    // Timestamp should be greater than previous one (protection from capturing and re-sending SMS)
+    if (timeStamp <= LastSmsTimeStamp)
+    {
+        LE_ERROR("SMS timestamp check failed: current %u last %u", timeStamp, LastSmsTimeStamp);
+        isValid = false;
+    } // Check if incoming rate of wake-up SMS exceeds the limit
+    else if (!le_clk_GreaterThan(CurrentTime, WakeUpSmsTimeout))
+    {
+        LE_INFO("Ratelimit exceeded: curr time %ld old %ld", CurrentTime.sec, WakeUpSmsTimeout.sec);
+        isValid = false;
+    }
+    else // This is a valid Wake-up SMS
+    {
+        // Update the locally stored time stamp of the previous wakeup message
+        LastSmsTimeStamp = timeStamp;
+
+        // Signature starts right after the time stamp
+        signaturePtr = (uint8_t *) commandPtr + strlen(commandPtr) + 1 + sizeof(timeStamp);
+
+        // Digitally signed data includes: "WAKEUP" + '\0' + timestamp
+        dataLen = strlen(WAKEUP_COMMAND) + 1 + sizeof(timeStamp);
+        signatureLen = decodedLen - dataLen;
+
+        // Verify the signature
+        isValid = VerifyWakeupSmsSignature(decodedData, dataLen, signaturePtr, signatureLen);
+
+        // Update the ratelimiting timeout
+        WakeUpSmsTimeout = le_clk_Add(CurrentTime, WakeUpSmsInterval);
+    }
+
+    // Cleanup - the wakeup message doesn't need to be stored.
+    // If it's not a wakeup command, the function will return earlier and message won't be deleted.
+    if (LE_OK != le_sms_DeleteFromStorage(msgRef))
+    {
+        LE_ERROR("Error deleting wakeup SMS from storage");
+    }
+
+    return isValid;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Handler function for wake-up SMS message reception.
+ *
+ */
+//--------------------- -----------------------------------------------------------------------------
+void RxMessageHandler
+(
+    le_sms_MsgRef_t msgRef,     ///< [IN] Message object received from the modem.
+    void*           contextPtr  ///< [IN] The handler's context.
+)
+{
+    bool isWakeup;
+    le_sms_Format_t Format = le_sms_GetFormat(msgRef);
+
+    switch(Format)
+    {
+        case LE_SMS_FORMAT_TEXT :
+            isWakeup = ProcessWakeupSms(msgRef);
+            // Start the session
+            if (isWakeup)
+            {
+                LE_INFO("Wakeup SMS received - starting AV session");
+                if (LE_OK != avcServer_StartSession())
+                {
+                    LE_ERROR("Failed to start a new session");
+                }
+            }
+            break;
+        default :
+            break;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Function to read a resource from a LwM2M object
  *
  * @return
@@ -3969,61 +4188,6 @@ static bool IsFotaInstalling
            && (LWM2MCORE_FW_UPDATE_STATE_UPDATING == fwUpdateState)
            && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult);
 
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Handler function for wake-up SMS message reception.
- *
- */
-//--------------------- ----------------------------------------------------------------------------
-void RxMessageHandler
-(
-    le_sms_MsgRef_t msgRef,     ///< [IN] Message object received from the modem.
-    void*           contextPtr  ///< [IN] The handler's context.
-)
-{
-    char text[LE_SMS_TEXT_MAX_BYTES] = {0};
-
-    le_sms_Format_t Format = le_sms_GetFormat(msgRef);
-
-    switch(Format)
-    {
-        case LE_SMS_FORMAT_TEXT :
-            le_sms_GetText(msgRef, text, sizeof(text));
-            if (strncmp(text, WAKEUP_SMS_TEXT, sizeof(text)) == 0)
-            {
-                le_clk_Time_t CurrentTime = le_clk_GetRelativeTime();
-                if (le_clk_GreaterThan(CurrentTime, WakeUpSmsTimeout))
-                {
-                    LE_INFO("Wakeup SMS received - starting AV session");
-
-                    // Update the ratelimiting timeout.
-                    WakeUpSmsTimeout = le_clk_Add(CurrentTime, WakeUpSmsInterval);
-
-                    // Start the AV session. If there is no activity, it will be
-                    // torn down after 20 seconds.
-                    if (LE_OK != avcServer_StartSession())
-                    {
-                        LE_ERROR("Failed to start a new session");
-                    }
-
-                    // Cleanup - the wakeup message doesn't need to be stored.
-                    if (LE_OK != le_sms_DeleteFromStorage(msgRef))
-                    {
-                        LE_ERROR("Error deleting wakeup SMS from storage");
-                    }
-                }
-                else
-                {
-                    LE_INFO("Wakeup SMS rate exceeds limit - ignoring");
-                }
-            }
-            // If this is not a wakeup message - do nothing.
-            break;
-        default :
-            break;
-    }
 }
 
 //--------------------------------------------------------------------------------------------------
