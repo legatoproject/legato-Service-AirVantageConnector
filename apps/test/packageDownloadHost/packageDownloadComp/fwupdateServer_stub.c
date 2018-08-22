@@ -135,7 +135,7 @@ le_result_t le_fwupdate_Download
                 // Full length of the CWE image is provided inside the
                 // first CWE header
                 fullImageLength = imageSize + CWE_HEADER_SIZE;
-                LE_DEBUG("fullImageLength: %u", fullImageLength);
+                LE_DEBUG("fullImageLength: %zu", fullImageLength);
             }
             else
             {
@@ -151,7 +151,7 @@ le_result_t le_fwupdate_Download
         }
     }
 
-    LE_INFO("Expected size: %d, received size: %d", fullImageLength, totalCount);
+    LE_INFO("Expected size: %zu, received size: %zu", fullImageLength, totalCount);
     LE_ASSERT(fullImageLength == totalCount);
 
     result = le_fs_Close(fileRef);
