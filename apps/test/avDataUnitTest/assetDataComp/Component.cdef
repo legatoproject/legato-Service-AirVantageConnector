@@ -6,10 +6,11 @@ requires:
         airVantage/le_avdata.api                            [types-only]
         le_cfg.api                                          [types-only]
     }
+
     component:
     {
-
         ${LEGATO_ROOT}/components/3rdParty/zlib
+        ${LEGATO_ROOT}/components/3rdParty/tinycbor
     }
 
     lib:
