@@ -644,7 +644,10 @@ static void TestPushStream
 
 end:
     close(fd);
-    remove("/tmp/PushSteamFile.txt");
+    if (-1 != remove("/tmp/PushSteamFile.txt"))
+    {
+        LE_ERROR("Unable to remove the file");
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
