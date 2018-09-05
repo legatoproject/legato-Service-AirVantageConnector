@@ -37,7 +37,7 @@
  * Absolute location of the firmware image to be sent to the modem
  */
 //--------------------------------------------------------------------------------------------------
-#define FWUPDATE_ABS_PATH_FILE     "/tmp/data/le_fs/fwupdate"
+#define FWUPDATE_ABS_PATH_FILE     "/tmp/data/le_fs/firmware.bin"
 
 //--------------------------------------------------------------------------------------------------
 /**

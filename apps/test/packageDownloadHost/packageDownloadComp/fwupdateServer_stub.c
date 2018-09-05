@@ -16,7 +16,7 @@
  * Location of the firmware image to be sent to the modem
  */
 //--------------------------------------------------------------------------------------------------
-#define FWUPDATE_STORE_FILE         "/fwupdate"
+#define FWUPDATE_STORE_FILE         "/firmware.bin"
 
 //--------------------------------------------------------------------------------------------------
 /**
