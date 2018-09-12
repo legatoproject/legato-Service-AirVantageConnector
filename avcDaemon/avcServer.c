@@ -478,6 +478,13 @@ static le_timer_Ref_t LaunchRebootTimer;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Launch install timer
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t LaunchInstallTimer;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Error occurred during update via airvantage.
  */
 //--------------------------------------------------------------------------------------------------
@@ -524,6 +531,13 @@ static le_timer_Ref_t PollingTimerRef = NULL;
  */
 // ------------------------------------------------------------------------------------------------
 static bool IsUserSession = false;
+
+// -------------------------------------------------------------------------------------------------
+/**
+ * Is update ready to install?
+ */
+// ------------------------------------------------------------------------------------------------
+static bool IsPkgReadyToInstall = false;
 
 //--------------------------------------------------------------------------------------------------
 // Local functions
@@ -879,6 +893,30 @@ static le_result_t AcceptDownloadPackage
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Trigger a 2-sec timer and launch install routine on expiry
+ */
+//--------------------------------------------------------------------------------------------------
+static void StartInstall
+(
+    void
+)
+{
+    LE_DEBUG("Starting install timer");
+
+    // Notify that an install is on progress
+    avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE, -1, 0,
+                           LE_AVC_ERR_NONE, NULL, NULL);
+
+    // Trigger a 2-sec timer and call the install routine on expiry
+    CurrentState = AVC_INSTALL_IN_PROGRESS;
+    le_clk_Time_t interval = { .sec = 2, .usec = 0 };
+    le_timer_SetInterval(LaunchInstallTimer, interval);
+    le_timer_Start(LaunchInstallTimer);
+    IsPkgReadyToInstall = false;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Accept the currently pending package install
  *
  * @return
@@ -900,19 +938,18 @@ static le_result_t AcceptInstallPackage
     else
     {
         StopDeferTimer(LE_AVC_USER_AGREEMENT_INSTALL);
+        IsPkgReadyToInstall = true;
+        switch (le_avc_GetSessionType())
+        {
+            case LE_AVC_BOOTSTRAP_SESSION:
+            case LE_AVC_DM_SESSION:
+                // Stop the active session before trying to install package.
+                le_avc_StopSession();
+                break;
 
-        // Notify the registered handler to proceed with the install; only called once.
-        if (QueryInstallHandlerRef != NULL)
-        {
-            CurrentState = AVC_INSTALL_IN_PROGRESS;
-            QueryInstallHandlerRef(PkgInstallCtx.type, PkgInstallCtx.instanceId);
-            QueryInstallHandlerRef = NULL;
-        }
-        else
-        {
-            LE_ERROR("Install handler not valid");
-            CurrentState = AVC_IDLE;
-            return LE_FAULT;
+            default:
+                StartInstall();
+                break;
         }
     }
     return LE_OK;
@@ -1599,6 +1636,13 @@ static void ProcessUpdateStatus
             avcClient_StopActivityTimer();
             // These events do not cause a state transition
             avData_ReportSessionState(LE_AVDATA_SESSION_STOPPED);
+
+            // If a package is waiting to be installed, trigger the install.
+            if (IsPkgReadyToInstall)
+            {
+                StartInstall();
+            }
+
             break;
 
         case LE_AVC_SESSION_FAILED:
@@ -1832,6 +1876,30 @@ static void LaunchRebootExpiryHandler
     {
         QueryRebootHandlerRef();
         QueryRebootHandlerRef = NULL;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Called when the launch install timer expires
+ */
+//--------------------------------------------------------------------------------------------------
+static void LaunchInstallExpiryHandler
+(
+    le_timer_Ref_t timerRef    ///< Timer that expired
+)
+{
+    // Notify the registered handler to proceed with the install; only called once.
+    if (QueryInstallHandlerRef != NULL)
+    {
+        LE_DEBUG("Triggering installation");
+        QueryInstallHandlerRef(PkgInstallCtx.type, PkgInstallCtx.instanceId);
+        QueryInstallHandlerRef = NULL;
+    }
+    else
+    {
+        LE_ERROR("Install handler not valid");
+        CurrentState = AVC_IDLE;
     }
 }
 
@@ -4229,6 +4297,9 @@ COMPONENT_INIT
 
     ConnectDeferTimer = le_timer_Create("connect defer timer");
     le_timer_SetHandler(ConnectDeferTimer, ConnectTimerExpiryHandler);
+
+    LaunchInstallTimer = le_timer_Create("launch install timer");
+    le_timer_SetHandler(LaunchInstallTimer, LaunchInstallExpiryHandler);
 
     LaunchRebootTimer = le_timer_Create("launch reboot timer");
     le_timer_SetHandler(LaunchRebootTimer, LaunchRebootExpiryHandler);

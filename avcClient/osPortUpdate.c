@@ -25,18 +25,6 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Launch update context structure
- */
-//--------------------------------------------------------------------------------------------------
-typedef struct
-{
-    lwm2mcore_UpdateType_t  type;       ///< Update type (firmware or software)
-    uint16_t                instanceId; ///< Instance id (0 for firmware update)
-}
-LaunchUpdateCtx_t;
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Start download context structure
  */
 //--------------------------------------------------------------------------------------------------
@@ -49,24 +37,10 @@ StartDownloadCtx_t;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Timer used to launch the update
- */
-//--------------------------------------------------------------------------------------------------
-static le_timer_Ref_t LaunchUpdateTimer = NULL;
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Timer used to start the download
  */
 //--------------------------------------------------------------------------------------------------
 static le_timer_Ref_t StartDownloadTimer = NULL;
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Current update context
- */
-//--------------------------------------------------------------------------------------------------
-static LaunchUpdateCtx_t UpdateCtx;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -90,8 +64,7 @@ static void LaunchUpdate
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
             LE_DEBUG("Launch FW update");
-            avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
-                                   -1, 0, LE_AVC_ERR_NONE, NULL, NULL);
+
             if (DWL_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING))
             {
                 LE_ERROR("Unable to set FW update state to UPDATING");
@@ -122,29 +95,6 @@ static void LaunchUpdate
         default:
             LE_ERROR("Unknown update type %u", updateType);
             break;
-    }
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Called when the launch update timer expires.
- */
-//--------------------------------------------------------------------------------------------------
-static void LaunchUpdateTimerExpiryHandler
-(
-    le_timer_Ref_t timerRef    ///< Timer that expired
-)
-{
-    LaunchUpdateCtx_t* updateCtxPtr = (LaunchUpdateCtx_t*)le_timer_GetContextPtr(timerRef);
-
-    // Notify for user agreement and launch update after user acceptance.
-    if (NULL == updateCtxPtr)
-    {
-        LE_ERROR("Update context not available");
-    }
-    else
-    {
-        avcServer_QueryInstall(LaunchUpdate, updateCtxPtr->type, updateCtxPtr->instanceId);
     }
 }
 
@@ -412,30 +362,6 @@ lwm2mcore_Sid_t lwm2mcore_LaunchUpdate
         case LWM2MCORE_FW_UPDATE_TYPE:
         case LWM2MCORE_SW_UPDATE_TYPE:
             {
-                // Acknowledge the launch update notification and launch the update later
-                UpdateCtx.type = type;
-                UpdateCtx.instanceId = instanceId;
-
-                le_clk_Time_t interval = {ACTION_DELAY, 0};
-                if (!LaunchUpdateTimer)
-                {
-                    LaunchUpdateTimer = le_timer_Create("launch update timer");
-                }
-                if (   (LE_OK != le_timer_SetHandler(LaunchUpdateTimer,
-                                                     LaunchUpdateTimerExpiryHandler))
-                    || (LE_OK != le_timer_SetContextPtr(LaunchUpdateTimer,
-                                                        (LaunchUpdateCtx_t*)&UpdateCtx))
-                    || (LE_OK != le_timer_SetInterval(LaunchUpdateTimer, interval))
-                    || (LE_OK != le_timer_Start(LaunchUpdateTimer))
-                   )
-                {
-                    sid = LWM2MCORE_ERR_GENERAL_ERROR;
-                }
-                else
-                {
-                    sid = LWM2MCORE_ERR_COMPLETED_OK;
-                }
-
                 if (type == LWM2MCORE_SW_UPDATE_TYPE)
                 {
                     avcApp_SetSwUpdateInternalState(INTERNAL_STATE_INSTALL_REQUESTED);
@@ -448,6 +374,8 @@ lwm2mcore_Sid_t lwm2mcore_LaunchUpdate
                         return LWM2MCORE_ERR_GENERAL_ERROR;
                     }
                 }
+                avcServer_QueryInstall(LaunchUpdate, type, instanceId);
+                sid = LWM2MCORE_ERR_COMPLETED_OK;
             }
             break;
 
