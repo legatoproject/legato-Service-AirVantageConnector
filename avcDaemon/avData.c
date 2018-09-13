@@ -2356,7 +2356,7 @@ static void AvServerRequestHandler
     uint8_t* payload = (uint8_t *)lwm2mcore_GetRequestPayload(AVServerReqRef);
     size_t payloadLen = lwm2mcore_GetRequestPayloadLength(AVServerReqRef);
     uint8_t* token = (uint8_t *)lwm2mcore_GetToken(AVServerReqRef);
-    size_t tokenLength = lwm2mcore_GetTokenLength(AVServerReqRef);
+    uint8_t tokenLength = lwm2mcore_GetTokenLength(AVServerReqRef);
 
     // Partially fill in the response.
     memcpy(AVServerResponse.token, token, tokenLength);
@@ -3225,6 +3225,13 @@ le_result_t le_avdata_Push
 {
     char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
 
+    // This api is not supported along with an external CoAP handler.
+    if (lwm2mcore_GetCoapExternalHandler() != NULL)
+    {
+        LE_ERROR("Push not allowed when external coap handler exists");
+        return LE_FAULT;
+    }
+
     // Format the path with correct delimiter
     FormatPath((char*)path);
 
@@ -3333,6 +3340,13 @@ le_result_t le_avdata_PushStream
     void* contextPtr                           ///< [IN] Context pointer
 )
 {
+    // This api is not supported along with an external CoAP handler.
+    if (lwm2mcore_GetCoapExternalHandler() != NULL)
+    {
+        LE_ERROR("Push not allowed when external coap handler exists");
+        return LE_FAULT;
+    }
+
     // Service is busy, notify user to try another time
     if (IsPushBusy())
     {
@@ -3683,6 +3697,13 @@ le_result_t le_avdata_PushRecord
 )
 {
     le_result_t result;
+
+    // This api is not supported along with an external CoAP handler.
+    if (lwm2mcore_GetCoapExternalHandler() != NULL)
+    {
+        LE_ERROR("Push not allowed when external coap handler exists");
+        return LE_FAULT;
+    }
 
     // Map safeRef to desired data
     recordRef = GetRecRefFromSafeRef(recordRef, __func__);

@@ -577,7 +577,7 @@ const uint8_t* lwm2mcore_GetToken
  * Function to get token length from request
  */
 //--------------------------------------------------------------------------------------------------
-size_t lwm2mcore_GetTokenLength
+uint8_t lwm2mcore_GetTokenLength
 (
     lwm2mcore_CoapRequest_t* requestRef    ///< [IN] Coap request reference
 )
@@ -607,6 +607,19 @@ void lwm2mcore_SetPushCallback
     lwm2mcore_PushAckCallback_t callbackP  ///< [IN] push callback pointer
 )
 {
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Returns the registered CoAP external event handler
+ */
+//--------------------------------------------------------------------------------------------------
+coap_external_handler_t lwm2mcore_GetCoapExternalHandler
+(
+    void
+)
+{
+    return NULL;
 }
 
 //--------------------------------------------------------------------------------------------------

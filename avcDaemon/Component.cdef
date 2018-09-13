@@ -4,6 +4,7 @@ provides:
     {
         airVantage/le_avc.api
         airVantage/le_avdata.api
+        airVantage/le_coap.api
     }
 }
 
@@ -65,6 +66,7 @@ sources:
 {
     assetData.c
     avData.c
+    coap.c
     avcServer.c
     timeseriesData.c
     push.c

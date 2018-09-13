@@ -18,6 +18,7 @@
 #include "avcServer.h"
 #include "avData.h"
 #include "push.h"
+#include "coap.h"
 #include "fsSys.h"
 #include "le_print.h"
 #include "avcAppUpdate.h"
@@ -4350,6 +4351,7 @@ COMPONENT_INIT
     avData_Init();
     timeSeries_Init();
     push_Init();
+    coap_Init();
     avcClient_Init();
 
     // Read the user defined timeout from config tree @ /apps/avcService/activityTimeout

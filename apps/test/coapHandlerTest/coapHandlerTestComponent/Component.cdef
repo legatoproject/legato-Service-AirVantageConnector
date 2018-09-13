@@ -1,0 +1,24 @@
+requires:
+{
+    api:
+    {
+        airVantage/le_avdata.api
+        airVantage/le_coap.api
+    }
+}
+
+sources:
+{
+    main.c
+}
+
+bundles:
+{
+    file:
+    {
+        $CURDIR/testVectors/transmitSmallString.cbor  transmitSmallString.cbor
+        $CURDIR/testVectors/transmitLargeString.cbor  transmitLargeString.cbor
+        $CURDIR/testVectors/getSmallString.cbor       getSmallString.cbor
+        $CURDIR/testVectors/get2kbString.cbor         get2kbString.cbor
+    }
+}

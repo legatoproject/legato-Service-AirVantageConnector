@@ -47,3 +47,10 @@ if(EXISTS ${LEGATO_ROOT}/3rdParty/Lwm2mCore/tests)
 
     add_dependencies(avc_tests_c lwm2munittests)
 endif()
+
+if(EXISTS ${LEGATO_ROOT}/3rdParty/Lwm2mCore/3rdParty/wakaama/tests)
+    add_subdirectory(${LEGATO_ROOT}/3rdParty/Lwm2mCore/3rdParty/wakaama/tests
+                     ${CMAKE_BINARY_DIR}/apps/test/platformServices/airVantageConnector/wakaama)
+
+    add_dependencies(avc_tests_c wakaamaunittests)
+endif()
