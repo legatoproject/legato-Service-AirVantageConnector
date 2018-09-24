@@ -15,7 +15,7 @@
 #include "push.h"
 #include "le_print.h"
 
-#include "tinycbor/cbor.h"
+#include "cbor.h"
 #include "zlib.h"
 
 //--------------------------------------------------------------------------------------------------

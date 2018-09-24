@@ -11,7 +11,7 @@
 
 #include <lwm2mcore/lwm2mcore.h>
 #include <lwm2mcore/coapHandlers.h>
-#include "tinycbor/cbor.h"
+#include "cbor.h"
 #include "legato.h"
 #include "interfaces.h"
 #include "timeseriesData.h"
