@@ -536,8 +536,22 @@ static bool IsUserSession = false;
 /**
  * Is update ready to install?
  */
-// ------------------------------------------------------------------------------------------------
-static bool IsPkgReadyToInstall = false;
+// -------------------------------------------------------------------------------------------------
+static bool IsFwReadyToInstall = false;
+
+//--------------------------------------------------------------------------------------------------
+// Function prototypes
+//--------------------------------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Called when the launch install timer expires
+ */
+//--------------------------------------------------------------------------------------------------
+static void LaunchInstallExpiryHandler
+(
+    le_timer_Ref_t timerRef    ///< Timer that expired
+);
 
 //--------------------------------------------------------------------------------------------------
 // Local functions
@@ -896,7 +910,7 @@ static le_result_t AcceptDownloadPackage
  * Trigger a 2-sec timer and launch install routine on expiry
  */
 //--------------------------------------------------------------------------------------------------
-static void StartInstall
+static void StartFwInstall
 (
     void
 )
@@ -912,7 +926,7 @@ static void StartInstall
     le_clk_Time_t interval = { .sec = 2, .usec = 0 };
     le_timer_SetInterval(LaunchInstallTimer, interval);
     le_timer_Start(LaunchInstallTimer);
-    IsPkgReadyToInstall = false;
+    IsFwReadyToInstall = false;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -937,21 +951,37 @@ static le_result_t AcceptInstallPackage
     }
     else
     {
+        le_avc_SessionType_t type = le_avc_GetSessionType();
         StopDeferTimer(LE_AVC_USER_AGREEMENT_INSTALL);
-        IsPkgReadyToInstall = true;
-        switch (le_avc_GetSessionType())
+
+        switch (PkgInstallCtx.type)
         {
-            case LE_AVC_BOOTSTRAP_SESSION:
-            case LE_AVC_DM_SESSION:
-                // Stop the active session before trying to install package.
-                le_avc_StopSession();
+            case LWM2MCORE_FW_UPDATE_TYPE:
+                // FW install should be performed only after stopping the active session correctly.
+                IsFwReadyToInstall = true;
+
+                if ((LE_AVC_BOOTSTRAP_SESSION == type) || (LE_AVC_DM_SESSION == type))
+                {
+                    le_avc_StopSession();
+                }
+                else
+                {
+                    StartFwInstall();
+                }
+                break;
+
+            case LWM2MCORE_SW_UPDATE_TYPE:
+                // Install can be processed right away, no need to stop the active session nor
+                // starting a 2-sec timer.
+                LaunchInstallExpiryHandler(NULL);
                 break;
 
             default:
-                StartInstall();
+                LE_ERROR("Unknown update type");
                 break;
         }
     }
+
     return LE_OK;
 }
 
@@ -1637,10 +1667,10 @@ static void ProcessUpdateStatus
             // These events do not cause a state transition
             avData_ReportSessionState(LE_AVDATA_SESSION_STOPPED);
 
-            // If a package is waiting to be installed, trigger the install.
-            if (IsPkgReadyToInstall)
+            // If a FW package is waiting to be installed, trigger the install.
+            if (IsFwReadyToInstall)
             {
-                StartInstall();
+                StartFwInstall();
             }
 
             break;
