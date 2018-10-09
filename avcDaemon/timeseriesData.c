@@ -905,7 +905,7 @@ static le_result_t Encode
         // Initialize CBOR stream.
         cbor_encoder_init(&recRef->streamRef,
                           recRef->bufferPtr,
-                          MAX_CBOR_BUFFER_NUMBYTES,
+                          AVDATA_PUSH_BUFFER_BYTES,
                           0);
 
         err = cbor_encoder_create_map(&recRef->streamRef,
@@ -1018,7 +1018,7 @@ le_result_t timeSeries_Create
     recordDataPtr->timestampList = LE_DLS_LIST_INIT;
     recordDataPtr->resourceList = LE_DLS_LIST_INIT;
     recordDataPtr->bufferPtr = le_mem_ForceAlloc(CborBufferPoolRef);
-    recordDataPtr->bufferSize = MAX_CBOR_BUFFER_NUMBYTES;
+    recordDataPtr->bufferSize = AVDATA_PUSH_BUFFER_BYTES;
     recordDataPtr->timestampFactor = 1;
     recordDataPtr->isEncoded = false;
     *recRefPtr = recordDataPtr;
@@ -1563,7 +1563,7 @@ le_result_t timeSeries_PushRecord
 {
 
     le_result_t result;
-    uint8_t buffer[MAX_CBOR_BUFFER_NUMBYTES];
+    uint8_t buffer[AVDATA_PUSH_BUFFER_BYTES];
     size_t bufferLength;
     z_stream defstream;
 
@@ -1617,7 +1617,7 @@ le_result_t timeSeries_Init
     DataValuePoolRef = le_mem_CreatePool("Data value pool", sizeof(Data_t));
     StringValuePoolRef = le_mem_CreatePool("String pool", LE_AVDATA_STRING_VALUE_BYTES);
 
-    CborBufferPoolRef = le_mem_CreatePool("CBOR buffer pool", MAX_CBOR_BUFFER_NUMBYTES);
+    CborBufferPoolRef = le_mem_CreatePool("CBOR buffer pool", AVDATA_PUSH_BUFFER_BYTES);
 
     return LE_OK;
 }

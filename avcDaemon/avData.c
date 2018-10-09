@@ -33,13 +33,6 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Buffer size in bytes for a CBOR decoder.
- */
-//--------------------------------------------------------------------------------------------------
-#define CBOR_DECODER_BUFFER_BYTES 1024
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Watchdog kick interval in seconds
  */
 //--------------------------------------------------------------------------------------------------
@@ -1999,7 +1992,7 @@ static void ProcessAvServerReadRequest
         LE_DEBUG(">>>>> Reading single data point.");
 
         // Encode the asset data value.
-        uint8_t buf[CBOR_DECODER_BUFFER_BYTES] = {0};
+        uint8_t buf[AVDATA_READ_BUFFER_BYTES] = {0};
         CborEncoder encoder;
         cbor_encoder_init(&encoder, (uint8_t*)&buf, sizeof(buf), 0); // no error check needed.
 
@@ -2065,7 +2058,7 @@ static void ProcessAvServerReadRequest
             }
 
             // compose the CBOR buffer
-            uint8_t buf[CBOR_DECODER_BUFFER_BYTES] = {0};
+            uint8_t buf[AVDATA_READ_BUFFER_BYTES] = {0};
             CborEncoder rootNode;
 
             cbor_encoder_init(&rootNode, (uint8_t*)&buf, sizeof(buf), 0); // no error check needed.
@@ -3295,7 +3288,7 @@ le_result_t le_avdata_Push
     }
 
     // compose the CBOR buffer
-    uint8_t buf[CBOR_DECODER_BUFFER_BYTES] = {0};
+    uint8_t buf[AVDATA_READ_BUFFER_BYTES] = {0};
     CborEncoder rootNode;
     cbor_encoder_init(&rootNode, (uint8_t*)&buf, sizeof(buf), 0); // no error check needed.
 

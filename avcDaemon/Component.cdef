@@ -118,6 +118,8 @@ cflags:
     -std=gnu99
     -DWITH_SHA256
     -fvisibility=default
+    -DAVDATA_READ_BUFFER_BYTES=4096
+    -DAVDATA_PUSH_BUFFER_BYTES=4096
 }
 
 ldflags:
