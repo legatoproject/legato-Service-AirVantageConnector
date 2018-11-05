@@ -980,3 +980,18 @@ le_result_t le_sms_DeleteFromStorage
 {
     return LE_OK;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete an SMS message.
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+void le_sms_Delete
+(
+    le_sms_MsgRef_t msgRef
+        ///< [IN] Reference to the message object.
+)
+{
+    return;
+}
