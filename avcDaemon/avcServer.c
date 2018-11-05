@@ -4056,10 +4056,10 @@ bool ProcessWakeupSms
     }
 
     // Check whether SMS starts with LWM2M
-    if ((strlen(text) > strlen(WAKEUP_SMS_PREFIX)) &&
+    if ((strlen(text) <= strlen(WAKEUP_SMS_PREFIX)) ||
         (strncmp(text, WAKEUP_SMS_PREFIX, strlen(WAKEUP_SMS_PREFIX)) != 0))
     {
-        LE_INFO("Prefix does not match pattern '%s', ignoring", WAKEUP_SMS_PREFIX);
+        LE_INFO("SMS is too short or doesn't start with prefix '%s', ignoring", WAKEUP_SMS_PREFIX);
         return false;
     }
 
@@ -4121,7 +4121,8 @@ bool ProcessWakeupSms
     }
 
     // Cleanup - the wakeup message doesn't need to be stored.
-    // If it's not a wakeup command, the function will return earlier and message won't be deleted.
+    // If it's not a wakeup command, the function will return earlier and message
+    // won't be deleted from storage.
     if (LE_OK != le_sms_DeleteFromStorage(msgRef))
     {
         LE_ERROR("Error deleting wakeup SMS from storage");
@@ -4162,6 +4163,9 @@ void RxMessageHandler
         default :
             break;
     }
+
+    // Dereference the message
+    le_sms_Delete(msgRef);
 }
 
 //--------------------------------------------------------------------------------------------------
