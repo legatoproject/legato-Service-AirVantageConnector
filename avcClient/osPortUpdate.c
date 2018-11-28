@@ -262,7 +262,12 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
             // FOTA suspend resume activity.
             avcApp_DeletePackage();
 
-            // Now reset the state
+            // Now reset the state and result
+            if (DWL_OK != packageDownloader_SetFwUpdateState(
+                                                  LWM2MCORE_FW_UPDATE_STATE_IDLE))
+            {
+              return LWM2MCORE_ERR_GENERAL_ERROR;
+            }
             if (DWL_OK != packageDownloader_SetFwUpdateResult(
                                                     LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL))
             {
