@@ -19,32 +19,6 @@
 #define LWM2M_CONTENT_CBOR         60
 #define LWM2M_CONTENT_ZCBOR        12118
 
-#define COAP(x)     (uint8_t)x
-
-/*
- * Error code as defined in RFC 7252 section 12.1.2
- */
-#define COAP_NO_ERROR                   (uint8_t)0x00
-#define COAP_IGNORE                     (uint8_t)0x01
-
-#define COAP_201_CREATED                COAP(0x41)
-#define COAP_202_DELETED                COAP(0x42)
-#define COAP_204_CHANGED                COAP(0x44)
-#define COAP_205_CONTENT                COAP(0x45)
-#define COAP_231_CONTINUE               COAP(0x5F)
-#define COAP_400_BAD_REQUEST            COAP(0x80)
-#define COAP_401_UNAUTHORIZED           COAP(0x81)
-#define COAP_402_BAD_OPTION             COAP(0x82)
-#define COAP_404_NOT_FOUND              COAP(0x84)
-#define COAP_405_METHOD_NOT_ALLOWED     COAP(0x85)
-#define COAP_406_NOT_ACCEPTABLE         COAP(0x86)
-#define COAP_408_REQ_ENTITY_INCOMPLETE  COAP(0x88)
-#define COAP_412_PRECONDITION_FAILED    COAP(0x8C)
-#define COAP_413_ENTITY_TOO_LARGE       COAP(0x8D)
-#define COAP_500_INTERNAL_SERVER_ERROR  COAP(0xA0)
-#define COAP_501_NOT_IMPLEMENTED        COAP(0xA1)
-#define COAP_503_SERVICE_UNAVAILABLE    COAP(0xA3)
-
 // File where CoAP PUT will be stored
 #define RECEIVED_STREAM_FILE   "receivedStream.cbor"
 
@@ -59,6 +33,7 @@
 // File that will be sent in response to CoAP GET
 #define GET_RESPONSE_SMALL_STRING   "getSmallString.cbor"
 #define GET_RESPONSE_2KB_STRING     "get2kbString.cbor"
+#define GET_RESPONSE_LARGE_STRING   "getLargeString.cbor"
 
 // Maximum size for file name
 #define MAX_FILE_PATH_BYTES 256
@@ -66,6 +41,7 @@
 // CoAP URLs
 #define URL_GET_SMALL_STRING    "/smallString"
 #define URL_GET_2KB_STRING      "/2kbString"
+#define URL_GET_LARGE_STRING    "/largeString"
 
 typedef enum
 {

@@ -9,29 +9,81 @@
 #include "legato.h"
 #include "interfaces.h"
 #include "coapHandlerTest.h"
+#include "cbor.h"
 
-// Reference to push timer
-le_timer_Ref_t ServerUpdateTimerRef = NULL;
+//--------------------------------------------------------------------------------------------------
+/**
+ * Test payload
+ */
+//--------------------------------------------------------------------------------------------------
+#define TEST_STRING                "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-// AV session state
-le_avdata_SessionState_t AvSessionState = LE_AVDATA_SESSION_STOPPED;
+//--------------------------------------------------------------------------------------------------
+/**
+ * Number of data points that will be pushed to the server when push timer expires.
+ */
+//--------------------------------------------------------------------------------------------------
+#define PUSH_NUM_DATA_POINTS    3000
 
-// Response payload shared by all CoAP responses as well as push
-char ResponsePayload[LE_COAP_MAX_PAYLOAD_NUM_BYTES];
+//--------------------------------------------------------------------------------------------------
+/**
+ * Number of data points that will be sent on receiving a GET request from server.
+ */
+//--------------------------------------------------------------------------------------------------
+#define GET_NUM_DATA_POINTS        5000
 
-// Context of the transmit message
+//--------------------------------------------------------------------------------------------------
+/**
+ * Maximum size of CBOR file that will be generated for test
+ */
+//--------------------------------------------------------------------------------------------------
+#define MAX_SIZE_CBOR_FILE        (256*1024)
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Structure defining the CoAP transmit context
+ */
+//--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    char filename[MAX_FILE_PATH_BYTES];        // Filename
-    int fp;                                    // File pointer for open file (tx in progress)
-    size_t offset;                             // not used
-} coapTransmitContext_t;
+    char filename[MAX_FILE_PATH_BYTES];        ///< Filename
+    int fp;                                    ///< File pointer for open file (tx in progress)
+}
+coapTransmitContext_t;
 
-// CoAP transmit context
-coapTransmitContext_t TransmitContext[2];
+//--------------------------------------------------------------------------------------------------
+/**
+ * Reference to the timer which triggers a push operation to server.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t ServerUpdateTimerRef = NULL;
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Session state
+ */
+//--------------------------------------------------------------------------------------------------
+static le_avdata_SessionState_t AvSessionState = LE_AVDATA_SESSION_STOPPED;
 
-// CoAP transmit status
+//--------------------------------------------------------------------------------------------------
+/**
+ * CoAP response payload
+ */
+//--------------------------------------------------------------------------------------------------
+static uint8_t ResponsePayload[LE_COAP_MAX_PAYLOAD_NUM_BYTES];
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Transmit context
+ */
+//--------------------------------------------------------------------------------------------------
+static coapTransmitContext_t TransmitContext[2];
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Status of the current push operation.
+ */
+//--------------------------------------------------------------------------------------------------
 static bool PushBusy = false;
 
 //-------------------------------------------------------------------------------------------------
@@ -39,7 +91,13 @@ static bool PushBusy = false;
  * Write received data to a file.
  */
 //-------------------------------------------------------------------------------------------------
-int CopyToFile(char* filePath, const char* bufferPtr, size_t length, bool isNewFile)
+static void CopyToFile
+(
+    char* filePath,               ///< [IN] Read file from this location
+    const uint8_t* bufferPtr,     ///< [IN] Copy read data to this location
+    size_t length,                ///< [IN] Length to read from file
+    bool isNewFile                ///< [IN] Start fresh or continue from current offset?
+)
 {
     int fp;
     size_t bytesWritten;
@@ -58,11 +116,9 @@ int CopyToFile(char* filePath, const char* bufferPtr, size_t length, bool isNewF
         bytesWritten = write(fp, bufferPtr, length);
         LE_ASSERT(bytesWritten == length);
         close (fp);
-        return 0;
     }
 
     LE_ERROR("Failed to write to file %s", filePath);
-    return 1;
 }
 
 
@@ -71,32 +127,48 @@ int CopyToFile(char* filePath, const char* bufferPtr, size_t length, bool isNewF
  * Read data from file to buffer.
  */
 //-------------------------------------------------------------------------------------------------
-int CopyToBuffer(responseType_t respType, char* bufferPtr, size_t maxNumBytes, bool isNewFile)
+static int CopyToBuffer
+(
+    responseType_t respType,            ///< [IN] Response to incoming message or unsolicited?
+    uint8_t* bufferPtr,                 ///< [IN] Buffer to write data to
+    size_t maxNumBytes,                 ///< [IN] Length to read from file
+    bool isNewFile                      ///< [IN] Start fresh or continue from current offset?
+)
 {
-    size_t maxLength = maxNumBytes - 1;
     int readLength = 0;
     coapTransmitContext_t* contextPtr;
+    size_t result;
 
     contextPtr = &TransmitContext[respType];
 
     if (isNewFile)
     {
         contextPtr->fp = open(contextPtr->filename, O_RDONLY,  S_IRUSR | S_IWUSR);
+        LE_ASSERT(contextPtr->fp != -1);
     }
 
     if (contextPtr->fp)
     {
-        // Read the bytes, retrying if interrupted by a signal.
+        int bytesRead = 0;
+        uint8_t buffer[maxNumBytes+1];
+        memset(buffer, 0, sizeof(buffer));
+
         do
         {
-            readLength = read(contextPtr->fp, bufferPtr, maxLength);
-        }
-        while ((-1 == readLength) && (EINTR == errno));
+            result = (read(contextPtr->fp, bufferPtr + readLength, (maxNumBytes - readLength)));
+            if (result > 0)
+            {
+                readLength += result;
+                LE_ASSERT(bytesRead <= maxNumBytes);
+            }
 
-        if (readLength != maxLength)
-        {
-            close(contextPtr->fp);
+            if ((result < 0) && (errno != EINTR))
+            {
+                LE_ERROR("Error writing the test pattern to file");
+                exit(1);
+            }
         }
+        while ((readLength < maxNumBytes) && (result != 0));
 
         return readLength;
     }
@@ -112,8 +184,8 @@ int CopyToBuffer(responseType_t respType, char* bufferPtr, size_t maxNumBytes, b
 //--------------------------------------------------------------------------------------------------
 static void SessionHandler
 (
-    le_avdata_SessionState_t sessionState,
-    void* contextPtr
+    le_avdata_SessionState_t sessionState,          ///< [IN] AVC Session state
+    void* contextPtr                                ///< [IN] Context
 )
 {
     if (sessionState == LE_AVDATA_SESSION_STARTED)
@@ -132,13 +204,16 @@ static void SessionHandler
 //-------------------------------------------------------------------------------------------------
 /**
  * Handler for receiving CoAP Stream
+ *
+ * @return:
+ *    - CoAP response code
  */
 //-------------------------------------------------------------------------------------------------
-static uint32_t CoapRxStreamHandler
+static le_coap_Code_t CoapRxStreamHandler
 (
-    le_coap_StreamStatus_t streamStatus,
-    const char* bufferPtr,
-    size_t length
+    le_coap_StreamStatus_t streamStatus,        ///< [IN] CoAP stream status received
+    const uint8_t* bufferPtr,                   ///< [IN] Buffer to copy data to
+    size_t length                               ///< [IN] size of data received
 )
 {
     // Copy stream data to buffer or file
@@ -148,25 +223,25 @@ static uint32_t CoapRxStreamHandler
         case LE_COAP_RX_STREAM_START:
             LE_INFO("Stream start: Create file and write received data");
             CopyToFile(RECEIVED_STREAM_FILE, bufferPtr, length, true);
-            return COAP_NO_ERROR;
+            return LE_COAP_CODE_NO_RESPONSE;
 
         case LE_COAP_RX_STREAM_IN_PROGRESS:
             LE_INFO("Stream in progress: Copy received data to file");
             CopyToFile(RECEIVED_STREAM_FILE, bufferPtr, length, false);
-            return COAP_NO_ERROR;
+            return LE_COAP_CODE_NO_RESPONSE;
 
         case LE_COAP_RX_STREAM_END:
             LE_INFO("Stream completed: Start processing received data");
             CopyToFile(RECEIVED_STREAM_FILE, bufferPtr, length, false);
-            return COAP_204_CHANGED;
+            return LE_COAP_CODE_204_CHANGED;
 
         case LE_COAP_RX_STREAM_ERROR:
             LE_INFO("Stream cancelled");
-            return COAP_500_INTERNAL_SERVER_ERROR;
+            return LE_COAP_CODE_500_INTERNAL_SERVER_ERROR;
 
         default:
             LE_INFO("Unexpected stream status during PUT");
-            return COAP_500_INTERNAL_SERVER_ERROR;
+            return LE_COAP_CODE_500_INTERNAL_SERVER_ERROR;
     }
 }
 
@@ -174,14 +249,17 @@ static uint32_t CoapRxStreamHandler
 //-------------------------------------------------------------------------------------------------
 /**
  * Handler for transmitting CoAP Stream
+ *
+ * @return:
+ *    - CoAP response code
  */
 //-------------------------------------------------------------------------------------------------
-static uint32_t CoapTxStreamHandler
+static le_coap_Code_t CoapTxStreamHandler
 (
-    responseType_t respType,
-    char* bufferPtr,
-    size_t* lengthPtr,
-    le_coap_StreamStatus_t* txStreamStatusPtr
+    responseType_t respType,                            ///< [IN] Unsolicited / request response
+    uint8_t* bufferPtr,                                 ///< [IN] Buffer to write data
+    size_t* lengthPtr,                                  ///< [IN] length of data
+    le_coap_StreamStatus_t* txStreamStatusPtr           ///< [IN] Status of transmit stream
 )
 {
     *lengthPtr = 0;
@@ -195,66 +273,66 @@ static uint32_t CoapTxStreamHandler
         case LE_COAP_STREAM_NONE:
             LE_INFO("No stream");
 
-            *lengthPtr = CopyToBuffer(respType, bufferPtr, LE_COAP_MAX_PAYLOAD_NUM_BYTES, true);
+            *lengthPtr = CopyToBuffer(respType, bufferPtr, LE_COAP_MAX_PAYLOAD, true);
 
             if (*lengthPtr == -1)
             {
                 *lengthPtr = 0;    // reset size of payload to 0
                 *txStreamStatusPtr = LE_COAP_TX_STREAM_ERROR;
-                return COAP_500_INTERNAL_SERVER_ERROR;
+                return LE_COAP_CODE_500_INTERNAL_SERVER_ERROR;
             }
 
             *txStreamStatusPtr = LE_COAP_STREAM_NONE;
-            return COAP_205_CONTENT;
+            return LE_COAP_CODE_205_CONTENT;
 
         case LE_COAP_TX_STREAM_START:
             LE_INFO("Stream started: Start sending data from file");
-            *lengthPtr = CopyToBuffer(respType, bufferPtr, LE_COAP_MAX_PAYLOAD_NUM_BYTES, true);
+            *lengthPtr = CopyToBuffer(respType, bufferPtr, LE_COAP_MAX_PAYLOAD, true);
 
             if (*lengthPtr == -1)
             {
                 *lengthPtr = 0;    // reset size of payload to 0
                 *txStreamStatusPtr = LE_COAP_TX_STREAM_ERROR;
-                return COAP_500_INTERNAL_SERVER_ERROR;
+                return LE_COAP_CODE_500_INTERNAL_SERVER_ERROR;
             }
 
             *txStreamStatusPtr = LE_COAP_TX_STREAM_START;
-            return COAP_205_CONTENT;
+            return LE_COAP_CODE_205_CONTENT;
 
         case LE_COAP_TX_STREAM_IN_PROGRESS:
             LE_INFO("Stream in progress: Continue sending data from file");
-            *lengthPtr = CopyToBuffer(respType, bufferPtr, LE_COAP_MAX_PAYLOAD_NUM_BYTES, false);
+            *lengthPtr = CopyToBuffer(respType, bufferPtr, LE_COAP_MAX_PAYLOAD, false);
 
             if (*lengthPtr == -1)
             {
                 *lengthPtr = 0;    // reset size of payload to 0
                 *txStreamStatusPtr = LE_COAP_TX_STREAM_ERROR;
-                return COAP_500_INTERNAL_SERVER_ERROR;
+                return LE_COAP_CODE_500_INTERNAL_SERVER_ERROR;
             }
 
             if (*lengthPtr == LE_COAP_MAX_PAYLOAD)
             {
                 *txStreamStatusPtr = LE_COAP_TX_STREAM_IN_PROGRESS;
-                return COAP_205_CONTENT;
+                return LE_COAP_CODE_205_CONTENT;
             }
 
             *txStreamStatusPtr = LE_COAP_TX_STREAM_END;
-            return COAP_205_CONTENT;
+            return LE_COAP_CODE_205_CONTENT;
 
         case LE_COAP_TX_STREAM_END:
             LE_INFO("Stream completed");
             *txStreamStatusPtr = LE_COAP_TX_STREAM_END;
-            return COAP_NO_ERROR;
+            return LE_COAP_CODE_NO_RESPONSE;
 
         case LE_COAP_TX_STREAM_ERROR:
             LE_INFO("Stream cancelled");
             *txStreamStatusPtr = LE_COAP_TX_STREAM_END;
-            return COAP_500_INTERNAL_SERVER_ERROR;
+            return LE_COAP_CODE_500_INTERNAL_SERVER_ERROR;
 
         default:
             LE_INFO("Unexpected stream status during GET");
             *txStreamStatusPtr = LE_COAP_TX_STREAM_END;
-            return COAP_500_INTERNAL_SERVER_ERROR;
+            return LE_COAP_CODE_500_INTERNAL_SERVER_ERROR;
     }
 }
 
@@ -266,8 +344,8 @@ static uint32_t CoapTxStreamHandler
 //--------------------------------------------------------------------------------------------------
 static void PushAckCallBack
 (
-    le_coap_PushStatus_t status,
-    void* contextPtr
+    le_coap_PushStatus_t status,                ///< [IN] Push status
+    void* contextPtr                            ///< [IN] Push context
 )
 {
     LE_INFO("Push finished");
@@ -296,28 +374,16 @@ static void PushAckCallBack
 //--------------------------------------------------------------------------------------------------
 static void ExternalCoapHandler
 (
-    le_coap_Code_t code,
-        ///< CoAP method or response code
-    le_coap_StreamStatus_t streamStatus,
-        ///< CoAP stream status
-    uint16_t messageId,
-        ///< message id
-    uint16_t contentType,
-        ///< content type
-    const char* uri,
-        ///< URI of resource
-    size_t uriLength,
-        ///< URI length
-    const char* token,
-        ///< token
-    uint8_t tokenLength,
-        ///< token length
-    const char* payload,
-        ///< CoAP payload
-    size_t payloadLength,
-        ///< CoAP payload length
-    void* contextPtr
-        ///<
+    le_coap_Code_t code,                            ///< [IN] CoAP method or response code
+    le_coap_StreamStatus_t streamStatus,            ///< [IN] CoAP stream status
+    uint16_t messageId,                             ///< [IN] message id
+    uint16_t contentType,                           ///< [IN] content type
+    const char* uri,                                ///< [IN] URI of resource
+    const uint8_t* token,                           ///< [IN] token
+    size_t tokenLength,                             ///< [IN] token length
+    const uint8_t* payload,                         ///< [IN] CoAP payload
+    size_t payloadLength,                           ///< [IN] CoAP payload length
+    void* contextPtr                                ///< [IN] Context
 )
 {
     uint32_t coapResponseCode;
@@ -345,7 +411,7 @@ static void ExternalCoapHandler
                                      token,
                                      tokenLength,
                                      LWM2M_CONTENT_CBOR,
-                                     COAP_204_CHANGED,
+                                     LE_COAP_CODE_204_CHANGED,
                                      LE_COAP_STREAM_NONE,
                                      ResponsePayload,
                                      0);
@@ -354,7 +420,7 @@ static void ExternalCoapHandler
             {
                 coapResponseCode = CoapRxStreamHandler(streamStatus, payload, payloadLength);
 
-                if (coapResponseCode != COAP_NO_ERROR)
+                if (coapResponseCode != LE_COAP_CODE_NO_RESPONSE)
                 {
                     // send actual CoAP response.
                     le_coap_SendResponse(messageId,
@@ -384,16 +450,20 @@ static void ExternalCoapHandler
             {
                 strncpy(getReponseFile, GET_RESPONSE_2KB_STRING, MAX_FILE_PATH_BYTES);
             }
+            else if (strncmp(uri, URL_GET_LARGE_STRING, sizeof(URL_GET_LARGE_STRING)) == 0)
+            {
+                strncpy(getReponseFile, GET_RESPONSE_LARGE_STRING, MAX_FILE_PATH_BYTES);
+            }
             else
             {
                 LE_ERROR("URI %s not found", uri);
                 le_coap_SendResponse(messageId,
-                                     "",
+                                     (const uint8_t*)"",
                                      0,
                                      LWM2M_CONTENT_CBOR,
-                                     COAP_404_NOT_FOUND,
+                                     LE_COAP_CODE_404_NOT_FOUND,
                                      LE_COAP_STREAM_NONE,
-                                     "",
+                                     (const uint8_t*)"",
                                      0);
                 return;
             }
@@ -425,7 +495,7 @@ static void ExternalCoapHandler
                                                    &responsePayloadLength,
                                                    &txStreamStatus);
 
-             if (coapResponseCode != COAP_NO_ERROR)
+             if (coapResponseCode != LE_COAP_CODE_NO_RESPONSE)
              {
                  // send actual CoAP response.
                  le_coap_SendResponse(messageId,
@@ -456,7 +526,7 @@ static void ExternalCoapHandler
                                                        &responsePayloadLength,
                                                        &txStreamStatus);
 
-                if (coapResponseCode != COAP_NO_ERROR)
+                if (coapResponseCode != LE_COAP_CODE_NO_RESPONSE)
                 {
                     // send actual CoAP response.
                     result = le_coap_Push(PUSH_URI,
@@ -493,13 +563,16 @@ static void ExternalCoapHandler
  * This function is called every 20 seconds to push data from device to cloud
  */
 //-------------------------------------------------------------------------------------------------
-static void PushResources(le_timer_Ref_t  timerRef)
+static void PushResources
+(
+    le_timer_Ref_t  timerRef                    ///< [IN] Timer reference
+)
 {
     uint32_t coapResponseCode;
     struct stat txFileStat;
     size_t responsePayloadLength = 0;
     le_coap_StreamStatus_t txStreamStatus;
-    char token[LE_COAP_MAX_TOKEN_NUM_BYTES];
+    uint8_t token[LE_COAP_MAX_TOKEN_NUM_BYTES];
     le_result_t result;
     static bool isLargeFile = false;
 
@@ -508,12 +581,12 @@ static void PushResources(le_timer_Ref_t  timerRef)
     // Alternate between a small and large string
     if (isLargeFile)
     {
-        strncpy(pushFilePtr, TRANSMIT_SMALL_STRING, MAX_FILE_PATH_BYTES);
+        strncpy(pushFilePtr, TRANSMIT_LARGE_STRING, MAX_FILE_PATH_BYTES);
         isLargeFile = false;
     }
     else
     {
-        strncpy(pushFilePtr, TRANSMIT_LARGE_STRING, MAX_FILE_PATH_BYTES);
+        strncpy(pushFilePtr, TRANSMIT_SMALL_STRING, MAX_FILE_PATH_BYTES);
         isLargeFile = true;
     }
 
@@ -548,7 +621,7 @@ static void PushResources(le_timer_Ref_t  timerRef)
                                                &responsePayloadLength,
                                                &txStreamStatus);
 
-        if (coapResponseCode != COAP_NO_ERROR)
+        if (coapResponseCode != LE_COAP_CODE_NO_RESPONSE)
         {
             result = le_coap_Push(PUSH_URI,
                                   token,
@@ -568,6 +641,46 @@ static void PushResources(le_timer_Ref_t  timerRef)
     }
 }
 
+//-------------------------------------------------------------------------------------------------
+/**
+ * Generate a CBOR payload
+ */
+//-------------------------------------------------------------------------------------------------
+static void CreateCborData
+(
+    char* outputFile,                       ///< [IN] Output file name
+    int numData                             ///< [IN] Number of data points
+)
+{
+    CborEncoder mapNode;
+    char path[256];
+    uint8_t buf[MAX_SIZE_CBOR_FILE] = {0};
+    CborEncoder encoder;
+
+    FILE* f = fopen(outputFile, "wb");
+
+    LE_ASSERT(f != NULL);
+    cbor_encoder_init(&encoder, (uint8_t*)&buf, sizeof(buf), 0);
+
+    LE_ASSERT(CborNoError == cbor_encoder_create_map(&encoder, &mapNode, CborIndefiniteLength));
+
+    for (int i = 0; i < numData; i++)
+    {
+        snprintf(path, sizeof(path), "%s%d", "test-", i);
+        LE_ASSERT(CborNoError == cbor_encode_text_stringz(&mapNode, path));
+        LE_ASSERT(CborNoError == cbor_encode_text_string(&mapNode, TEST_STRING, strlen(TEST_STRING)));
+    }
+
+    LE_ASSERT(CborNoError == cbor_encoder_close_container(&encoder, &mapNode));
+
+    size_t cborSize = cbor_encoder_get_buffer_size(&encoder, buf);
+
+    LE_ASSERT(cborSize < sizeof(buf))
+
+    fwrite(buf, 1, cborSize, f);
+    fclose(f);
+}
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -577,6 +690,7 @@ static void PushResources(le_timer_Ref_t  timerRef)
 //--------------------------------------------------------------------------------------------------
 COMPONENT_INIT
 {
+    LE_INFO("Start CoapHandler Test");
     le_avdata_AddSessionStateHandler(SessionHandler, NULL);
     le_coap_AddMessageEventHandler(ExternalCoapHandler, NULL);
 
@@ -586,15 +700,19 @@ COMPONENT_INIT
     strncpy(TransmitContext[REQUEST_RESPONSE].filename, GET_RESPONSE_SMALL_STRING, MAX_FILE_PATH_BYTES);
     strncpy(TransmitContext[UNSOLICITED_RESPONSE].filename, TRANSMIT_SMALL_STRING, MAX_FILE_PATH_BYTES);
 
-    // [PushTimer]
-    //Set timer to update on server on a regular basis
-    ServerUpdateTimerRef = le_timer_Create("serverUpdateTimer");         //create timer
-    le_clk_Time_t serverUpdateInterval = { 60, 0 };                      //update server every 60 seconds
+    // Generate CBOR test vectors with many data points
+    CreateCborData(TRANSMIT_LARGE_STRING, PUSH_NUM_DATA_POINTS);
+    CreateCborData(GET_RESPONSE_LARGE_STRING, GET_NUM_DATA_POINTS);
+
+    // Set timer to update on server on a regular basis
+    ServerUpdateTimerRef = le_timer_Create("serverUpdateTimer");       //create timer
+    le_clk_Time_t serverUpdateInterval = { 60, 0 };                    //update server every 60 seconds
     le_timer_SetInterval(ServerUpdateTimerRef, serverUpdateInterval);
-    le_timer_SetRepeat(ServerUpdateTimerRef, 0);                         //set repeat to always
-    //set callback function to handle timer expiration event
+    le_timer_SetRepeat(ServerUpdateTimerRef, 0);                       //set repeat to always
+
+    // set callback function to handle timer expiration event
     le_timer_SetHandler(ServerUpdateTimerRef, PushResources);
-    //start timer
+
+    // start timer
     le_timer_Start(ServerUpdateTimerRef);
-    // [PushTimer]
 }

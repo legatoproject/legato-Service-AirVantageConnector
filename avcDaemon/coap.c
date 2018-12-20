@@ -41,7 +41,6 @@ typedef struct
     uint16_t messageId;                               ///< [IN] CoAP message id
     uint16_t contentType;                             ///< [IN] Payload content type
     uint8_t uri[LE_COAP_MAX_URI_NUM_BYTES];           ///< [IN] URI
-    size_t uriLength;                                 ///< [IN] URI Length
     uint8_t token[LE_COAP_MAX_TOKEN_NUM_BYTES];       ///< [IN] Token
     uint8_t tokenLength;                              ///< [IN] Token length
     uint8_t payload[LE_COAP_MAX_PAYLOAD_NUM_BYTES];   ///< [IN] Payload of CoAP request
@@ -226,25 +225,7 @@ static void CoapMessageHandler
     coapMsgData.contentType = lwm2mcore_GetContentType(requestRef);
     uriPtr = lwm2mcore_GetRequestUri(requestRef); // cannot have trailing slash.
 
-    // Get URI
-    if (uriPtr)
-    {
-        coapMsgData.uriLength = strlen(uriPtr);
-    }
-    else
-    {
-        coapMsgData.uriLength = 0;
-    }
-
-    size_t uriLength = coapMsgData.uriLength;
-    if (uriLength >= LE_COAP_MAX_URI_NUM_BYTES)
-    {
-        LE_ERROR("URI exceeded maximum length");
-        uriLength = LE_COAP_MAX_URI_NUM_BYTES - 1;
-    }
-
-    memcpy(coapMsgData.uri, uriPtr, uriLength);
-    coapMsgData.uri[uriLength] = '\0';
+    strncpy((char*)coapMsgData.uri, uriPtr, sizeof(coapMsgData.uri));
 
     // Get payload
     uint8_t* payloadPtr = (uint8_t *)lwm2mcore_GetRequestPayload(requestRef);
@@ -258,7 +239,6 @@ static void CoapMessageHandler
     }
 
     memcpy(coapMsgData.payload, payloadPtr, payloadLength);
-    coapMsgData.payload[payloadLength] = '\0';
 
     // Get token
     uint8_t* tokenPtr = (uint8_t *)lwm2mcore_GetToken(requestRef);
@@ -272,7 +252,6 @@ static void CoapMessageHandler
     }
 
     memcpy(coapMsgData.token, tokenPtr, tokenLength);
-    coapMsgData.token[tokenLength] = '\0';
 
     // Send the event to external CoAP handler
     le_event_Report(CoapMessageEvent, &coapMsgData, sizeof(coapMsgData));
@@ -327,10 +306,9 @@ static void FirstLayerCoapMessageHandler
                       coapMsgDataPtr->messageId,
                       coapMsgDataPtr->contentType,
                       (const char*)&coapMsgDataPtr->uri,
-                      coapMsgDataPtr->uriLength,
-                      (const char*)&coapMsgDataPtr->token,
+                      (const uint8_t*)&coapMsgDataPtr->token,
                       coapMsgDataPtr->tokenLength,
-                      (const char*)&coapMsgDataPtr->payload,
+                      (const uint8_t*)&coapMsgDataPtr->payload,
                       coapMsgDataPtr->payloadLength,
                       le_event_GetContextPtr());
 }
@@ -417,19 +395,19 @@ le_result_t le_coap_SendResponse
 (
     uint16_t messageId,
         ///< [IN] message id
-    const char* tokenPtr,
+    const uint8_t* tokenPtr,
         ///< [IN] token
-    uint8_t tokenLength,
+    size_t tokenLength,
         ///< [IN] token Length
     uint16_t contentType,
         ///< [IN] content type
-    uint32_t responseCode,
+    le_coap_Code_t responseCode,
         ///< [IN] result of CoAP operation
     le_coap_StreamStatus_t streamStatus,
         ///< [IN] Status of the transmit stream
-    const char* payloadPtr,
+    const uint8_t* payloadPtr,
         ///< [IN] payload
-    uint32_t payloadLength
+    size_t payloadLength
         ///< [IN] payload Length
 )
 {
@@ -456,7 +434,8 @@ le_result_t le_coap_SendResponse
         return LE_FAULT;
     }
 
-    coapResponsePtr->code = responseCode;
+    // Pass response code directly as it is not converted back inside lwm2mcore
+    coapResponsePtr->code = (uint32_t)responseCode;
     coapResponsePtr->contentType = contentType;
     coapResponsePtr->streamStatus = ConvertLeStreamStatus(streamStatus);
     coapResponsePtr->payloadLength = payloadLength;
@@ -497,17 +476,17 @@ le_result_t le_coap_Push
 (
     const char* uriPtr,
         ///< [IN] URI where push should end
-    const char* tokenPtr,
+    const uint8_t* tokenPtr,
         ///< [IN] token
-    uint8_t tokenLength,
+    size_t tokenLength,
         ///< [IN] token length
     uint16_t contentType,
         ///< [IN] content type
     le_coap_StreamStatus_t streamStatus,
         ///< [IN] Status of transmit stream
-    const char* payloadPtr,
+    const uint8_t* payloadPtr,
         ///< [IN] payload
-    uint32_t payloadLength,
+    size_t payloadLength,
         ///< [IN] payload Length
     le_coap_PushHandlerFunc_t handlerPtr,
         ///< [IN] Push result callback
