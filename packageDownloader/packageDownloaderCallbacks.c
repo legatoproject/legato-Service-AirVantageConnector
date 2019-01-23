@@ -16,6 +16,7 @@
 #include <avcFsConfig.h>
 #include "packageDownloader.h"
 #include "packageDownloaderCallbacks.h"
+#include "avcClient.h"
 #include "avcServer.h"
 #include "file.h"
 
@@ -39,21 +40,6 @@
  */
 //--------------------------------------------------------------------------------------------------
 #define MEBIBYTE                        (1 << 20)
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Curl minimum download speed (expect to download atleast 100 bytes per second)
- */
-//--------------------------------------------------------------------------------------------------
-#define CURL_MINIMUM_SPEED              100L
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Curl timeout in seconds. Timeout, if the download speed is less than CURL_MINIMUM_SPEED for
- * more than CURL_TIMEOUT_SECONDS.
- */
-//--------------------------------------------------------------------------------------------------
-#define CURL_TIMEOUT_SECONDS            350L
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -240,62 +226,6 @@ static int CheckHttpStatusCode
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Get download information
- *
- * @return
- *      - 0 if the function succeeded
- *      - -1 if the function failed
- */
-//--------------------------------------------------------------------------------------------------
-static int GetDownloadInfo
-(
-    Package_t* pkgPtr   ///< [IN] Package data pointer
-)
-{
-    CURLcode rc;
-    PackageInfo_t* pkgInfoPtr;
-
-    pkgInfoPtr = &pkgPtr->pkgInfo;
-
-    // just get the header, will always succeed
-    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOBODY, 1L);
-    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, NULL);
-    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_XFERINFOFUNCTION, Progress);
-    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_XFERINFODATA, (void *)pkgPtr);
-    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOPROGRESS, 0L);
-
-    // perform the download operation
-    rc = curl_easy_perform(pkgPtr->curlPtr);
-    if (CURLE_OK != rc)
-    {
-        LE_ERROR("failed to perform curl request: %s", curl_easy_strerror(rc));
-        return -1;
-    }
-
-    // check for a valid response
-    rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_RESPONSE_CODE, &pkgInfoPtr->httpRespCode);
-    if (CURLE_OK != rc)
-    {
-        LE_ERROR("failed to get response code: %s", curl_easy_strerror(rc));
-        return -1;
-    }
-
-    rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
-                           &pkgInfoPtr->totalSize);
-    if (CURLE_OK != rc)
-    {
-        LE_ERROR("failed to get file size: %s", curl_easy_strerror(rc));
-        return -1;
-    }
-
-    memset(pkgInfoPtr->curlVersion, 0, BUF_SIZE);
-    memcpy(pkgInfoPtr->curlVersion, curl_version(), BUF_SIZE);
-
-    return 0;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * A simple function to calculate the power of an unsigned integer to an unsigned integer
  */
 //--------------------------------------------------------------------------------------------------
@@ -351,6 +281,179 @@ static void Wait
             req = rem;
         }
     } while (rc);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Performs CURL operation with retries.
+ *
+ * In case of a proxy resolving issue, a host resolving issue, a failure to connect, or an operation
+ * timeout it will retry for DWL_RETRIES and exit with DWL_FAIL in case of an unsuccessful retry
+ * otherwise it reinitializes the retry count, continues to download and returns DWL_OK when done.
+ *
+ * Each time an issue happens it will wait for 2^(retry-1) seconds before retrying to download
+ * e.g:
+ * first attempt: it'll wait for 2^0 = 1 second
+ * second attempt: it'll wait for 2^1 = 2 seconds
+ * third attempt: it'll wait for 2^2 = 4 seconds
+ * ...
+ * In the case of a successful retry, the count is reinitialized.
+ * e.g.:
+ * first attempt: wait for 1 second, retry failed
+ * second attempt: wait for 2 seconds, retry failed
+ * third attempt: wait for 4 seconds, retry succeeded
+ * sometime later the download fails again
+ * first attempt: wait for 1 second ...
+ *
+ * @return
+ *      - LE_OK        The function succeeded
+ *      - LE_FAULT        The download is suspended
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t CurlDownloadAttempt
+(
+    Package_t*  pkgPtr,            ///< [IN] Package data pointer
+    uint64_t    startOffset     ///< [IN] Start offset for the download
+)
+{
+    char buf[BUF_SIZE];
+    size_t size = 0;
+    long osErrno;
+    CURLcode rc;
+    le_result_t result = LE_FAULT;
+    int retry = 0;
+
+    while (retry < DWL_RETRIES)
+    {
+        LE_INFO("attempt %d", retry);
+        // perform download operation
+        rc = curl_easy_perform(pkgPtr->curlPtr);
+        switch (rc)
+        {
+            case CURLE_OK:
+            case CURLE_ABORTED_BY_CALLBACK:
+                retry = DWL_RETRIES;
+                result = LE_OK;
+                break;
+            case CURLE_COULDNT_RESOLVE_PROXY:
+            case CURLE_COULDNT_RESOLVE_HOST:
+            case CURLE_OPERATION_TIMEDOUT:
+            case CURLE_RECV_ERROR:
+            case CURLE_PARTIAL_FILE:
+                LE_ERROR("Received error: %s", curl_easy_strerror(rc));
+                retry++;
+                break;
+            case CURLE_COULDNT_CONNECT:
+                curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_OS_ERRNO, &osErrno);
+                (ECONNREFUSED == osErrno)?retry++:(retry = DWL_RETRIES);
+                break;
+            default:
+                LE_ERROR("failed to perform curl request: %s", curl_easy_strerror(rc));
+                retry = DWL_RETRIES;
+                break;
+        }
+
+        if (DWL_RETRIES > retry)
+        {
+            LE_ERROR("Retry curl download");
+            if (startOffset)
+            {
+                if (size != pkgPtr->size)
+                {
+                    retry = 1;
+                }
+                size = pkgPtr->size;
+                memset(buf, 0, BUF_SIZE);
+                snprintf(buf, BUF_SIZE, "%zu-", pkgPtr->size);
+                curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_RANGE, buf);
+            }
+
+            Wait(Power(2, retry - 1));
+        }
+
+        rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_RESPONSE_CODE, &HttpRespCode);
+        if (CURLE_OK != rc)
+        {
+            LE_WARN("failed to get response code: %s", curl_easy_strerror(rc));
+        }
+    }
+
+    if (result != LE_OK)
+    {
+        LE_ERROR("Suspending download due to too many curl failures");
+        LE_DEBUG("Resume at next polling period");
+
+        // Suspend the download.
+        if (LE_OK == packageDownloader_SuspendDownload())
+        {
+            pkgPtr->result = DWL_SUSPEND;
+
+            // Also disconnect from network. User has to retry connection
+            // at this point or the device will resume download only at
+            // next polling period.
+            avcClient_Disconnect(true);
+        }
+
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get download information
+ *
+ * @return
+ *      - 0 if the function succeeded
+ *      - -1 if the function failed
+ */
+//--------------------------------------------------------------------------------------------------
+static int GetDownloadInfo
+(
+    Package_t* pkgPtr   ///< [IN] Package data pointer
+)
+{
+    CURLcode rc;
+    PackageInfo_t* pkgInfoPtr;
+
+    pkgInfoPtr = &pkgPtr->pkgInfo;
+
+    // just get the header, will always succeed
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOBODY, 1L);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_WRITEFUNCTION, NULL);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_XFERINFOFUNCTION, Progress);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_XFERINFODATA, (void *)pkgPtr);
+    curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOPROGRESS, 0L);
+
+    // perform the download operation
+    le_result_t result = CurlDownloadAttempt(pkgPtr, 0);
+    if (LE_OK != result)
+    {
+        LE_ERROR("CurlDownloadAttempt() failed");
+        return -1;
+    }
+
+    // check for a valid response
+    rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_RESPONSE_CODE, &pkgInfoPtr->httpRespCode);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("failed to get response code: %s", curl_easy_strerror(rc));
+        return -1;
+    }
+
+    rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
+                           &pkgInfoPtr->totalSize);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("failed to get file size: %s", curl_easy_strerror(rc));
+        return -1;
+    }
+
+    memset(pkgInfoPtr->curlVersion, 0, BUF_SIZE);
+    memcpy(pkgInfoPtr->curlVersion, curl_version(), BUF_SIZE);
+
+    return 0;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -459,6 +562,8 @@ le_result_t pkgDwlCb_GetPackageSize
     curl_easy_setopt(curlPtr, CURLOPT_WRITEFUNCTION, NULL);
 
     // Retrieve the header
+    // It's OK to use curl_easy_perform() here instead of CurlDownloadAttempt()
+    // as we will proceed to download even if we fail to get the size.
     rc = curl_easy_perform(curlPtr);
     if (CURLE_OK != rc)
     {
@@ -542,24 +647,6 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
     if (CURLE_OK != rc)
     {
         LE_ERROR("failed to set curl connection timeout: %s", curl_easy_strerror(rc));
-        return DWL_FAULT;
-    }
-
-    // set timeout for the download speed to be very low
-    rc = curl_easy_setopt(pkg.curlPtr, CURLOPT_LOW_SPEED_TIME, CURL_TIMEOUT_SECONDS);
-    if (CURLE_OK != rc)
-    {
-        LE_ERROR("failed to set curl timeout: %s", curl_easy_strerror(rc));
-        return DWL_FAULT;
-    }
-
-    // set the minimum download speed expected. If the download speed continuous to
-    // be less than CURL_MINIMUM_SPEED for more than CURL_TIMEOUT_SECONDS, curl
-    // will timeout
-    rc = curl_easy_setopt(pkg.curlPtr, CURLOPT_LOW_SPEED_LIMIT, CURL_MINIMUM_SPEED);
-    if (CURLE_OK != rc)
-    {
-        LE_ERROR("failed to set curl download speed limit: %s", curl_easy_strerror(rc));
         return DWL_FAULT;
     }
 
@@ -672,24 +759,6 @@ lwm2mcore_DwlResult_t pkgDwlCb_GetInfo
  *
  * This implements a HTTP/S download starting at startOffset.
  *
- * In case of a proxy resolving issue, a host resolving issue, a failure to connect, or an operation
- * timeout it will retry for DWL_RETRIES and exit with DWL_FAIL in case of an unsuccessful retry
- * otherwise it reinitializes the retry count, continues to download and returns DWL_OK when done.
- *
- * Each time an issue happens it will wait for 2^(retry-1) seconds before retrying to download
- * e.g:
- * first attempt: it'll wait for 2^0 = 1 second
- * second attempt: it'll wait for 2^1 = 2 seconds
- * third attempt: it'll wait for 2^2 = 4 seconds
- * ...
- * In the case of a successful retry, the count is reinitialized.
- * e.g.:
- * first attempt: wait for 1 second, retry failed
- * second attempt: wait for 2 seconds, retry failed
- * third attempt: wait for 4 seconds, retry succeeded
- * sometime later the download fails again
- * first attempt: wait for 1 second ...
- *
  * @return
  *      - DWL_OK        The function succeeded
  *      - DWL_SUSPENDED The download is suspended
@@ -704,11 +773,7 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
 {
     packageDownloader_DownloadCtx_t* dwlCtxPtr;
     Package_t* pkgPtr;
-    CURLcode rc;
-    int retry = 0;
-    long osErrno;
     char buf[BUF_SIZE];
-    size_t size = 0;
 
     dwlCtxPtr = (packageDownloader_DownloadCtx_t*)ctxPtr;
     pkgPtr = (Package_t*)dwlCtxPtr->ctxPtr;
@@ -731,54 +796,10 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
         pkgPtr->size = (size_t)startOffset;
     }
 
-    while (retry < DWL_RETRIES)
+    le_result_t result = CurlDownloadAttempt(pkgPtr, startOffset);
+    if (LE_OK != result)
     {
-        LE_INFO("attempt %d", retry);
-        // perform download operation
-        rc = curl_easy_perform(pkgPtr->curlPtr);
-        switch (rc)
-        {
-            case CURLE_OK:
-            case CURLE_ABORTED_BY_CALLBACK:
-                retry = DWL_RETRIES;
-                break;
-            case CURLE_COULDNT_RESOLVE_PROXY:
-            case CURLE_COULDNT_RESOLVE_HOST:
-            case CURLE_OPERATION_TIMEDOUT:
-            case CURLE_RECV_ERROR:
-            case CURLE_PARTIAL_FILE:
-                LE_DEBUG("Received error: %s", curl_easy_strerror(rc));
-                retry++;
-                break;
-            case CURLE_COULDNT_CONNECT:
-                curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_OS_ERRNO, &osErrno);
-                (ECONNREFUSED == osErrno)?retry++:(retry = DWL_RETRIES);
-                break;
-            default:
-                LE_ERROR("failed to perform curl request: %s", curl_easy_strerror(rc));
-                retry = DWL_RETRIES;
-                break;
-        }
-
-        if (DWL_RETRIES > retry)
-        {
-            LE_ERROR("failed to perform curl request: %s", curl_easy_strerror(rc));
-            if (size != pkgPtr->size)
-            {
-                retry = 1;
-            }
-            size = pkgPtr->size;
-            memset(buf, 0, BUF_SIZE);
-            snprintf(buf, BUF_SIZE, "%zu-", pkgPtr->size);
-            curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_RANGE, buf);
-            Wait(Power(2, retry - 1));
-        }
-
-        rc = curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_RESPONSE_CODE, &HttpRespCode);
-        if (CURLE_OK != rc)
-        {
-            LE_WARN("failed to get response code: %s", curl_easy_strerror(rc));
-        }
+        LE_ERROR("CurlDownloadAttempt() failed");
     }
 
     return pkgPtr->result;
