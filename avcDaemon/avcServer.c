@@ -19,7 +19,7 @@
 #include "avData.h"
 #include "push.h"
 #include "coap.h"
-#include "fsSys.h"
+#include "updateInfo.h"
 #include "le_print.h"
 #include "avcAppUpdate.h"
 #include "packageDownloader.h"
@@ -4381,7 +4381,7 @@ COMPONENT_INIT
     avcServer_ResetQueryHandlers();
 
     // Clear resume data if necessary
-    if (fsSys_IsNewSys())
+    if (updateInfo_IsNewSys())
     {
         LE_INFO("New system installed. Removing old SOTA/FOTA resume info");
         // New system installed, all old(SOTA or FOTA) resume info are invalid. Delete them.
@@ -4396,7 +4396,7 @@ COMPONENT_INIT
             packageDownloader_DeleteFwUpdateInfo();
         }
         // Remove new system flag.
-        fsSys_RemoveNewSysFlag();
+        updateInfo_RemoveNewSysFlag();
     }
 
     // Initialize application update module
