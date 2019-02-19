@@ -43,10 +43,31 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Curl connection timeout (Maximum time curl can spend during connection phase)
+ * Curl minimum download speed (expect to download atleast 100 bytes per second)
  */
 //--------------------------------------------------------------------------------------------------
-#define CURL_CONNECT_TIMEOUT_SECONDS    300L
+#define CURL_MINIMUM_SPEED              100L
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Curl timeout in seconds. Timeout, if the download speed is less than CURL_MINIMUM_SPEED for
+ * more than CURL_TIMEOUT_SECONDS.
+ *
+ * @note This value times DWL_RETRIES must be less than upper-level timeouts
+ *       (i.e. watchdog timeout, le_fwupdate_Download() timeout)
+ */
+//--------------------------------------------------------------------------------------------------
+#define CURL_TIMEOUT_SECONDS            120L
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Curl connection timeout (Maximum time curl can spend during connection phase)
+ *
+ * @note This value times DWL_RETRIES must be less than upper-level timeouts
+ *       (i.e. watchdog timeout, le_fwupdate_Download() timeout)
+ */
+//--------------------------------------------------------------------------------------------------
+#define CURL_CONNECT_TIMEOUT_SECONDS    90L
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -107,6 +128,7 @@ Package_t;
 //--------------------------------------------------------------------------------------------------
 static long HttpRespCode = LE_AVC_HTTP_STATUS_INVALID;
 
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Send downloaded data to the package downloader
@@ -141,6 +163,7 @@ static size_t Write
     }
 
     pkgPtr->size += count;
+    LE_DEBUG("Number of bytes downloaded so far %zu", pkgPtr->size);
 
     return count;
 }
@@ -312,8 +335,8 @@ static void Wait
 //--------------------------------------------------------------------------------------------------
 le_result_t CurlDownloadAttempt
 (
-    Package_t*  pkgPtr,            ///< [IN] Package data pointer
-    uint64_t    startOffset     ///< [IN] Start offset for the download
+    Package_t*  pkgPtr,                 ///< [IN] Package data pointer
+    bool    isSetRange                  ///< [IN] Should curl use range option?
 )
 {
     char buf[BUF_SIZE];
@@ -322,6 +345,7 @@ le_result_t CurlDownloadAttempt
     CURLcode rc;
     le_result_t result = LE_FAULT;
     int retry = 0;
+    bool isRecoverable = true;
 
     while (retry < DWL_RETRIES)
     {
@@ -347,16 +371,33 @@ le_result_t CurlDownloadAttempt
                 curl_easy_getinfo(pkgPtr->curlPtr, CURLINFO_OS_ERRNO, &osErrno);
                 (ECONNREFUSED == osErrno)?retry++:(retry = DWL_RETRIES);
                 break;
+            case CURLE_WRITE_ERROR:
+                LE_ERROR("Package downloader failed in parse or store");
+                isRecoverable = false;
+                retry = DWL_RETRIES;
+                break;
             default:
                 LE_ERROR("failed to perform curl request: %s", curl_easy_strerror(rc));
                 retry = DWL_RETRIES;
                 break;
         }
 
+        // CURLE_WRITE_ERROR (23)
+        // An error occurred when writing received data to a local file,
+        // or an error was returned to libcurl from a write callback.
+        // This error is returned when the dwl parser or store fails and is not recoverable
+        // by doing a suspend/ resume.
+        if (isRecoverable == false)
+        {
+            LE_ERROR("Unrecoverable error in download");
+            return LE_FAULT;
+        }
+
         if (DWL_RETRIES > retry)
         {
             LE_ERROR("Retry curl download");
-            if (startOffset)
+
+            if (isSetRange)
             {
                 if (size != pkgPtr->size)
                 {
@@ -365,6 +406,7 @@ le_result_t CurlDownloadAttempt
                 size = pkgPtr->size;
                 memset(buf, 0, BUF_SIZE);
                 snprintf(buf, BUF_SIZE, "%zu-", pkgPtr->size);
+                LE_DEBUG("curl range = %s", buf);
                 curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_RANGE, buf);
             }
 
@@ -387,11 +429,6 @@ le_result_t CurlDownloadAttempt
         if (LE_OK == packageDownloader_SuspendDownload())
         {
             pkgPtr->result = DWL_SUSPEND;
-
-            // Also disconnect from network. User has to retry connection
-            // at this point or the device will resume download only at
-            // next polling period.
-            avcClient_Disconnect(true);
         }
 
         return LE_FAULT;
@@ -427,7 +464,7 @@ static int GetDownloadInfo
     curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_NOPROGRESS, 0L);
 
     // perform the download operation
-    le_result_t result = CurlDownloadAttempt(pkgPtr, 0);
+    le_result_t result = CurlDownloadAttempt(pkgPtr, false);
     if (LE_OK != result)
     {
         LE_ERROR("CurlDownloadAttempt() failed");
@@ -523,7 +560,7 @@ le_result_t pkgDwlCb_GetPackageSize
         goto global_cleanup;
     }
 
-    // Set the timeout for connection phase
+    // Set the timeout for connection phase.
     rc = curl_easy_setopt(curlPtr, CURLOPT_CONNECTTIMEOUT, CURL_CONNECT_TIMEOUT_SECONDS);
     if (CURLE_OK != rc)
     {
@@ -647,6 +684,24 @@ lwm2mcore_DwlResult_t pkgDwlCb_InitDownload
     if (CURLE_OK != rc)
     {
         LE_ERROR("failed to set curl connection timeout: %s", curl_easy_strerror(rc));
+        return DWL_FAULT;
+    }
+
+    // set timeout for the download speed to be very low
+    rc = curl_easy_setopt(pkg.curlPtr, CURLOPT_LOW_SPEED_TIME, CURL_TIMEOUT_SECONDS);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("failed to set curl timeout: %s", curl_easy_strerror(rc));
+        return DWL_FAULT;
+    }
+
+    // set the minimum download speed expected. If the download speed continuous to
+    // be less than CURL_MINIMUM_SPEED for more than CURL_TIMEOUT_SECONDS, curl
+    // will timeout
+    rc = curl_easy_setopt(pkg.curlPtr, CURLOPT_LOW_SPEED_LIMIT, CURL_MINIMUM_SPEED);
+    if (CURLE_OK != rc)
+    {
+        LE_ERROR("failed to set curl download speed limit: %s", curl_easy_strerror(rc));
         return DWL_FAULT;
     }
 
@@ -792,11 +847,12 @@ lwm2mcore_DwlResult_t pkgDwlCb_Download
     {
         memset(buf, 0, BUF_SIZE);
         snprintf(buf, BUF_SIZE, "%llu-", (unsigned long long)startOffset);
+        LE_DEBUG("curl range = %s", buf);
         curl_easy_setopt(pkgPtr->curlPtr, CURLOPT_RANGE, buf);
         pkgPtr->size = (size_t)startOffset;
     }
 
-    le_result_t result = CurlDownloadAttempt(pkgPtr, startOffset);
+    le_result_t result = CurlDownloadAttempt(pkgPtr, true);
     if (LE_OK != result)
     {
         LE_ERROR("CurlDownloadAttempt() failed");
