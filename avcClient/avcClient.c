@@ -1183,6 +1183,21 @@ void avcClient_ResetRetryTimer
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Get the data connection state.
+ *
+ * @return true if connected.
+ */
+//--------------------------------------------------------------------------------------------------
+bool avcClient_IsDataConnected
+(
+    void
+)
+{
+    return DataConnected;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Initialize the AVC client sub-component.
  *
  * @note This function should be called during the initializaion phase of the AVC daemon.

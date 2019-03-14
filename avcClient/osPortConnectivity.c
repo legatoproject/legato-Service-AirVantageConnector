@@ -10,6 +10,7 @@
 #include <lwm2mcore/connectivity.h>
 #include "legato.h"
 #include "interfaces.h"
+#include "avcClient.h"
 
 //--------------------------------------------------------------------------------------------------
 // Symbol and Enum definitions
@@ -729,6 +730,22 @@ static lwm2mcore_Sid_t GetCellularSignalBars
 }
 
 //--------------------------------------------------------------------------------------------------
+/**
+ * Get the current technology used for data connection.
+ *
+ * @return Current technology.
+ *         LE_DATA_MAX if not connected.
+ */
+//--------------------------------------------------------------------------------------------------
+static le_data_Technology_t GetConnectedTechnology
+(
+    void
+)
+{
+    return avcClient_IsDataConnected() ? le_data_GetTechnology() : LE_DATA_MAX;
+}
+
+//--------------------------------------------------------------------------------------------------
 // Public functions
 //--------------------------------------------------------------------------------------------------
 
@@ -741,6 +758,7 @@ static lwm2mcore_Sid_t GetCellularSignalBars
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetNetworkBearer
@@ -756,7 +774,7 @@ lwm2mcore_Sid_t lwm2mcore_GetNetworkBearer
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -786,6 +804,10 @@ lwm2mcore_Sid_t lwm2mcore_GetNetworkBearer
         case LE_DATA_WIFI:
             *valuePtr = LWM2MCORE_NETWORK_BEARER_WLAN;
             sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
+
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
         default:
@@ -910,6 +932,7 @@ lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetSignalStrength
@@ -925,7 +948,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSignalStrength
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1005,6 +1028,10 @@ lwm2mcore_Sid_t lwm2mcore_GetSignalStrength
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
             break;
 
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
         default:
             sID = LWM2MCORE_ERR_GENERAL_ERROR;
             break;
@@ -1039,7 +1066,7 @@ lwm2mcore_Sid_t lwm2mcore_GetLinkQuality
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1126,6 +1153,10 @@ lwm2mcore_Sid_t lwm2mcore_GetLinkQuality
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
             break;
 
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
         default:
             sID = LWM2MCORE_ERR_GENERAL_ERROR;
             break;
@@ -1145,6 +1176,7 @@ lwm2mcore_Sid_t lwm2mcore_GetLinkQuality
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
@@ -1166,7 +1198,7 @@ lwm2mcore_Sid_t lwm2mcore_GetIpAddresses
     *ipAddrNbPtr = 0;
     memset(ipAddrList, 0,
            ((CONN_MONITOR_IP_ADDRESSES_MAX_NB)*(CONN_MONITOR_IP_ADDR_MAX_BYTES)*sizeof(char)));
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1176,6 +1208,10 @@ lwm2mcore_Sid_t lwm2mcore_GetIpAddresses
 
         case LE_DATA_WIFI:
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            break;
+
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
         default:
@@ -1197,6 +1233,7 @@ lwm2mcore_Sid_t lwm2mcore_GetIpAddresses
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetRouterIpAddresses
@@ -1217,7 +1254,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRouterIpAddresses
     *ipAddrNbPtr = 0;
     memset(ipAddrList, 0,
            ((CONN_MONITOR_IP_ADDRESSES_MAX_NB)*(CONN_MONITOR_IP_ADDR_MAX_BYTES)*sizeof(char)));
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1227,6 +1264,10 @@ lwm2mcore_Sid_t lwm2mcore_GetRouterIpAddresses
 
         case LE_DATA_WIFI:
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            break;
+
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
         default:
@@ -1296,7 +1337,7 @@ lwm2mcore_Sid_t lwm2mcore_GetAccessPointNames
 
     *apnNbPtr = 0;
     memset(apnList, 0, ((CONN_MONITOR_APN_MAX_NB)*(CONN_MONITOR_APN_MAX_BYTES)*sizeof(char)));
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1307,6 +1348,10 @@ lwm2mcore_Sid_t lwm2mcore_GetAccessPointNames
         case LE_DATA_WIFI:
             // The SSID could be returned in this case
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            break;
+
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
         default:
@@ -1343,7 +1388,7 @@ lwm2mcore_Sid_t lwm2mcore_GetCellId
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1366,6 +1411,10 @@ lwm2mcore_Sid_t lwm2mcore_GetCellId
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
         default:
             sID = LWM2MCORE_ERR_GENERAL_ERROR;
             break;
@@ -1385,6 +1434,7 @@ lwm2mcore_Sid_t lwm2mcore_GetCellId
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  *      - LWM2MCORE_ERR_NOT_YET_IMPLEMENTED if the resource is not yet implemented
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetMncMcc
@@ -1401,7 +1451,7 @@ lwm2mcore_Sid_t lwm2mcore_GetMncMcc
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1434,6 +1484,10 @@ lwm2mcore_Sid_t lwm2mcore_GetMncMcc
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
         default:
             sID = LWM2MCORE_ERR_GENERAL_ERROR;
             break;
@@ -1452,6 +1506,7 @@ lwm2mcore_Sid_t lwm2mcore_GetMncMcc
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetSignalBars
@@ -1467,7 +1522,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSignalBars
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1477,6 +1532,10 @@ lwm2mcore_Sid_t lwm2mcore_GetSignalBars
 
         case LE_DATA_WIFI:
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            break;
+
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
         default:
@@ -1497,6 +1556,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSignalBars
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
@@ -1514,7 +1574,7 @@ lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1545,6 +1605,10 @@ lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
         default:
             sID = LWM2MCORE_ERR_GENERAL_ERROR;
             break;
@@ -1563,6 +1627,7 @@ lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetRoamingIndicator
@@ -1578,7 +1643,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRoamingIndicator
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1618,6 +1683,10 @@ lwm2mcore_Sid_t lwm2mcore_GetRoamingIndicator
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
         default:
             sID = LWM2MCORE_ERR_GENERAL_ERROR;
             break;
@@ -1652,7 +1721,7 @@ lwm2mcore_Sid_t lwm2mcore_GetEcIo
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1718,6 +1787,10 @@ lwm2mcore_Sid_t lwm2mcore_GetEcIo
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
         default:
             sID = LWM2MCORE_ERR_GENERAL_ERROR;
             break;
@@ -1751,7 +1824,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRsrp
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1806,6 +1879,10 @@ lwm2mcore_Sid_t lwm2mcore_GetRsrp
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
         default:
             sID = LWM2MCORE_ERR_GENERAL_ERROR;
             break;
@@ -1840,7 +1917,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRsrq
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1895,6 +1972,10 @@ lwm2mcore_Sid_t lwm2mcore_GetRsrq
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
         default:
             sID = LWM2MCORE_ERR_GENERAL_ERROR;
             break;
@@ -1928,7 +2009,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRscp
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -1990,6 +2071,10 @@ lwm2mcore_Sid_t lwm2mcore_GetRscp
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
         default:
             sID = LWM2MCORE_ERR_GENERAL_ERROR;
             break;
@@ -2023,7 +2108,7 @@ lwm2mcore_Sid_t lwm2mcore_GetLac
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -2045,6 +2130,10 @@ lwm2mcore_Sid_t lwm2mcore_GetLac
         break;
 
         case LE_DATA_WIFI:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
+        case LE_DATA_MAX:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
@@ -2081,7 +2170,7 @@ lwm2mcore_Sid_t lwm2mcore_GetServingCellLteTracAreaCode
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -2103,6 +2192,10 @@ lwm2mcore_Sid_t lwm2mcore_GetServingCellLteTracAreaCode
         break;
 
         case LE_DATA_WIFI:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
+        case LE_DATA_MAX:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
@@ -2190,6 +2283,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSmsRxCount
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetTxData
@@ -2205,7 +2299,7 @@ lwm2mcore_Sid_t lwm2mcore_GetTxData
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -2231,6 +2325,10 @@ lwm2mcore_Sid_t lwm2mcore_GetTxData
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
             break;
 
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
         default:
             sID = LWM2MCORE_ERR_GENERAL_ERROR;
             break;
@@ -2249,6 +2347,7 @@ lwm2mcore_Sid_t lwm2mcore_GetTxData
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
 lwm2mcore_Sid_t lwm2mcore_GetRxData
@@ -2264,7 +2363,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRxData
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    currentTech = le_data_GetTechnology();
+    currentTech = GetConnectedTechnology();
 
     switch (currentTech)
     {
@@ -2288,6 +2387,10 @@ lwm2mcore_Sid_t lwm2mcore_GetRxData
 
         case LE_DATA_WIFI:
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            break;
+
+        case LE_DATA_MAX:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
         default:
