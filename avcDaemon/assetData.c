@@ -2022,6 +2022,7 @@ le_result_t assetData_CreateInstanceById
         // Allocate instance data and populate most of the instance from the model definition
         // No need to check assetId, since we already know it is valid
         assetInstPtr = le_mem_ForceAlloc(InstanceDataPoolRef);
+        assetInstPtr->link = LE_DLS_LINK_INIT;
         CreateInstanceForObjectNine(assetInstPtr);
     }
     else
