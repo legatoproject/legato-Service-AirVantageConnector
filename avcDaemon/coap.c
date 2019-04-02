@@ -225,7 +225,7 @@ static void CoapMessageHandler
     coapMsgData.contentType = lwm2mcore_GetContentType(requestRef);
     uriPtr = lwm2mcore_GetRequestUri(requestRef); // cannot have trailing slash.
 
-    strncpy((char*)coapMsgData.uri, uriPtr, sizeof(coapMsgData.uri));
+    le_utf8_Copy((char*)coapMsgData.uri, uriPtr, sizeof(coapMsgData.uri), NULL);
 
     // Get payload
     uint8_t* payloadPtr = (uint8_t *)lwm2mcore_GetRequestPayload(requestRef);
