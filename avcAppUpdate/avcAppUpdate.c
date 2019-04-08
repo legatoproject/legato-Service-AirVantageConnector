@@ -312,6 +312,7 @@ static bool IsHiddenApp
     const char* appNamePtr  ///< Name of the application to check.
 )
 {
+#if LE_CONFIG_ENABLE_CONFIG_TREE
     if (true == le_cfg_QuickGetBool("/lwm2m/hideDefaultApps", true))
     {
         static char* appList[] =
@@ -350,6 +351,7 @@ static bool IsHiddenApp
             }
         }
     }
+#endif
     return false;
 }
 
@@ -388,9 +390,10 @@ static void UpdateEndHandler
     void *reportPtr
 )
 {
+#if LE_CONFIG_SOTA
     LE_DEBUG("End Update");
     le_update_End();
-
+#endif /* end LE_CONFIG_SOTA */
     LE_DEBUG("Delete package downloaded.");
     DeletePackage();
 }
@@ -520,6 +523,7 @@ static void SetObject9InstanceForApp
                                               ///< if the link is to be cleared.
 )
 {
+#if LE_CONFIG_ENABLE_CONFIG_TREE
     le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_OBJECT_INFO_PATH);
 
     if (instanceRef != NULL)
@@ -539,6 +543,7 @@ static void SetObject9InstanceForApp
     }
 
     le_cfg_CommitTxn(iterRef);
+#endif
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -585,16 +590,16 @@ static assetData_InstanceDataRef_t GetObject9InstanceForApp
     bool mapIfNotFound       ///< If an instance was created, should a mapping be created for it?
 )
 {
-    LE_DEBUG("Getting object 9 instance for application '%s'.", appNamePtr);
-
     // Attempt to read the mapping from the configuration.
     assetData_InstanceDataRef_t instanceRef = NULL;
+#if LE_CONFIG_ENABLE_CONFIG_TREE
+    LE_DEBUG("Getting object 9 instance for application '%s'.", appNamePtr);
     le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn(CFG_OBJECT_INFO_PATH);
 
     le_cfg_GoToNode(iterRef, appNamePtr);
     int instanceId = le_cfg_GetInt(iterRef, "oiid", -1);
     le_cfg_CancelTxn(iterRef);
-
+#endif
     if (instanceId != -1)
     {
         LE_DEBUG("Was mapped to instance, %d.", instanceId);
@@ -764,12 +769,12 @@ static void PopulateAppInfoObjects
     int index = 0;
 
     LE_INFO("Found %d app.", foundAppCount);
-
+#if LE_CONFIG_ENABLE_CONFIG_TREE
     // Now cleanup the lwm2m/objectMap config tree
     le_cfg_IteratorRef_t iterRef = le_cfg_CreateWriteTxn(CFG_OBJECT_PATH);
     le_cfg_DeleteNode(iterRef, CFG_OBJECT_MAP);
     le_cfg_CommitTxn(iterRef);
-
+#endif
     while (foundAppCount > 0)
     {
         assetData_InstanceDataRef_t instanceRef = NULL;
@@ -991,7 +996,7 @@ static void AppUninstallHandler
 
         LE_DEBUG("Uninstall of application completed.");
         avcServer_UpdateStatus(LE_AVC_UNINSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
-                               -1, -1, LE_AVC_ERR_NONE, NULL, NULL);
+                               -1, -1, LE_AVC_ERR_NONE);
     }
     else
     {
@@ -1051,28 +1056,6 @@ static bool FileExists
         {
             return false;
         }
-    }
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Closes a file descriptor
- */
-//--------------------------------------------------------------------------------------------------
-static void CloseFd
-(
-    int fd  ///< [IN] File descriptor to close.
-)
-{
-    if (fd < 0)
-    {
-        LE_ERROR("Bad file descriptor: %d", fd);
-        return;
-    }
-
-    if (-1 == close(fd))
-    {
-        LE_ERROR("Error in closing fd: %d. %m", fd);
     }
 }
 
@@ -1141,25 +1124,28 @@ static le_result_t StartUninstall
 )
 {
     LE_DEBUG("Application '%s' uninstall requested", appNamePtr);
+    le_result_t result = LE_OK;
+#if LE_CONFIG_SOTA
 
     LE_DEBUG("Uninstall in progress");
     avcServer_UpdateStatus(LE_AVC_UNINSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
-                           -1, 0, LE_AVC_ERR_NONE, NULL, NULL);
+                           -1, 0, LE_AVC_ERR_NONE);
 
     // Update Daemon doesn't send any callback notification for single app removal. So returning
     // LE_OK from the following function means app is removed successfully.
-    le_result_t result = le_appRemove_Remove(appNamePtr);
+    result = le_appRemove_Remove(appNamePtr);
+#endif /* end LE_CONFIG_SOTA */
 
     if (result == LE_OK)
     {
         avcServer_UpdateStatus(LE_AVC_UNINSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
-                               -1, 100, LE_AVC_ERR_NONE, NULL, NULL);
+                               -1, 100, LE_AVC_ERR_NONE);
     }
     else
     {
         LE_ERROR("Uninstall of application failed (%s).", LE_RESULT_TXT(result));
         avcServer_UpdateStatus(LE_AVC_UNINSTALL_FAILED, LE_AVC_APPLICATION_UPDATE,
-                               -1, -1, LE_AVC_ERR_INTERNAL, NULL, NULL);
+                               -1, -1, LE_AVC_ERR_INTERNAL);
     }
 
     return result;
@@ -1558,9 +1544,10 @@ static void UpdateProgressHandler
                           LWM2MCORE_SW_UPDATE_RESULT_DOWNLOADED);
             LE_INFO("Package delivered");
 
+#if LE_CONFIG_SOTA
             // Delete the SOTA resume info.
             packageDownloader_DeleteResumeInfo();
-
+#endif /* end LE_CONFIG_SOTA */
             // Check and resume install if necessary.
             le_event_Report(InstallResumeEventId, NULL, 0);
             break;
@@ -1570,9 +1557,8 @@ static void UpdateProgressHandler
                                    LE_AVC_APPLICATION_UPDATE,
                                    -1,
                                    percentDone,
-                                   LE_AVC_ERR_NONE,
-                                   NULL,
-                                   NULL);
+                                   LE_AVC_ERR_NONE
+                                   );
 
             LE_DEBUG("Installation Progress: %d.", percentDone);
             break;
@@ -1583,9 +1569,8 @@ static void UpdateProgressHandler
                                    LE_AVC_APPLICATION_UPDATE,
                                    -1,
                                    100,
-                                   LE_AVC_ERR_NONE,
-                                   NULL,
-                                   NULL);
+                                   LE_AVC_ERR_NONE
+                                   );
             RequestConnection();
             le_update_End();
             break;
@@ -1618,9 +1603,8 @@ static void UpdateProgressHandler
                                    LE_AVC_APPLICATION_UPDATE,
                                    -1,
                                    percentDone,
-                                   avcErrorCode,
-                                   NULL,
-                                   NULL);
+                                   avcErrorCode
+                                   );
 
             // Now end the update and set the UpdateStarted flag false before calling SetObj9State()
             // function (otherwise, SetObj9State() may call le_update_End() again if it notices
@@ -1662,14 +1646,14 @@ static void StopStoringPackage
     if (UpdateReadFd != -1)
     {
         LE_DEBUG("Close downloader read pipe.");
-        CloseFd(UpdateReadFd);
+        le_fd_Close(UpdateReadFd);
         UpdateReadFd = -1;
     }
 
     if (UpdateStoreFd != -1)
     {
         LE_DEBUG("Close store pipe.");
-        CloseFd(UpdateStoreFd);
+        le_fd_Close(UpdateStoreFd);
         UpdateStoreFd = -1;
     }
 
@@ -1837,11 +1821,13 @@ static void StoreFdEventHandler
         }
         LE_DEBUG("result: %s, bytes copied: %zd", LE_RESULT_TXT(result), bytesCopied);
     }
+#ifndef LE_CONFIG_CUSTOM_OS
     else if (events & POLLHUP)
     {
         LE_WARN("File descriptor closed");
         StopStoringPackage(LE_TERMINATED);
     }
+#endif
     else
     {
         LE_WARN("Unexpected event received 0x%x", events & ~POLLIN);
@@ -1880,20 +1866,20 @@ static void PrepareDownloadDirectory
 //-------------------------------------------------------------------------------------------------
 static le_result_t StartStoringPackage
 (
-    bool isResume   ///<[IN] Resume the previously interrupted operation.
+    bool isResume,    ///<[IN] Resume the previously interrupted operation.
+    size_t offset     ///<[IN] Resume offset
 )
 {
     char downloadFile[MAX_FILE_PATH_BYTES];
-    le_result_t result;
-    size_t offset = 0;
 
+#if LE_CONFIG_SOTA
     // Make sure legato is NOT a read only system
     if (le_framework_IsReadOnly())
     {
         LE_ERROR("Legato is R/O");
         return LE_UNSUPPORTED;
     }
-
+#endif /* end LE_CONFIG_SOTA */
     // The name of temporary file where the package downloaded will be stored.
     le_utf8_Copy(downloadFile, AppDownloadPath, sizeof(downloadFile), NULL);
     le_utf8_Append(downloadFile, NAME_DOWNLOAD_FILE, sizeof(downloadFile), NULL);
@@ -1916,15 +1902,6 @@ static le_result_t StartStoringPackage
             return LE_FAULT;
         }
 
-        // Read the resume offset from the workspace
-        result = GetSwUpdateBytesDownloaded(&offset);
-
-        if(result != LE_OK)
-        {
-            LE_ERROR("Can't read download offset");
-            return LE_FAULT;
-        }
-
         // Seek to the resume offset
         LE_DEBUG("Seek to offset %zd", offset);
         size_t fileOffset = lseek(UpdateStoreFd, offset, SEEK_SET);
@@ -1932,7 +1909,7 @@ static le_result_t StartStoringPackage
         if (fileOffset == -1)
         {
             LE_ERROR("Seek file to offset %zd failed.", offset);
-            CloseFd(UpdateStoreFd);
+            le_fd_Close(UpdateStoreFd);
             return LE_FAULT;
         }
     }
@@ -1989,29 +1966,27 @@ static void DownloadHandler
     if (UpdateReadFd != -1)
     {
         LE_DEBUG("Close downloader read pipe.");
-        CloseFd(UpdateReadFd);
+        le_fd_Close(UpdateReadFd);
         UpdateReadFd = -1;
     }
 
     if (UpdateStoreFd != -1)
     {
         LE_DEBUG("Close store pipe.");
-        CloseFd(UpdateStoreFd);
+        le_fd_Close(UpdateStoreFd);
         UpdateStoreFd = -1;
     }
 
-    // Open read pipe
-    UpdateReadFd = open(dwlCtxPtr->fifoPtr, O_RDONLY|O_NONBLOCK, 0);
-    LE_DEBUG("Opened fifo");
-
+    // Get the read end of the pipe
+    UpdateReadFd = dwlCtxPtr->recvFd;
     if (-1 == UpdateReadFd)
     {
-        LE_ERROR("failed to open fifo %m");
+        LE_ERROR("Invalid pipe file descriptor");
         return;
     }
 
     LE_DEBUG("Start storing the downloaded package.");
-    result = StartStoringPackage(dwlCtxPtr->resume);
+    result = StartStoringPackage(dwlCtxPtr->resume, pkgDwlPtr->data.updateOffset);
 
     if (LE_OK != result)
     {
@@ -2276,9 +2251,9 @@ le_result_t avcApp_StartInstall
                  instanceRef);
         return LE_FAULT;
     }
-
+#if LE_CONFIG_SOTA
     result = le_update_Install();
-
+#endif
     if (result == LE_OK)
     {
         AvmsInstall = true;
@@ -2315,13 +2290,13 @@ le_result_t avcApp_StartUpdate
     LE_DEBUG("unpack object instance %d", instanceId);
 
     char downloadFile[MAX_FILE_PATH_BYTES];
-
+#if LE_CONFIG_SOTA
     if (le_framework_IsReadOnly())
     {
         LE_ERROR("Legato is R/O");
         return LE_UNSUPPORTED;
     }
-
+#endif /* end LE_CONFIG_SOTA */
     // Check if the downloaded package exists.
     le_utf8_Copy(downloadFile, AppDownloadPath, sizeof(downloadFile), NULL);
     le_utf8_Append(downloadFile, NAME_DOWNLOAD_FILE, sizeof(downloadFile), NULL);
@@ -2345,7 +2320,9 @@ le_result_t avcApp_StartUpdate
 
     // Start unpacking the downloaded file. No need to close the readFd again as it will be closed
     // by underlying messaging api.
+#if LE_CONFIG_SOTA
     result = le_update_Start(readFd);
+#endif
 
     if (result != LE_OK)
     {
@@ -2451,7 +2428,7 @@ le_result_t avcApp_StartApp
         LE_ERROR("Application '%s' not installed.", appName);
         return LE_UNAVAILABLE;
     }
-
+#if LE_CONFIG_SOTA
     result = le_appCtrl_Start(appName);
 
     if (result == LE_DUPLICATE)
@@ -2460,7 +2437,7 @@ le_result_t avcApp_StartApp
         // App is already running, so return LE_OK.
         result = LE_OK;
     }
-
+#endif /* end LE_CONFIG_SOTA */
     return result;
 }
 
@@ -2510,8 +2487,11 @@ le_result_t avcApp_StopApp
         LE_ERROR("Application '%s' not installed.", appName);
         return LE_UNAVAILABLE;
     }
-
+#if LE_CONFIG_SOTA
     return le_appCtrl_Stop(appName);
+#else
+    return LE_OK;
+#endif
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2784,12 +2764,15 @@ le_result_t avcApp_DeleteObj9Instance
                 if (UpdateStarted)
                 {
                     UpdateStarted = false;
+#if LE_CONFIG_SOTA
                     le_update_End();
+#endif
                 }
 
                 // Delete everything relating to the aborted SOTA job
-                packageDownloader_SuspendDownload();
+#ifndef LE_CONFIG_CUSTOM_OS
                 packageDownloader_DeleteResumeInfo();
+#endif
                 DeletePackage();
                 avcServer_ResetQueryHandlers();
                 assetData_DeleteInstance(instanceRef);
@@ -2858,7 +2841,7 @@ le_result_t avcApp_StoreSwPackage
  *      - LE_OK on success
  *      - LE_BAD_PARAMETER Invalid parameter
  *      - LE_FAULT on failure
- */;
+ */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcApp_GetResumePosition
 (
@@ -2891,7 +2874,7 @@ le_result_t avcApp_GetResumePosition
             return LE_FAULT;
         }
 
-        CloseFd(storeFd);
+        le_fd_Close(storeFd);
     }
     else
     {
@@ -3418,14 +3401,14 @@ void avcApp_Init
 )
 {
     le_sig_Block(SIGPIPE);
-
+#if LE_CONFIG_SOTA
     // Register our handler for update progress reports from the Update Daemon.
     le_update_AddProgressHandler(UpdateProgressHandler, NULL);
 
     // Make sure that we're notified when applications are installed and removed from the system.
     le_instStat_AddAppInstallEventHandler(AppInstallHandler, NULL);
     le_instStat_AddAppUninstallEventHandler(AppUninstallHandler, NULL);
-
+#endif /* end LE_CONFIG_SOTA */
     DownloadEventId = le_event_CreateId("DownloadEvent", sizeof(lwm2mcore_PackageDownloader_t));
     le_event_AddHandler("DownloadHandler", DownloadEventId, DownloadHandler);
 

@@ -74,8 +74,7 @@ le_result_t DeleteFs
  * @return
  *  - LE_OK             The function succeeded
  *  - LE_BAD_PARAMETER  Incorrect parameter provided
- *  - LE_OVERFLOW       The file path is too long
- *  - LE_FAULT          The function failed
+ *  - LE_NOT_FOUND      The file does not exist or a directory in the path does not exist
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t ExistsFs

@@ -22,66 +22,6 @@
 #include "defaultDerKey.h"
 #include "avcFs.h"
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Base64 line break position
- */
-//--------------------------------------------------------------------------------------------------
-#define BASE64_NL           64
-
-//--------------------------------------------------------------------------------------------------
-/**
- * PEM certificate header
- */
-//--------------------------------------------------------------------------------------------------
-#define PEM_CERT_HEADER     "-----BEGIN CERTIFICATE-----\n"
-
-//--------------------------------------------------------------------------------------------------
-/**
- * PEM certificate footer
- */
-//--------------------------------------------------------------------------------------------------
-#define PEM_CERT_FOOTER     "-----END CERTIFICATE-----\n"
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Insert a character val at position pos
- */
-//--------------------------------------------------------------------------------------------------
-static void InsertCharAtPosition
-(
-    char*   strPtr,
-    size_t  strLen,
-    int     pos,
-    char    val
-)
-{
-    char *tmpPtr = strPtr+pos;
-    memmove(tmpPtr+1, tmpPtr, strLen-pos);
-    *tmpPtr = val;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Add a new line to string
- *
- * note:
- *    Due to the 64 bit encoding openssl expects a new line each 64 character
- */
-//--------------------------------------------------------------------------------------------------
-static void AddNewLine
-(
-    char*   strPtr,
-    size_t  strLen
-)
-{
-    int j,n;
-
-    for(j=BASE64_NL, n=0; j<=strLen; j+=BASE64_NL, n++)
-    {
-        InsertCharAtPosition(strPtr, strLen+n, j+n, '\n');
-    }
-}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -91,7 +31,7 @@ static void AddNewLine
 //--------------------------------------------------------------------------------------------------
 static int ConvertDERToPEM
 (
-    const unsigned char*  derKeyPtr,///< [IN] DER key
+    const unsigned char*  derKeyPtr, ///< [IN] DER key
     int             derKeyLen,      ///< [IN] DER key length
     unsigned char*  pemKeyPtr,      ///< [OUT] PEM key
     int             pemKeyLen       ///< [IN] PEM key length
@@ -229,45 +169,6 @@ static le_result_t WritePEMCertificate
     close(fd);
 
     return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Lay out a base64 string into PEM
- *
- * @note:
- *     - Make sure that strPtr is big enough to hold the new string.
- *     - The buffer size must be >=
- *          ( strLen+(strLen/64)+strlen(PEM_CERT_HEADER)+strlen(PEM_CERT_FOOTER)+2 )
- */
-//--------------------------------------------------------------------------------------------------
-int ssl_LayOutPEM
-(
-    char*   strPtr,
-    int     strLen
-)
-{
-    char *tmpStr;
-    size_t finalSize;
-    size_t currentSize = strlen(strPtr);
-
-    finalSize = currentSize+(currentSize/BASE64_NL)+strlen(PEM_CERT_HEADER)
-        +strlen(PEM_CERT_FOOTER);
-
-    if (strLen < finalSize)
-    {
-        LE_ERROR("The buffer isn't big enough to hold the new string");
-        return -1;
-    }
-
-    AddNewLine(strPtr, currentSize);
-    currentSize = strlen(strPtr);
-
-    tmpStr = memmove(strPtr + strlen(PEM_CERT_HEADER), strPtr, strlen(strPtr));
-    memcpy(strPtr, PEM_CERT_HEADER, strlen(PEM_CERT_HEADER));
-    memcpy(tmpStr+currentSize, PEM_CERT_FOOTER, strlen(PEM_CERT_FOOTER));
-
-    return strlen(strPtr);
 }
 
 //--------------------------------------------------------------------------------------------------

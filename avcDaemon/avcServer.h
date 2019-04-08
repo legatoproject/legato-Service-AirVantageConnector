@@ -15,7 +15,7 @@
 #include "legato.h"
 #include "assetData.h"
 #include "lwm2mcore/update.h"
-#include "lwm2mcorePackageDownloader.h"
+#include "lwm2mcore/lwm2mcorePackageDownloader.h"
 #include "avcFs.h"
 
 //--------------------------------------------------------------------------------------------------
@@ -57,7 +57,6 @@ typedef void (*avcServer_UninstallHandlerFunc_t)
 //--------------------------------------------------------------------------------------------------
 typedef void (*avcServer_DownloadHandlerFunc_t)
 (
-    const char*            uriPtr,  ///< Package URI
     lwm2mcore_UpdateType_t type,    ///< Update type (FW/SW)
     bool                   resume   ///< Indicates if it is a download resume
 );
@@ -76,7 +75,6 @@ typedef void (*avcServer_RebootHandlerFunc_t)
 //--------------------------------------------------------------------------------------------------
 // Interface functions
 //--------------------------------------------------------------------------------------------------
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -126,14 +124,12 @@ LE_SHARED void avcServer_QueryUninstall
 //--------------------------------------------------------------------------------------------------
 LE_SHARED void avcServer_QueryDownload
 (
-    avcServer_DownloadHandlerFunc_t handlerFunc,    ///< [IN] Download handler function
-    uint64_t bytesToDownload,                       ///< [IN] Number of bytes to download
-    lwm2mcore_UpdateType_t type,                    ///< [IN] Update type
-    char* uriPtr,                                   ///< [IN] Update package URI
-    bool resume,                                    ///< [IN] Is it a download resume?
-    le_avc_StatusHandlerFunc_t statusHandlerPtr,    ///< [IN] Pointer on handler function
-    void*                      contextPtr           ///< [IN] Context
-
+    avcServer_DownloadHandlerFunc_t handlerFunc,        ///< [IN] Download handler function
+    uint64_t                        bytesToDownload,    ///< [IN] Number of bytes to download
+    lwm2mcore_UpdateType_t          type,               ///< [IN] Update type
+    bool                            resume,             ///< [IN] Is it a download resume?
+    le_avc_ErrorCode_t              errorCode           ///< [IN] AVC error code if download was
+                                                        ///<      suspended
 );
 
 
@@ -158,8 +154,8 @@ void avcServer_ResetQueryHandlers
 LE_SHARED void avcServer_NotifyUserApp
 (
     le_avc_Status_t updateStatus,
-    uint numBytes,                 ///< [IN]  Number of bytes to download.
-    uint installProgress,          ///< [IN]  Percentage of install completed.
+    uint32_t numBytes,             ///< [IN]  Number of bytes to download.
+    uint32_t installProgress,      ///< [IN]  Percentage of install completed.
                                    ///        Applicable only when le_avc_Status_t is one of
                                    ///        LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_INSTALL_COMPLETE
                                    ///        or LE_AVC_INSTALL_FAILED.
@@ -207,9 +203,7 @@ LE_SHARED void avcServer_UpdateStatus
     le_avc_UpdateType_t updateType,
     int32_t totalNumBytes,
     int32_t dloadProgress,
-    le_avc_ErrorCode_t errorCode,
-    le_avc_StatusHandlerFunc_t statusHandlerPtr,
-    void* contextPtr
+    le_avc_ErrorCode_t errorCode
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -318,6 +312,19 @@ LE_SHARED bool avcServer_IsUserSession
     void
 );
 
+//-------------------------------------------------------------------------------------------------
+/**
+ * Save current epoch time to le_fs
+ *
+ * @return
+ *      - LE_OK if successful
+ *      - LE_FAULT if otherwise
+ */
+//-------------------------------------------------------------------------------------------------
+le_result_t avcServer_SaveCurrentEpochTime
+(
+    void
+);
 //--------------------------------------------------------------------------------------------------
 /**
  * Resume firmware install if necessary

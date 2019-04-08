@@ -26,6 +26,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Maximum URI buffer length buffer
+ */
+//--------------------------------------------------------------------------------------------------
+#define LE_TPF_URI_PACKAGE_MAX_SIZE 255
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Update status
  * Indicates either a success or the defective image partition.
  */
@@ -424,7 +431,7 @@ lwm2mcore_Ref_t lwm2mcore_Init
 void le_avcTest_SimulateLwm2mEvent
 (
     lwm2mcore_StatusType_t status,   ///< Event
-    lwm2mcore_PkgDwlType_t pkgType,  ///< Package type.
+    lwm2mcore_UpdateType_t pkgType,  ///< Package type
     uint32_t numBytes,               ///< For package download, num of bytes to be downloaded
     uint32_t progress                ///< For package download, package download progress in %
 );
@@ -441,6 +448,20 @@ void le_avcTest_SimulateLwm2mEvent
 bool lwm2mcore_TimerIsRunning
 (
     lwm2mcore_TimerType_t timer    ///< [IN] Timer Id
+);
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get Package URI
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_tpf_GetPackageUri
+(
+    char* uriptr,                     ///< [OUT] Package address
+    size_t packageUriSize          ///< Uri size
 );
 
 #endif /* interfaces.h */

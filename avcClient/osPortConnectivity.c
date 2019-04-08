@@ -9,6 +9,9 @@
 
 #include <lwm2mcore/connectivity.h>
 #include "legato.h"
+// Definitions made above which conflict with interfaces.h
+#undef LE_MDC_IPV6_ADDR_MAX_BYTES
+#undef LE_MDC_APN_NAME_MAX_BYTES
 #include "interfaces.h"
 #include "avcClient.h"
 
@@ -346,7 +349,7 @@ static lwm2mcore_Sid_t GetCellularIpAddresses
 {
     le_mdc_ProfileRef_t profileRef;
     le_mdc_ConState_t state = LE_MDC_DISCONNECTED;
-    int i = 1;
+    uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile(LE_MDC_DEFAULT_PROFILE));
     lwm2mcore_Sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
     le_result_t result;
 
@@ -357,7 +360,7 @@ static lwm2mcore_Sid_t GetCellularIpAddresses
 
     do
     {
-        LE_DEBUG("Profile index: %d", i);
+        LE_DEBUG("Profile index: %"PRIu32, i);
         profileRef = le_mdc_GetProfile(i);
 
         if (   (profileRef)
@@ -439,7 +442,7 @@ static lwm2mcore_Sid_t GetCellularRouterIpAddresses
 {
     le_mdc_ProfileRef_t profileRef;
     le_mdc_ConState_t state = LE_MDC_DISCONNECTED;
-    uint32_t i = 1;
+    uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile(LE_MDC_DEFAULT_PROFILE));
     lwm2mcore_Sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
     le_result_t result;
 
@@ -450,7 +453,7 @@ static lwm2mcore_Sid_t GetCellularRouterIpAddresses
 
     do
     {
-        LE_DEBUG("Profile index: %d", i);
+        LE_DEBUG("Profile index: %"PRIu32, i);
         profileRef = le_mdc_GetProfile(i);
 
         if (   (profileRef)
@@ -530,7 +533,7 @@ static lwm2mcore_Sid_t GetCellularApn
 )
 {
     le_mdc_ProfileRef_t profileRef;
-    int i = 1;
+    uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile(LE_MDC_DEFAULT_PROFILE));
     lwm2mcore_Sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
     le_result_t result;
 
@@ -541,7 +544,7 @@ static lwm2mcore_Sid_t GetCellularApn
 
     do
     {
-        LE_DEBUG("Profile index: %d", i);
+        LE_DEBUG("Profile index: %"PRIu32, i);
         profileRef = le_mdc_GetProfile(i);
 
         if (profileRef)
@@ -2224,21 +2227,26 @@ lwm2mcore_Sid_t lwm2mcore_GetSmsTxCount
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )
 {
-    int32_t smsTxCount;
-
     if (!valuePtr)
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
+    *valuePtr = 0;
+
+#if LE_CONFIG_ENABLE_AV_SMS_COUNT
+    int32_t smsTxCount = 0;
     if (LE_OK == le_sms_GetCount(LE_SMS_TYPE_TX, &smsTxCount))
     {
         *valuePtr = smsTxCount;
         return LWM2MCORE_ERR_COMPLETED_OK;
     }
 
-    *valuePtr = 0;
     return LWM2MCORE_ERR_GENERAL_ERROR;
+#else /* LE_CONFIG_ENABLE_AV_SMS_COUNT */
+
+    return LWM2MCORE_ERR_INVALID_STATE;
+#endif
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2257,21 +2265,26 @@ lwm2mcore_Sid_t lwm2mcore_GetSmsRxCount
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )
 {
-    int32_t smsRxCount;
-
     if (!valuePtr)
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
+    *valuePtr = 0;
+
+#if LE_CONFIG_ENABLE_AV_SMS_COUNT
+    int32_t smsRxCount = 0;
     if (LE_OK == le_sms_GetCount(LE_SMS_TYPE_RX, &smsRxCount))
     {
         *valuePtr = smsRxCount;
         return LWM2MCORE_ERR_COMPLETED_OK;
     }
 
-    *valuePtr = 0;
     return LWM2MCORE_ERR_GENERAL_ERROR;
+#else /* LE_CONFIG_ENABLE_AV_SMS_COUNT */
+
+    return LWM2MCORE_ERR_INVALID_STATE;
+#endif
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2417,9 +2430,11 @@ lwm2mcore_Sid_t lwm2mcore_StartConnectivityCounters
     void
 )
 {
+#if LE_CONFIG_ENABLE_AV_SMS_COUNT
     // Reset and start SMS counters
     le_sms_ResetCount();
     le_sms_StartCount();
+#endif /* end LE_CONFIG_ENABLE_AV_SMS_COUNT */
 
     // Reset and start cellular data counters
     if (LE_DATA_CELLULAR == le_data_GetTechnology())
@@ -2449,8 +2464,10 @@ lwm2mcore_Sid_t lwm2mcore_StopConnectivityCounters
     void
 )
 {
+#if LE_CONFIG_ENABLE_AV_SMS_COUNT
     // Stop SMS counters without resetting the counters
     le_sms_StopCount();
+#endif /* LE_CONFIG_ENABLE_AV_SMS_COUNT */
 
     // Stop cellular data counters without resetting the counters
     if (LE_DATA_CELLULAR == le_data_GetTechnology())

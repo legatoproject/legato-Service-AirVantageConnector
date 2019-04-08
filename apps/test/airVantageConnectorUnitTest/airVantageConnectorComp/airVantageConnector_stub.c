@@ -7,7 +7,7 @@
 
 #include "legato.h"
 #include "interfaces.h"
-#include "lwm2mcorePackageDownloader.h"
+#include "lwm2mcore/lwm2mcorePackageDownloader.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -212,6 +212,58 @@ void le_wdogChain_MonitorEventLoop
 le_result_t packageDownloader_GetFwUpdateInstallPending
 (
     bool* isFwInstallPendingPtr                  ///< [OUT] Is FW install pending?
+)
+{
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set firmware update install pending status
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetFwUpdateInstallPending
+(
+    bool isFwInstallPending                     ///< [IN] Is FW install pending ?
+)
+{
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get connection notification status
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetConnectionNotificationState
+(
+    bool* isConnectionNeededPtr                  ///< [OUT] Is connection enabled ?
+)
+{
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set connection notification  status
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetConnectionNotificationState
+(
+    bool isConnectionNeeded                     ///< [IN] Is connection enabled ?
 )
 {
     return LE_OK;
@@ -465,37 +517,6 @@ le_result_t packageDownloader_GetFwUpdateNotification
 )
 {
     return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Set firmware update result
- *
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResult
-(
-    lwm2mcore_FwUpdateResult_t fwUpdateResult   ///< [IN] New FW update result
-)
-{
-    return DWL_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Set firmware update state
- *
- * @return
- *  - LE_OK     The function succeeded
- *  - LE_FAULT  The function failed
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateState
-(
-    lwm2mcore_FwUpdateState_t fwUpdateState     ///< [IN] New FW update state
-)
-{
-    return DWL_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -976,6 +997,110 @@ le_result_t le_sms_DeleteFromStorage
 (
     le_sms_MsgRef_t msgRef
         ///< [IN] Reference to the message object.
+)
+{
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if the downloader thread is running
+ *
+ * @return
+ *   - LE_OK                If function succeeded
+ *   - LE_BAD_PARAMETER     Null pointer provided
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_IsDownloadInProgress
+(
+    bool*    isDownloadPtr   ///< [INOUT] Download thread state (true = running, false = stopped)
+)
+{
+    if( NULL == isDownloadPtr)
+    {
+        return LE_BAD_PARAMETER;
+    }
+
+    *isDownloadPtr = false;
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize the AVC update client sub-component.
+ *
+ * @note This function should be called during the initializaion phase of the AVC daemon.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_UpdateInit
+(
+   void
+)
+{
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize the AVC device client sub-component.
+ *
+ * @note This function should be called during the initializaion phase of the AVC daemon.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_DeviceInit
+(
+   void
+)
+{
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get Package URI
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_tpf_GetPackageUri
+(
+    char* uriptr,                     ///< [OUT] Package address
+    size_t packageUriSize             ///< [IN] URI size
+)
+{
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get TPF mode state
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t tpfServer_GetTpfState
+(
+    bool* isTpfEnablePtr                    ///< [OUT] True if TPF mode is enabled, false otherwise
+)
+{
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set TPF mode state
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t tpfServer_SetTpfState
+(
+    bool isTpfEnable                     ///< [IN] is TPF mode enable
 )
 {
     return LE_OK;

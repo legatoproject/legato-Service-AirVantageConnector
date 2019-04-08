@@ -52,21 +52,3 @@ void avcClient_StopActivityTimer
 {
     LE_DEBUG("Stub");
 }
-
-//--------------------------------------------------------------------------------------------------
-/**
- * LwM2M client entry point to close a connection.
- *
- * @return
- *      - LE_OK in case of success.
- *      - LE_FAULT in case of failure.
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t avcClient_Disconnect
-(
-    bool resetRetry  ///< [IN] if true, reset the retry timers.
-)
-{
-    LE_DEBUG("Stub");
-    return LE_OK;
-}

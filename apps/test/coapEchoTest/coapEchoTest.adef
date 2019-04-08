@@ -1,0 +1,22 @@
+
+executables:
+{
+    coapEchoTest = ( coapEchoTestComponent )
+}
+
+processes:
+{
+    run:
+    {
+        (coapEchoTest)
+    }
+    maxStackBytes: 8192
+}
+
+start: manual
+
+bindings:
+{
+    coapEchoTest.coapEchoTestComponent.le_avc -> avcService.le_avc
+    coapEchoTest.coapEchoTestComponent.le_coap -> avcService.le_coap
+}

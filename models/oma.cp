@@ -48,6 +48,8 @@
           <variable default-label="Firmware update state" path="3" type="int"></variable>
           <setting default-label="Firmware update supported objects" path="4" type="boolean"></setting>
           <variable default-label="Firmware update result" path="5" type="int"></variable>
+          <variable default-label="Firmware update protocol support" path="8" type="int"></variable>
+          <variable default-label="Firmware update delivery method" path="9" type="int"></variable>
         </node>
         <node default-label="Location" path="6">
           <variable default-label="Latitude" path="0" type="string"></variable>

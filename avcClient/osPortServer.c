@@ -79,7 +79,7 @@ lwm2mcore_Sid_t lwm2mcore_SetPollingTimer
 )
 {
     uint32_t value = interval;
-    LE_INFO("Setting polling timer to %d seconds", interval);
+    LE_INFO("Setting polling timer to %"PRIu32" seconds", interval);
     if (false == lwm2mcore_CheckLifetimeLimit(interval))
     {
         return LWM2MCORE_ERR_INCORRECT_RANGE;

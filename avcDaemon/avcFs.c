@@ -35,6 +35,9 @@ le_result_t ReadFs
     le_fs_FileRef_t fileRef;
     le_result_t result;
 
+    LE_FATAL_IF(!pathPtr, "Invalid parameter");
+    LE_FATAL_IF(!bufPtr, "Invalid parameter");
+
     result = le_fs_Open(pathPtr, LE_FS_RDONLY, &fileRef);
     if (LE_OK != result)
     {
@@ -84,7 +87,10 @@ le_result_t WriteFs
     le_fs_FileRef_t fileRef;
     le_result_t result;
 
-    result = le_fs_Open(pathPtr, LE_FS_WRONLY | LE_FS_CREAT, &fileRef);
+    LE_FATAL_IF(!pathPtr, "Invalid parameter");
+    LE_FATAL_IF(!bufPtr, "Invalid parameter");
+
+    result = le_fs_Open(pathPtr, LE_FS_WRONLY | LE_FS_CREAT | LE_FS_TRUNC, &fileRef);
     if (LE_OK != result)
     {
         LE_ERROR("failed to open %s: %s", pathPtr, LE_RESULT_TXT(result));
@@ -134,6 +140,8 @@ le_result_t DeleteFs
 {
     le_result_t result;
 
+    LE_FATAL_IF(!pathPtr, "Invalid parameter");
+
     result = le_fs_Delete(pathPtr);
     if (LE_OK != result)
     {
@@ -150,8 +158,7 @@ le_result_t DeleteFs
  * @return
  *  - LE_OK             The function succeeded
  *  - LE_BAD_PARAMETER  Incorrect parameter provided
- *  - LE_OVERFLOW       The file path is too long
- *  - LE_FAULT          The function failed
+ *  - LE_NOT_FOUND      The file does not exist or a directory in the path does not exist
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t ExistsFs
@@ -159,22 +166,14 @@ le_result_t ExistsFs
     const char* pathPtr ///< File path
 )
 {
-    le_fs_FileRef_t fileRef;
-    le_result_t result;
+    LE_FATAL_IF(!pathPtr, "Invalid parameter");
 
-    result = le_fs_Open(pathPtr, LE_FS_RDONLY, &fileRef);
-    if (LE_OK != result)
+    if (le_fs_Exists(pathPtr))
     {
-        LE_ERROR("failed to open %s: %s", pathPtr, LE_RESULT_TXT(result));
-        return result;
+        return LE_OK;
     }
-
-    result = le_fs_Close(fileRef);
-    if (LE_OK != result)
+    else
     {
-        LE_ERROR("failed to close %s: %s", pathPtr, LE_RESULT_TXT(result));
-        return result;
+        return LE_NOT_FOUND;
     }
-
-    return LE_OK;
 }

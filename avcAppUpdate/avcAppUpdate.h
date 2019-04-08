@@ -10,7 +10,7 @@
 #define LEGATO_AVC_APP_UPDATE_DEFS_INCLUDE_GUARD
 
 #include <lwm2mcore/update.h>
-#include <lwm2mcorePackageDownloader.h>
+#include <lwm2mcore/lwm2mcorePackageDownloader.h>
 
 
 //--------------------------------------------------------------------------------------------------

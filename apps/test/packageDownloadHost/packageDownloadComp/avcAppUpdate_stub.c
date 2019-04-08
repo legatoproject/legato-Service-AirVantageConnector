@@ -11,7 +11,7 @@
 #include "legato.h"
 #include "interfaces.h"
 #include "avcServer.h"
-#include "lwm2mcorePackageDownloader.h"
+#include "lwm2mcore/lwm2mcorePackageDownloader.h"
 #include "packageDownloader.h"
 #include "avcAppUpdate.h"
 #include "avcFsConfig.h"

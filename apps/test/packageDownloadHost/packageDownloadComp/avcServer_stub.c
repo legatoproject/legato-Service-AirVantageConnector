@@ -23,24 +23,15 @@ void avcServer_UpdateStatus
     le_avc_UpdateType_t updateType,              ///< Update type
     int32_t totalNumBytes,                       ///< Total number of bytes to download (-1 if not set)
     int32_t dloadProgress,                       ///< Download Progress in percent (-1 if not set)
-    le_avc_ErrorCode_t errorCode,                ///< Error code
-    le_avc_StatusHandlerFunc_t statusHandlerPtr, ///< Pointer on handler function
-    void* contextPtr                             ///< Context
+    le_avc_ErrorCode_t errorCode                 ///< Error code
 )
 {
-    DownloadResult_t result;
-
-    LE_DEBUG("Stub");
-
-    if (updateStatus == LE_AVC_DOWNLOAD_COMPLETE)
-    {
-        result.updateStatus = updateStatus;
-        result.updateType = updateType;
-        result.totalNumBytes = totalNumBytes;
-        result.dloadProgress = dloadProgress;
-        result.errorCode = errorCode;
-        NotifyCompletion(&result);
-    }
+    LE_INFO("avcServer_UpdateStatus status %d", updateStatus);
+    (void)updateStatus;
+    (void)updateType;
+    (void)totalNumBytes;
+    (void)dloadProgress;
+    (void)errorCode;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -130,17 +121,16 @@ void avcServer_QueryUninstall
 //--------------------------------------------------------------------------------------------------
 void avcServer_QueryDownload
 (
-    avcServer_DownloadHandlerFunc_t handlerFunc,    ///< [IN] Download handler function
-    uint64_t bytesToDownload,                       ///< [IN] Number of bytes to download
-    lwm2mcore_UpdateType_t type,                    ///< [IN] Update type
-    char* uriPtr,                                   ///< [IN] Update package URI
-    bool resume,                                    ///< [IN] Is it a download resume?
-    le_avc_StatusHandlerFunc_t statusHandlerPtr,    ///< Pointer on handler function
-    void*                      contextPtr           ///< Context
+    avcServer_DownloadHandlerFunc_t handlerFunc,        ///< [IN] Download handler function
+    uint64_t                        bytesToDownload,    ///< [IN] Number of bytes to download
+    lwm2mcore_UpdateType_t          type,               ///< [IN] Update type
+    bool                            resume,             ///< [IN] Is it a download resume?
+    le_avc_ErrorCode_t              errorCode           ///< [IN] AVC error code if download was
+                                                        ///<      suspended
 )
 {
     LE_DEBUG("Stub");
-    handlerFunc(uriPtr, type, resume);
+    handlerFunc(type, resume);
 }
 
 //--------------------------------------------------------------------------------------------------

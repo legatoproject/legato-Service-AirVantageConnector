@@ -43,8 +43,8 @@ static char* ConvertTimerIdToString
             result = STRINGIZE_EXPAND(LWM2MCORE_TIMER_INACTIVITY);
             break;
 
-        case LWM2MCORE_TIMER_REBOOT:
-            result = STRINGIZE_EXPAND(LWM2MCORE_TIMER_REBOOT);
+        case LWM2MCORE_TIMER_DOWNLOAD:
+            result = STRINGIZE_EXPAND(LWM2MCORE_TIMER_DOWNLOAD);
             break;
 
         default:
@@ -99,7 +99,7 @@ bool lwm2mcore_TimerSet
         return false;
     }
 
-    LE_DEBUG("lwm2mcore_TimerSet %s (id:%d, time %d sec)",
+    LE_DEBUG("lwm2mcore_TimerSet %s (id:%d, time %"PRIu32" sec)",
              ConvertTimerIdToString(timer), timer, time);
 
     if (Lwm2mTimerRef[timer] == NULL)
@@ -176,7 +176,7 @@ bool lwm2mcore_TimerStop
     }
     else
     {
-        LE_ERROR("Timer reference is NULL");
+        LE_DEBUG("Timer reference is NULL");
         return false;
     }
 
@@ -210,7 +210,7 @@ bool lwm2mcore_TimerIsRunning
     }
     else
     {
-        LE_ERROR("Timer reference is NULL");
+        LE_DEBUG("Timer reference is NULL");
     }
 
     LE_DEBUG("%s timer is running %d", ConvertTimerIdToString(timer), isRunning);

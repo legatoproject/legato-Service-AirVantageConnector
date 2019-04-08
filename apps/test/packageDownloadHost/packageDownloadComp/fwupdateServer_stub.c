@@ -211,6 +211,11 @@ le_result_t le_fwupdate_GetResumePosition
 )
 {
     LE_DEBUG("Stub");
+    if (!positionPtr)
+    {
+        return LE_BAD_PARAMETER;
+    }
+    *positionPtr = 0;
     return LE_OK;
 }
 

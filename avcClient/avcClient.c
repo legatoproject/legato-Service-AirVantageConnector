@@ -17,11 +17,58 @@
 #include "legato.h"
 #include "interfaces.h"
 #include "avcClient.h"
+#include "tpfServer.h"
 #include "avcServer.h"
+#include "packageDownloader.h"
+#include "workspace.h"
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize memory areas for Lwm2m
+ */
+//--------------------------------------------------------------------------------------------------
+// Prototype of function in osPlatform.c -- included to avoid a header for one function.
+extern void lwm2mcore_InitMem
+(
+    void
+);
 
 //--------------------------------------------------------------------------------------------------
 // Definitions
 //--------------------------------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Fwupdate object ID.
+ */
+//--------------------------------------------------------------------------------------------------
+#define FW_UPDATE_OBJECT_ID  5
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Fwupdate instance object ID.
+ */
+//--------------------------------------------------------------------------------------------------
+#define FW_UPDATE_OBJECT_INSTANCE_ID  0
+//--------------------------------------------------------------------------------------------------
+/**
+ * Fwupdate resource id.
+ */
+//--------------------------------------------------------------------------------------------------
+#define FW_UPDATE_WRITE_RESOURCE_ID  1
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Fwupdate write resource id.
+ */
+//--------------------------------------------------------------------------------------------------
+#define FW_UPDATE_EXEC_RESOURCE_ID  2
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Fwupdate execute resource instance id.
+ */
+//--------------------------------------------------------------------------------------------------
+#define FW_UPDATE_RESOURCE_INSTANCE_ID  0
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -57,7 +104,6 @@
  */
 //--------------------------------------------------------------------------------------------------
 #define ACTIVITY_TIMER_EVENTS_POOL_SIZE  5
-
 
 //--------------------------------------------------------------------------------------------------
 // Local variables.
@@ -144,21 +190,31 @@ static le_timer_Ref_t ActivityTimerRef = NULL;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Pool used to pass activity timer events to the main thread.
- */
-//--------------------------------------------------------------------------------------------------
-static le_mem_PoolRef_t ActivityTimerEventsPool;
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Flag used to indicate a retry pending
  */
 //--------------------------------------------------------------------------------------------------
 static bool RetryPending = false;
 
 //--------------------------------------------------------------------------------------------------
+/**
+ * Define static pool used to pass activity timer events to the main thread.
+ */
+//--------------------------------------------------------------------------------------------------
+LE_MEM_DEFINE_STATIC_POOL(ActivityTimerEventsPool,
+                          ACTIVITY_TIMER_EVENTS_POOL_SIZE,
+                          sizeof(bool));
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Pool used to pass activity timer events to the main thread
+ */
+//--------------------------------------------------------------------------------------------------
+static le_mem_PoolRef_t ActivityTimerEventsPool;
+
+//--------------------------------------------------------------------------------------------------
 // Local functions
 //--------------------------------------------------------------------------------------------------
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -200,6 +256,8 @@ static void CheckDateTimeValidity
     void
 )
 {
+#if LE_CONFIG_LINUX
+
     char dateTimeBuf[DATE_TIME_LENGTH] = {0};
     uint32_t deviceYear;
 
@@ -229,12 +287,14 @@ static void CheckDateTimeValidity
         snprintf(dateTimeBuf, sizeof(dateTimeBuf), "%04d-%02d-%02d %02d:%02d:%02d",
                  year, month, day, hour, minute, second);
         LE_DEBUG("Set date/time: %s", dateTimeBuf);
+
         if (LE_OK != le_clk_SetUTCDateTimeString("%Y-%m-%d %H:%M:%S", dateTimeBuf))
         {
             LE_ERROR("Unable to retrieve date or time from server");
             return;
         }
     }
+#endif
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -291,6 +351,80 @@ static void BearerEventCb
 
 //--------------------------------------------------------------------------------------------------
 /**
+ *  Callback registered in LwM2M client for bearer related TPF Server events.
+ */
+//--------------------------------------------------------------------------------------------------
+static void TpfBearerEventCb
+(
+    bool connected,     ///< [IN] Indicates if the bearer is connected or disconnected.
+    void* contextPtr    ///< [IN] User data.
+)
+{
+    LE_INFO("Connected %d", connected);
+    if (connected)
+    {
+        char endpointPtr[LWM2MCORE_ENDPOINT_LEN] = {0};
+        uint16_t nbrObject = 0;
+        // Register objects to LwM2M and set the device endpoint:
+        // - Endpoint shall be unique for each client: IMEI/ESN/MEID.
+        // - The number of objects we will be passing through and the objects array.
+
+        // Get the device endpoint: IMEI.
+        if (LE_OK != le_info_GetImei((char*)endpointPtr, (uint32_t)LWM2MCORE_ENDPOINT_LEN))
+        {
+            LE_ERROR("Error to retrieve the device IMEI");
+            return;
+        }
+
+        // Register to the LwM2M agent.
+        nbrObject = lwm2mcore_ObjectRegister(Lwm2mInstanceRef, endpointPtr, NULL, NULL);
+        if (!nbrObject)
+        {
+            LE_ERROR("ERROR in LwM2M obj reg");
+            return;
+        }
+        //check if the FwupdateObj is registered
+        if (nbrObject >= FW_UPDATE_OBJECT_ID)
+        {
+            LE_INFO("The FwUpdateObj is successfully registered, then write in ressource 5/0/1");
+            //After all the LWM2M object are registerd , launch an Fwupdate
+            lwm2mcore_Uri_t uri;
+
+            char buffer[LE_TPF_URI_PACKAGE_MAX_SIZE] = { 0 };
+            size_t bufferLen = LE_TPF_URI_PACKAGE_MAX_SIZE;
+            le_tpf_GetPackageUri(buffer,bufferLen);
+            bufferLen = strlen(buffer);
+            LE_DEBUG("Package adress : %s",buffer);
+            LE_DEBUG("URL length : %zd",bufferLen);
+
+            // Define the URI
+            uri.oid = FW_UPDATE_OBJECT_ID;   //object 5
+            uri.oiid = FW_UPDATE_OBJECT_INSTANCE_ID;  // only one ressource
+            uri.rid = FW_UPDATE_WRITE_RESOURCE_ID;
+            uri.riid = FW_UPDATE_RESOURCE_INSTANCE_ID;
+            uri.op = LWM2MCORE_OP_WRITE; // select write operation
+            if(!lwm2mcore_ResourceWrite(uri.oid, uri.oiid, uri.rid, uri.riid, buffer, &bufferLen))
+            {
+                LE_ERROR("Failed to write in fwupdate object");
+                return;
+            }
+        }
+
+    }
+    else
+    {
+        if (NULL != Lwm2mInstanceRef)
+        {
+            // If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active.
+            if (lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
+            {
+                avcClient_Disconnect(false);
+            }
+        }
+    }
+}
+//--------------------------------------------------------------------------------------------------
+/**
  * Callback for the connection state.
  */
 //--------------------------------------------------------------------------------------------------
@@ -301,6 +435,7 @@ static void ConnectionStateHandler
     void* contextPtr            ///< [IN] User data.
 )
 {
+    bool isEnabled = false;
     if (connected)
     {
         LE_DEBUG("Connected through interface '%s'", intfNamePtr);
@@ -308,18 +443,35 @@ static void ConnectionStateHandler
 
         // Check if date/time is valid when connected.
         CheckDateTimeValidity();
-
-        // Call the callback.
-        BearerEventCb(connected, contextPtr);
+        if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
+        {
+            LE_INFO("Third party FOTA is activated !");
+            // Call the TPF callback.
+            TpfBearerEventCb(connected, contextPtr);
+        }
+        else
+        {
+            // Call the callback.
+            BearerEventCb(connected, contextPtr);
+        }
     }
     else
     {
         LE_WARN("Disconnected from data connection service, current state %d", DataConnected);
         if (DataConnected)
         {
-            // Call the callback.
-            BearerEventCb(connected, contextPtr);
             DataConnected = false;
+            if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
+            {
+                LE_INFO("Third party FOTA is activated !");
+                // Call the TPF callback.
+                TpfBearerEventCb(connected, contextPtr);
+            }
+            else
+            {
+                // Call the callback.
+                BearerEventCb(connected, contextPtr);
+            }
             SessionStarted = false;
             AuthenticationPhase = false;
         }
@@ -343,28 +495,35 @@ static int PackageEventHandler
 {
     int result = 0;
 
+    LE_DEBUG("PackageEventHandler event %d", status.event);
+
     switch (status.event)
     {
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_DETAILS:
-            // Notification of download pending is sent from user agreement callback.
+            // Received a new download request: clear all query handler references which might be
+            // left by previous aborted or stale SOTA/FOTA jobs.
+            avcServer_ResetQueryHandlers();
+
+            // Request user agreement before proceeding with download
+            avcServer_QueryDownload(packageDownloader_StartDownload,
+                                    status.u.pkgStatus.numBytes,
+                                    status.u.pkgStatus.pkgType,
+                                    false,
+                                    LE_AVC_ERR_NONE);
             break;
 
         case LWM2MCORE_EVENT_DOWNLOAD_PROGRESS:
-            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            if (LWM2MCORE_FW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_DOWNLOAD_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode),
-                                       NULL, NULL
-                                      );
+                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
-            else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
+            else if (LWM2MCORE_SW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_DOWNLOAD_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode),
-                                       NULL, NULL
-                                      );
+                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else
             {
@@ -373,7 +532,7 @@ static int PackageEventHandler
             break;
 
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FINISHED:
-            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            if (LWM2MCORE_FW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 // The download thread finished the file download without any error, but the FOTA
                 // update package still might be rejected by the store thread, e.g. if the received
@@ -381,13 +540,11 @@ static int PackageEventHandler
                 // The download complete event is therefore not sent now and will be sent only when
                 // the store thread also exits without error.
             }
-            else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
+            else if (LWM2MCORE_SW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_DOWNLOAD_COMPLETE, LE_AVC_APPLICATION_UPDATE,
                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode),
-                                       NULL, NULL
-                                      );
+                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else
             {
@@ -397,21 +554,17 @@ static int PackageEventHandler
             break;
 
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FAILED:
-            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            if (LWM2MCORE_FW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED, LE_AVC_FIRMWARE_UPDATE,
                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode),
-                                       NULL, NULL
-                                      );
+                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
-            else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
+            else if (LWM2MCORE_SW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED, LE_AVC_APPLICATION_UPDATE,
                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode),
-                                       NULL, NULL
-                                      );
+                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else
             {
@@ -420,15 +573,15 @@ static int PackageEventHandler
             break;
 
         case LWM2MCORE_EVENT_UPDATE_STARTED:
-            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            if (LWM2MCORE_FW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE,
-                                       -1, 0, LE_AVC_ERR_NONE, NULL, NULL);
+                                       -1, 0, LE_AVC_ERR_NONE);
             }
-            else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
+            else if (LWM2MCORE_SW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
-                                       -1, 0, LE_AVC_ERR_NONE, NULL, NULL);
+                                       -1, 0, LE_AVC_ERR_NONE);
             }
             else
             {
@@ -437,15 +590,15 @@ static int PackageEventHandler
             break;
 
         case LWM2MCORE_EVENT_UPDATE_FINISHED:
-            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            if (LWM2MCORE_FW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_INSTALL_COMPLETE, LE_AVC_FIRMWARE_UPDATE,
-                                       -1, -1, LE_AVC_ERR_NONE, NULL, NULL);
+                                       -1, -1, LE_AVC_ERR_NONE);
             }
-            else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
+            else if (LWM2MCORE_SW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_INSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
-                                       -1, -1, LE_AVC_ERR_NONE, NULL, NULL);
+                                       -1, -1, LE_AVC_ERR_NONE);
             }
             else
             {
@@ -454,17 +607,15 @@ static int PackageEventHandler
             break;
 
         case LWM2MCORE_EVENT_UPDATE_FAILED:
-            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            if (LWM2MCORE_FW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
-                                       -1, -1, ConvertFumoErrorCode(status.u.pkgStatus.errorCode),
-                                       NULL, NULL);
+                                       -1, -1, ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
-            else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
+            else if (LWM2MCORE_SW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED, LE_AVC_APPLICATION_UPDATE,
-                                       -1, -1, ConvertFumoErrorCode(status.u.pkgStatus.errorCode),
-                                       NULL, NULL);
+                                       -1, -1, ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
             else
             {
@@ -473,15 +624,15 @@ static int PackageEventHandler
             break;
 
         case LWM2MCORE_EVENT_PACKAGE_CERTIFICATION_OK:
-            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            if (LWM2MCORE_FW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_CERTIFICATION_OK, LE_AVC_FIRMWARE_UPDATE,
-                                       -1, -1, LE_AVC_ERR_NONE, NULL, NULL);
+                                       -1, -1, LE_AVC_ERR_NONE);
             }
-            else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
+            else if (LWM2MCORE_SW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_CERTIFICATION_OK, LE_AVC_APPLICATION_UPDATE,
-                                       -1, -1, LE_AVC_ERR_NONE, NULL, NULL);
+                                       -1, -1, LE_AVC_ERR_NONE);
             }
             else
             {
@@ -490,19 +641,61 @@ static int PackageEventHandler
             break;
 
         case LWM2MCORE_EVENT_PACKAGE_CERTIFICATION_NOT_OK:
-            if (LWM2MCORE_PKG_FW == status.u.pkgStatus.pkgType)
+            if (LWM2MCORE_FW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_CERTIFICATION_KO, LE_AVC_FIRMWARE_UPDATE,
-                                       -1, -1, LE_AVC_ERR_BAD_PACKAGE, NULL, NULL);
+                                       -1, -1, LE_AVC_ERR_BAD_PACKAGE);
             }
-            else if (LWM2MCORE_PKG_SW == status.u.pkgStatus.pkgType)
+            else if (LWM2MCORE_SW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
             {
                 avcServer_UpdateStatus(LE_AVC_CERTIFICATION_KO, LE_AVC_APPLICATION_UPDATE,
-                                       -1, -1, LE_AVC_ERR_BAD_PACKAGE, NULL, NULL);
+                                       -1, -1, LE_AVC_ERR_BAD_PACKAGE);
             }
             else
             {
                 LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
+            }
+            break;
+
+        case LWM2MCORE_EVENT_PACKAGE_SIZE_ERROR:
+            LE_DEBUG("error code %"PRIu32, status.u.pkgStatus.errorCode);
+            switch(status.u.pkgStatus.errorCode)
+            {
+                case DWL_MEM_ERROR:
+                    avcServer_QueryDownload(packageDownloader_StartDownload,
+                                            INT64_MAX,
+                                            status.u.pkgStatus.pkgType,
+                                            false,
+                                            LE_AVC_ERR_RAM);
+                    break;
+                case DWL_NETWORK_ERROR:
+                    avcServer_QueryDownload(packageDownloader_StartDownload,
+                                            INT64_MAX,
+                                            status.u.pkgStatus.pkgType,
+                                            false,
+                                            LE_AVC_ERR_NETWORK);
+                    break;
+                case DWL_BAD_ADDR:
+                    if (LWM2MCORE_FW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
+                    {
+                        avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
+                                               LE_AVC_FIRMWARE_UPDATE,
+                                               -1,
+                                               -1,
+                                               LE_AVC_ERR_BAD_PACKAGE);
+                    }
+                    else
+                    {
+                        avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
+                                               LE_AVC_APPLICATION_UPDATE,
+                                               -1,
+                                               -1,
+                                               LE_AVC_ERR_BAD_PACKAGE);
+                    }
+                    break;
+
+                default:
+                    break;
             }
             break;
 
@@ -515,6 +708,47 @@ static int PackageEventHandler
             break;
     }
     return result;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Reset the retry timers by resetting the retrieved reset timer config, and stopping the current
+ * retry timer.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ResetRetryTimers
+(
+    void
+)
+{
+    LE_DEBUG("Stop retry timer");
+    RetryTimersIndex = -1;
+    memset(RetryTimers, 0, sizeof(RetryTimers));
+    le_timer_Stop(RetryTimerRef);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Stop the bearer - undo what StartBearer does.
+ */
+//--------------------------------------------------------------------------------------------------
+static void StopBearer
+(
+    void
+)
+{
+    LE_INFO("Stop bearer %p", DataRef);
+    if (DataRef)
+    {
+        // Close the data connection.
+        le_data_Release(DataRef);
+
+        // Remove the data handler.
+        le_data_RemoveConnectionStateHandler(DataHandler);
+        DataRef = NULL;
+        DataHandler = NULL;
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -548,7 +782,7 @@ static int EventHandler
             if (LE_AVC_BOOTSTRAP_SESSION == le_avc_GetSessionType())
             {
                 avcServer_UpdateStatus(LE_AVC_SESSION_FAILED, LE_AVC_UNKNOWN_UPDATE,
-                                       -1, -1, LE_AVC_ERR_NONE, NULL, NULL);
+                                       -1, -1, LE_AVC_ERR_NONE);
                 LE_ERROR("Session failure on bootstrap server");
                 le_event_Report(BsFailureEventId, NULL, 0);
             }
@@ -560,7 +794,14 @@ static int EventHandler
             {
                 LE_DEBUG("Session finished");
                 avcServer_UpdateStatus(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
-                                       -1, -1, LE_AVC_ERR_NONE, NULL, NULL);
+                                       -1, -1, LE_AVC_ERR_NONE);
+
+                if (Lwm2mInstanceRef)
+                {
+                    lwm2mcore_Free(Lwm2mInstanceRef);
+                    Lwm2mInstanceRef = NULL;
+                }
+                StopBearer();
             }
 
             SessionStarted = false;
@@ -572,16 +813,17 @@ static int EventHandler
             {
                 LE_DEBUG("Connected to bootstrap");
                 avcServer_UpdateStatus(LE_AVC_SESSION_BS_STARTED, LE_AVC_UNKNOWN_UPDATE,
-                                       -1, -1, LE_AVC_ERR_NONE, NULL, NULL);
+                                       -1, -1, LE_AVC_ERR_NONE);
             }
             else
             {
                 LE_DEBUG("Connected to DM");
                 avcServer_UpdateStatus(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
-                                       -1, -1, LE_AVC_ERR_NONE, NULL, NULL);
+                                       -1, -1, LE_AVC_ERR_NONE);
 
                 SessionStarted = true;
             }
+            ResetRetryTimers();
             AuthenticationPhase = false;
             break;
 
@@ -605,6 +847,7 @@ static int EventHandler
         case LWM2MCORE_EVENT_UPDATE_FAILED:
         case LWM2MCORE_EVENT_PACKAGE_CERTIFICATION_OK:
         case LWM2MCORE_EVENT_PACKAGE_CERTIFICATION_NOT_OK:
+        case LWM2MCORE_EVENT_PACKAGE_SIZE_ERROR:
             result = PackageEventHandler(status);
             break;
 
@@ -619,7 +862,7 @@ static int EventHandler
             }
             AuthenticationPhase = true;
             avcServer_UpdateStatus(LE_AVC_AUTH_STARTED, LE_AVC_UNKNOWN_UPDATE,
-                                   -1, -1, LE_AVC_ERR_NONE, NULL, NULL);
+                                   -1, -1, LE_AVC_ERR_NONE);
             break;
 
         case LWM2MCORE_EVENT_AUTHENTICATION_FAILED:
@@ -632,7 +875,13 @@ static int EventHandler
                 LE_WARN("Authentication to DM failed");
             }
             avcServer_UpdateStatus(LE_AVC_AUTH_FAILED, LE_AVC_UNKNOWN_UPDATE,
-                                   -1, -1, LE_AVC_ERR_NONE, NULL, NULL);
+                                   -1, -1, LE_AVC_ERR_NONE);
+            break;
+        case LWM2MCORE_EVENT_REG_UPDATE_DONE:
+            if (avcServer_SaveCurrentEpochTime() != LE_OK)
+            {
+                LE_ERROR("Failed to save the current time in AVC config");
+            }
             break;
 
         default:
@@ -649,22 +898,6 @@ static int EventHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Reset the retry timers by resetting the retrieved reset timer config, and stopping the current
- * retry timer.
- */
-//--------------------------------------------------------------------------------------------------
-static void ResetRetryTimers
-(
-    void
-)
-{
-    RetryTimersIndex = -1;
-    memset(RetryTimers, 0, sizeof(RetryTimers));
-    le_timer_Stop(RetryTimerRef);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Start the bearer.
  */
 //--------------------------------------------------------------------------------------------------
@@ -676,42 +909,14 @@ static void StartBearer
     // Attempt to connect.
     Lwm2mInstanceRef = lwm2mcore_Init(EventHandler);
 
+    LE_INFO("Start Bearer");
     // Initialize the bearer and open a data connection.
     le_data_ConnectService();
 
     DataHandler = le_data_AddConnectionStateHandler(ConnectionStateHandler, NULL);
-
     // Request data connection.
     DataRef = le_data_Request();
     LE_ASSERT(NULL != DataRef);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Stop the bearer - undo what StartBearer does.
- */
-//--------------------------------------------------------------------------------------------------
-static void StopBearer
-(
-    void
-)
-{
-    if (NULL != Lwm2mInstanceRef)
-    {
-        if (DataRef)
-        {
-            // Close the data connection.
-            le_data_Release(DataRef);
-
-            // Remove the data handler.
-            le_data_RemoveConnectionStateHandler(DataHandler);
-            DataRef = NULL;
-        }
-
-        // The data connection is closed.
-        lwm2mcore_Free(Lwm2mInstanceRef);
-        Lwm2mInstanceRef = NULL;
-    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -729,9 +934,7 @@ static void ActivityTimerHandler
                            LE_AVC_UNKNOWN_UPDATE,
                            -1,
                            -1,
-                           LE_AVC_ERR_NONE,
-                           NULL,
-                           NULL);
+                           LE_AVC_ERR_NONE);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -850,8 +1053,11 @@ le_result_t avcClient_Connect
         // Disconnect LwM2M session
         if (true == lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
         {
+            le_result_t result = LE_OK;
+
             RetryPending = true;
-            lwm2mcore_Disconnect(Lwm2mInstanceRef);
+            result = lwm2mcore_DisconnectWithDeregister(Lwm2mInstanceRef);
+            LE_DEBUG("lwm2mcore_DisconnectWithDeregister %d", result);
             RetryPending = false;
         }
 
@@ -933,18 +1139,25 @@ le_result_t avcClient_Disconnect
 
     le_result_t result = LE_OK;
 
+    avcServer_ResetDownloadAgreement();
+
     // If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active.
     // In that case, attempt to disconnect.
     if (lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
     {
-        result = (lwm2mcore_Disconnect(Lwm2mInstanceRef)) ? LE_OK : LE_FAULT;
+        if (DataConnected)
+        {
+            result = (lwm2mcore_DisconnectWithDeregister(Lwm2mInstanceRef)) ? LE_OK : LE_FAULT;
+        }
+        else
+        {
+            result = (lwm2mcore_Disconnect(Lwm2mInstanceRef)) ? LE_OK : LE_FAULT;
+        }
     }
     else
     {
         result = LE_DUPLICATE;
     }
-
-    StopBearer();
 
     if (resetRetry)
     {
@@ -969,6 +1182,7 @@ le_result_t avcClient_Update
     void
 )
 {
+    bool isEnabled = false;
     LE_DEBUG("Registration update");
 
     if (NULL == Lwm2mInstanceRef)
@@ -977,14 +1191,55 @@ le_result_t avcClient_Update
         return LE_UNAVAILABLE;
     }
 
-    if (lwm2mcore_Update(Lwm2mInstanceRef))
+    if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
     {
-        return LE_OK;
+        return LE_OK ;
     }
+
     else
     {
+        if (lwm2mcore_Update(Lwm2mInstanceRef))
+        {
+            return LE_OK;
+        }
+        else
+        {
+            return LE_FAULT;
+        }
+    }
+ }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * LwM2M client entry point to exucute fwupdate.
+ *
+ * @return
+ *      - LE_OK in case of success.
+ *      - LE_FAULT in case of failure.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcClient_LaunchFwUpdate
+(
+    void
+)
+{
+
+    LE_INFO("The FwUpdateObj is successfully registered, then write in ressource 5/0/2");
+    //After all the LWM2M object are registerd , launch an Fwupdate
+    lwm2mcore_Uri_t uri;
+    size_t bufferLen = 0;
+
+    // Define the URI
+    uri.oid = FW_UPDATE_OBJECT_ID;   //Object 5
+    uri.oiid = FW_UPDATE_OBJECT_INSTANCE_ID;  //Only one ressource
+    uri.rid = FW_UPDATE_EXEC_RESOURCE_ID; //Select resource ID "2"
+    uri.riid = FW_UPDATE_RESOURCE_INSTANCE_ID; //Only one ressource
+    if(!lwm2mcore_ResourceExec(uri.oid, uri.oiid, uri.rid, uri.riid, NULL, &bufferLen))
+    {
+        LE_INFO("lwm2mcore_ResourceExec failed !!");
         return LE_FAULT;
     }
+    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1219,6 +1474,17 @@ void avcClient_Init
     LegatoThread = le_thread_GetCurrent();
 
     // Create pool to report activity timer events.
-    ActivityTimerEventsPool = le_mem_CreatePool("ActivityTimerEventsPool", sizeof(bool));
-    le_mem_ExpandPool(ActivityTimerEventsPool, ACTIVITY_TIMER_EVENTS_POOL_SIZE);
+    ActivityTimerEventsPool = le_mem_InitStaticPool(ActivityTimerEventsPool,
+                                                    ACTIVITY_TIMER_EVENTS_POOL_SIZE,
+                                                    sizeof(bool));
+
+    avcClient_UpdateInit();
+    avcClient_DeviceInit();
+
+    lwm2mcore_InitMem();
+
+    if(false == lwm2mcore_SetEventHandler(EventHandler))
+    {
+        LE_ERROR("Can not subscribe to LwM2MCore events");
+    }
 }

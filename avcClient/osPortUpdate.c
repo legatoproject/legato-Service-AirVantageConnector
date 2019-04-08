@@ -9,45 +9,62 @@
 
 #include <lwm2mcore/update.h>
 #include <packageDownloader.h>
-#include <packageDownloaderCallbacks.h>
 #include "legato.h"
 #include "interfaces.h"
 #include "avcAppUpdate.h"
 #include "avcServer.h"
+#include "tpfServer.h"
+#include "avcClient.h"
+#include "avcFsConfig.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
- * After acknowledging the data received from the server, the action is delayed before being
- * executed. This is useful if the action might take some take to execute.
+ * Size of install timer memory pool.
  */
 //--------------------------------------------------------------------------------------------------
-#define ACTION_DELAY    2
+#define INSTALL_TIMER_POOL_SIZE  5
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Start download context structure
+ * Default timer value for install request
+ */
+//--------------------------------------------------------------------------------------------------
+#define DEFAULT_INSTALL_TIMER  2
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Timer to treat install request
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t TreatInstallTimer;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Structure to treat install request timer
  */
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    uint8_t                 uri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];   ///< Update package URI
-    lwm2mcore_UpdateType_t  type;                                   ///< Update type (FW or SW)
+    lwm2mcore_UpdateType_t type;    ///< Update type
+    uint16_t instanceId;            ///< Instance Id (0 for FW, any value for SW)
 }
-StartDownloadCtx_t;
+InstallTimerData_t;
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Timer used to start the download
+ * Define static pool used to pass activity timer events to the main thread.
  */
 //--------------------------------------------------------------------------------------------------
-static le_timer_Ref_t StartDownloadTimer = NULL;
+LE_MEM_DEFINE_STATIC_POOL(InstallTimerPool,
+                          INSTALL_TIMER_POOL_SIZE,
+                          sizeof(InstallTimerData_t));
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Current download context
+ * Pool used to pass install timer data
  */
 //--------------------------------------------------------------------------------------------------
-static StartDownloadCtx_t DownloadCtx;
+static le_mem_PoolRef_t InstallTimerPool;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -64,26 +81,17 @@ static void LaunchUpdate
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
             LE_DEBUG("Launch FW update");
-
-            if (DWL_OK != packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_UPDATING))
+            if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_SetUpdateAccepted())
             {
                 LE_ERROR("Unable to set FW update state to UPDATING");
                 return;
             }
-
-            // Install pending is accepted by user. So, clear the install pending flag
-            if (LE_OK != packageDownloader_SetFwUpdateInstallPending(false))
-            {
-                LE_ERROR("Unable to clear fw update install pending flag");
-                return;
-            }
-
             // This function returns only if there was an error
             if (LE_OK != le_fwupdate_Install())
             {
-                 avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
-                                        -1, -1, LE_AVC_ERR_INTERNAL, NULL, NULL);
-                 packageDownloader_SetFwUpdateResult(LWM2MCORE_FW_UPDATE_RESULT_INSTALL_FAILURE);
+                avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED, LE_AVC_FIRMWARE_UPDATE,
+                                       -1, -1, LE_AVC_ERR_INTERNAL);
+                lwm2mcore_SetUpdateResult(false);
             }
             break;
 
@@ -100,82 +108,303 @@ static void LaunchUpdate
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Called when the start download timer expires.
+ * The server requires the software update state
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  */
 //--------------------------------------------------------------------------------------------------
-static void StartDownloadTimerExpiryHandler
+lwm2mcore_Sid_t lwm2mcore_GetSwUpdateState
 (
-    le_timer_Ref_t timerRef    ///< Timer that expired
+    uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
+    uint8_t* updateStatePtr         ///< [OUT] Firmware update state
 )
 {
-    uint64_t packageSize;
-    StartDownloadCtx_t* startDwlCtxPtr = (StartDownloadCtx_t*)le_timer_GetContextPtr(timerRef);
-
-    if (!startDwlCtxPtr)
+    lwm2mcore_Sid_t sid;
+    if (NULL == updateStatePtr)
     {
-        LE_ERROR("Start download context not available");
-        return;
+        return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    // Retrieve update package size from server
-    if (LE_OK != pkgDwlCb_GetPackageSize((char*)startDwlCtxPtr->uri, &packageSize))
+    if (LE_OK == avcApp_GetSwUpdateState(instanceId, updateStatePtr))
     {
-        LE_ERROR("Unable to retrieve package size, request user agreement anyway");
-        packageSize = 0;
+        sid = LWM2MCORE_ERR_COMPLETED_OK;
+        LE_DEBUG("updateState : %d", *updateStatePtr);
+    }
+    else
+    {
+        sid = LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    // Received a new download request: clear all query handler references which might be left by
-    // previous aborted or stale SOTA/FOTA jobs.
-    avcServer_ResetQueryHandlers();
-
-    // Request user agreement before proceeding with download
-    avcServer_QueryDownload(packageDownloader_StartDownload,
-                            packageSize,
-                            startDwlCtxPtr->type,
-                            (char*)startDwlCtxPtr->uri,
-                            false,
-                            NULL,
-                            NULL
-                           );
+    return sid;
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Check if any SOTA/FOTA package download is in progress
+ * Function for setting software update state
  *
  * @return
- *  true if package download is in progress, false otherwise
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  */
 //--------------------------------------------------------------------------------------------------
-static bool IsPackageDownloading
+lwm2mcore_Sid_t lwm2mcore_SetSwUpdateState
 (
-    lwm2mcore_UpdateType_t updateType
+    lwm2mcore_SwUpdateState_t swUpdateState     ///< [IN] New SW update state
 )
 {
-    if (updateType == LWM2MCORE_FW_UPDATE_TYPE)
+    le_result_t result;
+    result = avcApp_SetSwUpdateState(swUpdateState);
+
+    if (LE_OK != result)
     {
-
-        lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
-        lwm2mcore_FwUpdateResult_t fwUpdateResult = LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
-
-        return ((LE_OK == packageDownloader_GetFwUpdateState(&fwUpdateState))
-                && (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
-                && (LWM2MCORE_FW_UPDATE_STATE_DOWNLOADING == fwUpdateState)
-                && (LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL == fwUpdateResult));
-    }
-    else if (updateType == LWM2MCORE_SW_UPDATE_TYPE)
-    {
-
-        lwm2mcore_SwUpdateState_t swUpdateState = LWM2MCORE_SW_UPDATE_STATE_INITIAL;
-        lwm2mcore_SwUpdateResult_t swUpdateResult = LWM2MCORE_SW_UPDATE_RESULT_INITIAL;
-
-        return ((LE_OK == avcApp_GetSwUpdateRestoreState(&swUpdateState))
-                && (LE_OK == avcApp_GetSwUpdateRestoreResult(&swUpdateResult))
-                && (LWM2MCORE_SW_UPDATE_STATE_DOWNLOAD_STARTED == swUpdateState)
-                && (LWM2MCORE_SW_UPDATE_RESULT_INITIAL == swUpdateResult));
+        LE_ERROR("Failed to set SW update state: %d. %s",
+                 (int)swUpdateState,
+                 LE_RESULT_TXT(result));
+        return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    return false;
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function for setting software update result
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_SetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t swUpdateResult   ///< [IN] New SW update result
+)
+{
+    le_result_t result = avcApp_SetSwUpdateResult(swUpdateResult);
+
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to set SW update result: %d. %s",
+                 (int)swUpdateResult,
+                 LE_RESULT_TXT(result));
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * The server requires the software update result
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetSwUpdateResult
+(
+    uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
+    uint8_t* updateResultPtr        ///< [OUT] Firmware update result
+)
+{
+    lwm2mcore_Sid_t sid;
+    if (NULL == updateResultPtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    if (LE_OK == avcApp_GetSwUpdateResult(instanceId, updateResultPtr))
+    {
+        sid = LWM2MCORE_ERR_COMPLETED_OK;
+        LE_DEBUG("updateResult : %d", *updateResultPtr);
+    }
+    else
+    {
+        sid = LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+    return sid;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set legacy firmware update state
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_SetLegacyFwUpdateState
+(
+    lwm2mcore_FwUpdateState_t fwUpdateState     ///< [IN] New FW update state
+)
+{
+    le_result_t result;
+
+    result = WriteFs(FW_UPDATE_STATE_PATH,
+                     (uint8_t*)&fwUpdateState,
+                     sizeof(lwm2mcore_FwUpdateState_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", FW_UPDATE_STATE_PATH, LE_RESULT_TXT(result));
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set legacy firmware update result
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_SetLegacyFwUpdateResult
+(
+    lwm2mcore_FwUpdateResult_t fwUpdateResult   ///< [IN] New FW update result
+)
+{
+    le_result_t result;
+
+    result = WriteFs(FW_UPDATE_RESULT_PATH,
+                     (uint8_t*)&fwUpdateResult,
+                     sizeof(lwm2mcore_FwUpdateResult_t));
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", FW_UPDATE_RESULT_PATH, LE_RESULT_TXT(result));
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get legacy firmware update state
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetLegacyFwUpdateState
+(
+    lwm2mcore_FwUpdateState_t* fwUpdateStatePtr     ///< [INOUT] FW update state
+)
+{
+    lwm2mcore_FwUpdateState_t updateState;
+    size_t size = sizeof(lwm2mcore_FwUpdateState_t);
+
+    if (!fwUpdateStatePtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    if (LE_OK != ReadFs(FW_UPDATE_STATE_PATH, (uint8_t*)&updateState, &size))
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    LE_DEBUG("FW Update state %d", updateState);
+    *fwUpdateStatePtr = updateState;
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get legacy firmware update result
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetLegacyFwUpdateResult
+(
+    lwm2mcore_FwUpdateResult_t* fwUpdateResultPtr   ///< [INOUT] FW update result
+)
+{
+    lwm2mcore_FwUpdateResult_t updateResult;
+    size_t size = sizeof(lwm2mcore_FwUpdateResult_t);;
+
+    if (!fwUpdateResultPtr)
+    {
+        LE_ERROR("Invalid input parameter");
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    if (LE_OK != ReadFs(FW_UPDATE_RESULT_PATH, (uint8_t*)&updateResult, &size))
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    LE_DEBUG("FW Update result %d", updateResult);
+    *fwUpdateResultPtr = updateResult;
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Launch the timer to treat the install request
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t LaunchInstallRequestTimer
+(
+    lwm2mcore_UpdateType_t type,    ///< [IN] Update type
+    uint16_t instanceId             ///< [IN] Instance Id (0 for FW, any value for SW)
+)
+{
+    le_clk_Time_t interval = { .sec = DEFAULT_INSTALL_TIMER };
+    InstallTimerData_t* timerDataPtr = le_mem_ForceAlloc(InstallTimerPool);
+    timerDataPtr->type = type;
+    timerDataPtr->instanceId = instanceId;
+    if ((LE_OK == le_timer_SetInterval(TreatInstallTimer, interval))
+     && (LE_OK == le_timer_SetContextPtr(TreatInstallTimer, timerDataPtr))
+     && (LE_OK == le_timer_Start(TreatInstallTimer)))
+    {
+        return LE_OK;
+    }
+    return LE_FAULT;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Called when the timer for install treatment expires
+ */
+//--------------------------------------------------------------------------------------------------
+static void TreatInstallExpiryHandler
+(
+    le_timer_Ref_t timerRef    ///< Timer that expired
+)
+{
+    InstallTimerData_t* timerDataPtr = NULL;
+    timerDataPtr = le_timer_GetContextPtr(TreatInstallTimer);
+    if (!timerDataPtr)
+    {
+        LE_ERROR("timerDataPtr NULL");
+        return;
+    }
+    LE_DEBUG("Timer for install: type %d, instanceId %d",
+            timerDataPtr->type, timerDataPtr->instanceId);
+    avcServer_QueryInstall(LaunchUpdate, timerDataPtr->type, timerDataPtr->instanceId);
+    le_mem_Release(timerDataPtr);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -195,125 +424,6 @@ lwm2mcore_Sid_t lwm2mcore_PushUpdatePackage
 )
 {
     return LWM2MCORE_ERR_OP_NOT_SUPPORTED;
-}
-
-
-//--------------------------------------------------------------------------------------------------
-/**
- * The server sends a package URI to the LWM2M client
- *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
- *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_SetUpdatePackageUri
-(
-    lwm2mcore_UpdateType_t type,    ///< [IN] Update type
-    uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
-    char* bufferPtr,                ///< [INOUT] Data buffer
-    size_t len                      ///< [IN] Length of input buffer
-)
-{
-    LE_DEBUG("URI: len %zu", len);
-
-    if (0 == len)
-    {
-        le_result_t result = LE_OK;
-
-        // If length is 0, then the Update State shall be set to default value,
-        // any active download is suspended and the package URI is deleted from storage file.
-        result = packageDownloader_AbortDownload(type);
-
-        // Delete old FOTA job info. No need to delete obsolete SOTA job info as for SOTA,
-        // delete command is explicitly sent from server.
-        packageDownloader_DeleteFwUpdateInfo();
-
-        return (result == LE_OK) ? LWM2MCORE_ERR_COMPLETED_OK : LWM2MCORE_ERR_GENERAL_ERROR;
-    }
-
-    // Parameter check
-    if (   (!bufferPtr)
-        || (LWM2MCORE_PACKAGE_URI_MAX_LEN < len)
-        || (LWM2MCORE_MAX_UPDATE_TYPE <= type))
-    {
-        LE_ERROR("lwm2mcore_UpdateSetPackageUri: bad parameter");
-        return LWM2MCORE_ERR_INVALID_ARG;
-    }
-
-    // Package URI: LWM2MCORE_PACKAGE_URI_MAX_LEN+1 for null byte: string format
-    uint8_t downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
-    memset(downloadUri, 0, LWM2MCORE_PACKAGE_URI_MAX_BYTES);
-    memcpy(downloadUri, bufferPtr, len);
-    LE_DEBUG("Request to download update package from URL : %s, len %zd", downloadUri, len);
-
-    // Store URI and update type to be able to resume the download if necessary. This should be
-    // the very first step to reduce the window between receiving uri and storing it flash storage.
-    if (LE_OK != packageDownloader_SetResumeInfo((char *)downloadUri, type))
-    {
-        return LWM2MCORE_ERR_GENERAL_ERROR;
-    }
-    // Delete all unfinished/aborted SOTA/FOTA job info. Also, reset the update state
-    switch (type)
-    {
-        case LWM2MCORE_FW_UPDATE_TYPE:
-            // Delete aborted/stale stored SOTA job info. Otherwise, they may create problem during
-            // FOTA suspend resume activity.
-            avcApp_DeletePackage();
-
-            // Now reset the state and result
-            if (DWL_OK != packageDownloader_SetFwUpdateState(
-                                                  LWM2MCORE_FW_UPDATE_STATE_IDLE))
-            {
-              return LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            if (DWL_OK != packageDownloader_SetFwUpdateResult(
-                                                    LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL))
-            {
-                return LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            break;
-
-        case LWM2MCORE_SW_UPDATE_TYPE:
-            // Delete aborted/stale stored FOTA job info. Otherwise, they may create problem during
-            // SOTA suspend resume activity.
-            packageDownloader_DeleteFwUpdateInfo();
-
-            // For SOTA upgrade, no create command is issued. So if device reboots after uninstall,
-            // there is a chance that no SOTA object is dedicated for this uri. So create a SOTA
-            // object if there is currently none.
-            if (LE_FAULT == avcApp_CreateObj9Instance(instanceId))
-            {
-                return LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            break;
-
-        default:
-            LE_ERROR("Unknown download type");
-            return LWM2MCORE_ERR_GENERAL_ERROR;
-    }
-
-    // Acknowledge the update package URI notification and launch the download later
-    memset(DownloadCtx.uri, 0, LWM2MCORE_PACKAGE_URI_MAX_BYTES);
-    memcpy(DownloadCtx.uri, bufferPtr, len);
-    DownloadCtx.type = type;
-
-    le_clk_Time_t interval = {ACTION_DELAY, 0};
-    if (!StartDownloadTimer)
-    {
-        StartDownloadTimer = le_timer_Create("start download timer");
-    }
-    if (   (LE_OK != le_timer_SetHandler(StartDownloadTimer, StartDownloadTimerExpiryHandler))
-        || (LE_OK != le_timer_SetContextPtr(StartDownloadTimer, (StartDownloadCtx_t*)&DownloadCtx))
-        || (LE_OK != le_timer_SetInterval(StartDownloadTimer, interval))
-        || (LE_OK != le_timer_Start(StartDownloadTimer))
-       )
-    {
-        return LWM2MCORE_ERR_GENERAL_ERROR;
-    }
-
-    return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -347,6 +457,10 @@ lwm2mcore_Sid_t lwm2mcore_GetUpdatePackageUri
 /**
  * The server requests to launch an update
  *
+ * @warning The client MUST store a parameter in non-volatile memory in order to keep in memory that
+ * an install request was received and launch a timer (value could be decided by the client
+ * implementation) in order to treat the install request.
+ *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
@@ -361,28 +475,33 @@ lwm2mcore_Sid_t lwm2mcore_LaunchUpdate
     size_t len                      ///< [IN] Length of input buffer
 )
 {
-    lwm2mcore_Sid_t sid;
+    lwm2mcore_Sid_t sid = LWM2MCORE_ERR_GENERAL_ERROR;
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
         case LWM2MCORE_SW_UPDATE_TYPE:
+        {
+            if (type == LWM2MCORE_SW_UPDATE_TYPE)
             {
-                if (type == LWM2MCORE_SW_UPDATE_TYPE)
-                {
-                    avcApp_SetSwUpdateInternalState(INTERNAL_STATE_INSTALL_REQUESTED);
-                }
-                else
-                {
-                    if (LE_OK != packageDownloader_SetFwUpdateInstallPending(true))
-                    {
-                        LE_ERROR("Unable to set fw update install pending flag");
-                        return LWM2MCORE_ERR_GENERAL_ERROR;
-                    }
-                }
-                avcServer_QueryInstall(LaunchUpdate, type, instanceId);
-                sid = LWM2MCORE_ERR_COMPLETED_OK;
+                avcApp_SetSwUpdateInternalState(INTERNAL_STATE_INSTALL_REQUESTED);
             }
-            break;
+            else
+            {
+                if (LE_OK != packageDownloader_SetFwUpdateInstallPending(true))
+                {
+                    LE_ERROR("Unable to set fw update install pending flag");
+                    return LWM2MCORE_ERR_GENERAL_ERROR;
+                }
+            }
+
+            // Process the install request:
+            // - return the user agreement if needed
+            // - when the install is accepted or automatically launched, a 2-second
+            //   timer is launched and the install process is launched when this timer expires
+            avcServer_QueryInstall(LaunchUpdate, type, instanceId);
+            sid = LWM2MCORE_ERR_COMPLETED_OK;
+        }
+        break;
 
         default:
             sid = LWM2MCORE_ERR_INVALID_ARG;
@@ -392,144 +511,6 @@ lwm2mcore_Sid_t lwm2mcore_LaunchUpdate
     return sid;
 }
 
-//--------------------------------------------------------------------------------------------------
-/**
- * The server requires the update state
- *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
- *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetUpdateState
-(
-    lwm2mcore_UpdateType_t type,    ///< [IN] Update type
-    uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
-    uint8_t* updateStatePtr         ///< [OUT] Firmware update state
-)
-{
-    lwm2mcore_Sid_t sid;
-    if ((NULL == updateStatePtr) || (LWM2MCORE_MAX_UPDATE_TYPE <= type))
-    {
-        return LWM2MCORE_ERR_INVALID_ARG;
-    }
-
-    // Call API to get the update state
-    switch (type)
-    {
-        case LWM2MCORE_FW_UPDATE_TYPE:
-            {
-                lwm2mcore_FwUpdateState_t fwUpdateState = LWM2MCORE_FW_UPDATE_STATE_IDLE;
-
-                // Don't pass updateStatePtr by casting to pointer to enum as it may result wrong
-                // memory alignment and eventually stack corruption.
-                if (LE_OK == packageDownloader_GetFwUpdateState(&fwUpdateState))
-                {
-                    sid = LWM2MCORE_ERR_COMPLETED_OK;
-                    *updateStatePtr = (uint8_t)fwUpdateState;
-                    LE_DEBUG("updateState : %d", *updateStatePtr);
-                }
-                else
-                {
-                    sid = LWM2MCORE_ERR_GENERAL_ERROR;
-                }
-            }
-            break;
-
-        case LWM2MCORE_SW_UPDATE_TYPE:
-            if (LE_OK == avcApp_GetSwUpdateState(instanceId,
-                                                 updateStatePtr))
-            {
-                sid = LWM2MCORE_ERR_COMPLETED_OK;
-                LE_DEBUG("updateState : %d", *updateStatePtr);
-            }
-            else
-            {
-                sid = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            break;
-
-        default:
-            LE_ERROR("Bad update type");
-            return LWM2MCORE_ERR_INVALID_ARG;
-    }
-    LE_DEBUG("GetUpdateState type %d: %d", type, sid);
-    return sid;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * The server requires the update result
- *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
- *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetUpdateResult
-(
-    lwm2mcore_UpdateType_t type,    ///< [IN] Update type
-    uint16_t instanceId,            ///< [IN] Instance Id (0 for FW, any value for SW)
-    uint8_t* updateResultPtr        ///< [OUT] Firmware update result
-)
-{
-    lwm2mcore_Sid_t sid;
-    if ((NULL == updateResultPtr) || (LWM2MCORE_MAX_UPDATE_TYPE <= type))
-    {
-        return LWM2MCORE_ERR_INVALID_ARG;
-    }
-
-    // Call API to get the update result
-    switch (type)
-    {
-        case LWM2MCORE_FW_UPDATE_TYPE:
-            {
-                lwm2mcore_FwUpdateResult_t fwUpdateResult =
-                                                        LWM2MCORE_FW_UPDATE_RESULT_DEFAULT_NORMAL;
-                // Don't pass updateResultPtr by casting to pointer to enum as it may result wrong
-                // memory alignment and eventually stack corruption.
-                if (LE_OK == packageDownloader_GetFwUpdateResult(&fwUpdateResult))
-                {
-                    sid = LWM2MCORE_ERR_COMPLETED_OK;
-                    // After device reboot on firmware update, firmware update notification flag is
-                    // set to true to notify control app that a connection to server is required to
-                    // inform the firmware update result. Now set this flag to false as request
-                    // from server to read firmware update result succeeds.
-                    packageDownloader_SetFwUpdateNotification(false,
-                                                              LE_AVC_NO_UPDATE,
-                                                              LE_AVC_ERR_NONE);
-                    *updateResultPtr = (uint8_t)fwUpdateResult;
-                    LE_DEBUG("updateResult : %d", *updateResultPtr);
-                }
-                else
-                {
-                    sid = LWM2MCORE_ERR_GENERAL_ERROR;
-                }
-            }
-            break;
-
-        case LWM2MCORE_SW_UPDATE_TYPE:
-            if (LE_OK == avcApp_GetSwUpdateResult(instanceId,
-                                                  updateResultPtr))
-            {
-                sid = LWM2MCORE_ERR_COMPLETED_OK;
-                LE_DEBUG("updateResult : %d", *updateResultPtr);
-            }
-            else
-            {
-                sid = LWM2MCORE_ERR_GENERAL_ERROR;
-            }
-            break;
-
-        default:
-            LE_ERROR("Bad update type");
-            return LWM2MCORE_ERR_INVALID_ARG;
-    }
-    LE_DEBUG("GetUpdateResult type %d: %d", type, sid);
-    return sid;
-}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -837,74 +818,6 @@ lwm2mcore_Sid_t lwm2mcore_SoftwareUpdateInstance
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Resume a package download if necessary
- *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_ResumePackageDownload
-(
-    void
-)
-{
-    char downloadUri[LWM2MCORE_PACKAGE_URI_MAX_BYTES];
-    size_t uriSize = LWM2MCORE_PACKAGE_URI_MAX_BYTES;
-    lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
-    bool downloadResume = false;
-    uint64_t numBytesToDownload = 0;
-    memset(downloadUri, 0, sizeof(downloadUri));
-
-    // Check if an update package URI is stored
-    if (LE_OK != packageDownloader_GetResumeInfo(downloadUri, &uriSize, &updateType))
-    {
-        LE_DEBUG("No download to resume");
-        return LWM2MCORE_ERR_COMPLETED_OK;
-    }
-
-    LE_DEBUG("Download to resume");
-
-    if (   (0 == strncmp(downloadUri, "", LWM2MCORE_PACKAGE_URI_MAX_BYTES))
-        || (LWM2MCORE_MAX_UPDATE_TYPE == updateType)
-       )
-    {
-        LE_ERROR("Download to resume but no URI/updateType stored");
-        return LWM2MCORE_ERR_GENERAL_ERROR;
-    }
-
-    // Check if a download was started
-    if (IsPackageDownloading(updateType))
-    {
-        downloadResume = true;
-    }
-    LE_INFO("downloadResume %d", downloadResume);
-
-    if (LE_OK != packageDownloader_BytesLeftToDownload(&numBytesToDownload))
-    {
-        LE_ERROR("Unable to retrieve bytes left to download");
-        return LWM2MCORE_ERR_GENERAL_ERROR;
-    }
-
-    // Resuming a download: clear all query handler references which might be left by
-    // previous SOTA/FOTA jobs interrupted by a session stop.
-    avcServer_ResetQueryHandlers();
-
-    // Request user agreement before proceeding with download
-    avcServer_QueryDownload(packageDownloader_StartDownload,
-                            numBytesToDownload,
-                            updateType,
-                            downloadUri,
-                            downloadResume,
-                            NULL,
-                            NULL
-                           );
-
-    return LWM2MCORE_ERR_COMPLETED_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Resume firmware install
  *
  * @return None
@@ -915,28 +828,109 @@ void ResumeFwInstall
     void
 )
 {
-    avcServer_QueryInstall(LaunchUpdate, LWM2MCORE_FW_UPDATE_TYPE, 0);
+    LaunchInstallRequestTimer(LWM2MCORE_FW_UPDATE_TYPE, 0);
 }
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Suspend a package download if necessary
+ * @brief Function to get the package offset on client side
+ *
+ * @remark Platform adaptor function which needs to be defined on client side.
+ *
+ * @note
+ * This function is not available if @c LWM2M_EXTERNAL_DOWNLOADER compilation flag is embedded
+ *
+ * @note
+ * When a package started to be downloaded, the client stores the downloaded data in memory.
+ * When the download is suspended, LwM2MCore needs to know the package offset which is stored in
+ * client side in order to resume the download to the correct offset.
+ *
+ * @return
+ *  - LWM2MCORE_ERR_COMPLETED_OK on success
+ *  - LWM2MCORE_ERR_INVALID_STATE if no package download is on-going
+ *  - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ *  - LWM2MCORE_ERR_GENERAL_ERROR on failure
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetPackageOffsetStorage
+(
+    lwm2mcore_UpdateType_t  updateType,     ///< [IN] Update type
+    uint64_t*               offsetPtr       ///< [IN] Package offset
+)
+{
+    if (!offsetPtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    switch (updateType)
+    {
+        case LWM2MCORE_FW_UPDATE_TYPE:
+        {
+            *offsetPtr = packageDownloader_GetResumePosition();
+        }
+        break;
+
+        case LWM2MCORE_SW_UPDATE_TYPE:
+        {
+            size_t offset;
+            // Get swupdate offset before launching the download
+            avcApp_GetResumePosition((size_t *)&offset);
+            LE_DEBUG("updateOffset: %zu", offset);
+            *offsetPtr = (uint64_t)offset;
+        }
+        break;
+
+        default:
+            LE_ERROR("unknown download type");
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get TPF mode state
  *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_SuspendPackageDownload
+lwm2mcore_Sid_t lwm2mcore_GetTpfState
 (
-    void
+    bool*  statePtr        ///< [OUT] true if third party FOTA service is activated
 )
 {
-    // Suspend the download thread if there is any.
-    if (LE_OK == packageDownloader_SuspendDownload())
+    if (NULL == statePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+    if (LE_OK == tpfServer_GetTpfState(statePtr))
     {
         return LWM2MCORE_ERR_COMPLETED_OK;
     }
-
     return LWM2MCORE_ERR_GENERAL_ERROR;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize the AVC update client sub-component.
+ *
+ * @note This function should be called during the initializaion phase of the AVC daemon.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_UpdateInit
+(
+   void
+)
+{
+    // Create pool to report install timer events.
+    InstallTimerPool = le_mem_InitStaticPool(InstallTimerPool,
+                                             INSTALL_TIMER_POOL_SIZE,
+                                             sizeof(InstallTimerData_t));
+
+    TreatInstallTimer = le_timer_Create("launch timer for install treatment");
+    le_timer_SetHandler(TreatInstallTimer, TreatInstallExpiryHandler);
 }

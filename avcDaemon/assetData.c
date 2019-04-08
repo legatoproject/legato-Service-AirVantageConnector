@@ -22,9 +22,10 @@
 #include "assetData.h"
 #include "le_print.h"
 
+#ifndef LE_CONFIG_CUSTOM_OS
 // For htonl
 #include <arpa/inet.h>
-
+#endif
 
 
 //--------------------------------------------------------------------------------------------------
@@ -340,6 +341,7 @@ le_result_t FormatString
  *      - LE_FAULT on error
  */
 //--------------------------------------------------------------------------------------------------
+#if LE_CONFIG_ENABLE_CONFIG_TREE
 static le_result_t ConvertDataTypeStr
 (
     char* dataTypeStrPtr,           ///< [IN]
@@ -359,7 +361,7 @@ static le_result_t ConvertDataTypeStr
 
     return LE_FAULT;
 }
-
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -398,6 +400,7 @@ static const char* GetDataTypeStr
  *      - LE_FAULT on error
  */
 //--------------------------------------------------------------------------------------------------
+#if LE_CONFIG_ENABLE_CONFIG_TREE
 static le_result_t ConvertAccessModeStr
 (
     char* accessModeStrPtr,              ///< [IN]
@@ -431,7 +434,7 @@ static le_result_t ConvertAccessModeStr
     *accessModePtr = accessMode;
     return LE_OK;
 }
-
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -479,6 +482,7 @@ static void InitDefaultFieldData
  *      - LE_FAULT on error
  */
 //--------------------------------------------------------------------------------------------------
+#if LE_CONFIG_ENABLE_CONFIG_TREE
 static le_result_t CreateFieldFromModel
 (
     le_cfg_IteratorRef_t assetCfg,
@@ -538,7 +542,6 @@ static le_result_t CreateFieldFromModel
 
     return LE_OK;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -655,6 +658,7 @@ static le_result_t OpenModelFromConfig
     *assetCfgPtr = assetCfg;
     return LE_OK;
 }
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -673,8 +677,8 @@ static void AddFieldFromData
 )
 {
     FieldData_t* fieldDataPtr = le_mem_ForceAlloc(FieldDataPoolRef);
-    fieldDataPtr->link = LE_DLS_LINK_INIT;
 
+    fieldDataPtr->link = LE_DLS_LINK_INIT;
     fieldDataPtr->fieldId = fieldId;
     LE_ASSERT( le_utf8_Copy(fieldDataPtr->name, namePtr, sizeof(fieldDataPtr->name), NULL) == LE_OK );
     fieldDataPtr->type = type;
@@ -878,10 +882,10 @@ static le_result_t CreateAssetDataFromModel
     }
     else
     {
+        char assetName[100];
+#if LE_CONFIG_ENABLE_CONFIG_TREE
         le_result_t result;
         le_cfg_IteratorRef_t assetCfg;
-        char assetName[100];
-
         // Open a config read transaction for the asset model
         result = OpenModelFromConfig(appNamePtr, assetId, &assetCfg);
         if ( result != LE_OK )
@@ -898,7 +902,7 @@ static le_result_t CreateAssetDataFromModel
 
         // Regardless of success/failure, stop the transaction
         le_cfg_CancelTxn(assetCfg);
-
+#endif
         // Create and store new AssetData block
         if ( AddAssetData(appNamePtr, assetId, assetName, assetDataPtrPtr) != LE_OK )
         {
@@ -931,16 +935,15 @@ static le_result_t CreateAssetDataFromModelByName
 {
     le_result_t result = LE_NOT_FOUND;
     int assetId = -1;
-    le_cfg_IteratorRef_t assetCfg;
     char strBuf[LIMIT_MAX_PATH_BYTES] = "";     // Generic buffer for reading string data
 
     if ( FormatString(strBuf, sizeof(strBuf), "/apps/%s/assets", appNamePtr) != LE_OK )
     {
         return LE_FAULT;
     }
-
+#if LE_CONFIG_ENABLE_CONFIG_TREE
     // Open a config read transaction for the asset model
-    assetCfg = le_cfg_CreateReadTxn(strBuf);
+    le_cfg_IteratorRef_t assetCfg = le_cfg_CreateReadTxn(strBuf);
 
     if (le_cfg_IsEmpty(assetCfg, ""))
     {
@@ -977,7 +980,7 @@ static le_result_t CreateAssetDataFromModelByName
 
     // Regardless of success/failure, stop the transaction
     le_cfg_CancelTxn(assetCfg);
-
+#endif
     // Create and store new AssetData block, if we found the asset definition
     if ( result == LE_OK )
     {
@@ -2027,6 +2030,7 @@ le_result_t assetData_CreateInstanceById
     }
     else
     {
+#if LE_CONFIG_ENABLE_CONFIG_TREE
         le_cfg_IteratorRef_t assetCfg;
 
         // Open a config read transaction for the asset model
@@ -2051,6 +2055,7 @@ le_result_t assetData_CreateInstanceById
             LE_ERROR("Error in reading model");
             return LE_FAULT;
         }
+#endif
     }
 
     // Everything is okay, so finish initializing the instance data, and store it
@@ -3331,8 +3336,6 @@ le_result_t assetData_Init
  */
 //--------------------------------------------------------------------------------------------------
 
-#include <arpa/inet.h>
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -3927,7 +3930,7 @@ static le_result_t ReadFieldValueFromTLV
         case DATA_TYPE_INT:
             if ( (valueNumBytes != 1) && (valueNumBytes != 2) && (valueNumBytes != 4) )
             {
-                LE_ERROR("Invalid value length = %i", valueNumBytes);
+                LE_ERROR("Invalid value length = %"PRIu32, valueNumBytes);
                 result = LE_FAULT;
             }
             else
@@ -3939,7 +3942,7 @@ static le_result_t ReadFieldValueFromTLV
         case DATA_TYPE_BOOL:
             if ( valueNumBytes != 1 )
             {
-                LE_ERROR("Invalid value length = %i", valueNumBytes);
+                LE_ERROR("Invalid value length = %"PRIu32, valueNumBytes);
                 result = LE_FAULT;
             }
             else
@@ -3951,7 +3954,7 @@ static le_result_t ReadFieldValueFromTLV
         case DATA_TYPE_STRING:
             if ( valueNumBytes > (STRING_VALUE_NUMBYTES-1) )
             {
-                LE_ERROR("Invalid value length = %i", valueNumBytes);
+                LE_ERROR("Invalid value length = %"PRIu32, valueNumBytes);
                 result = LE_FAULT;
             }
             else
@@ -3966,7 +3969,7 @@ static le_result_t ReadFieldValueFromTLV
         case DATA_TYPE_FLOAT:
             if ( (valueNumBytes != 4) && (valueNumBytes != 8) )
             {
-                LE_ERROR("Invalid value length = %i", valueNumBytes);
+                LE_ERROR("Invalid value length = %"PRIu32, valueNumBytes);
                 result = LE_FAULT;
             }
             else
@@ -3976,7 +3979,7 @@ static le_result_t ReadFieldValueFromTLV
             break;
 
         case DATA_TYPE_NONE:
-            LE_ERROR("Write not allowed for fieldId = %i", fieldId);
+            LE_ERROR("Write not allowed for fieldId = %"PRIu32, fieldId);
             result = LE_FAULT;
             break;
     }

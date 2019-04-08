@@ -265,10 +265,8 @@ static void Testle_avc_StartDownload
     avcServer_QueryDownload(packageDownloader_StartDownload,
                             bytesToDownload,
                             type,
-                            "http://airvantage.net",
                             true,
-                            NULL,
-                            NULL
+                            LE_AVC_ERR_NONE
                            );
     le_sem_Post(appCtxPtr->appSemaphore);
 }
@@ -356,7 +354,7 @@ static void GetUpdateType
     void* param2Ptr  /// Value to be passed as param2Ptr to the function
 )
 {
-    LE_INFO("======== Test Restart Session ========");
+    LE_INFO("======== Get session type ========");
     AppContext_t* appCtxPtr = (AppContext_t*) param1Ptr;
 
     le_avc_UpdateType_t updateType;
@@ -443,6 +441,17 @@ static void* AirVantageUnitTestThread
     le_event_QueueFunctionToThread(AppCtx.appThreadRef,
                                    Testle_avc_StartSession, &AppCtx, NULL);
     SynchronizeTest();
+    sleep(1);
+
+    le_avcTest_SimulateLwm2mEvent(LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_DETAILS,
+                                  LWM2MCORE_SW_UPDATE_TYPE,
+                                  1024,
+                                  0);
+
+    le_avcTest_SimulateLwm2mEvent(LWM2MCORE_EVENT_DOWNLOAD_PROGRESS,
+                                  LWM2MCORE_SW_UPDATE_TYPE, 1024, 10);
+    SynchronizeTest();
+
     // Start dowload
     le_event_QueueFunctionToThread(AppCtx.appThreadRef,
                                    Testle_avc_StartDownload, &AppCtx, NULL);
@@ -451,7 +460,7 @@ static void* AirVantageUnitTestThread
     for(i = 0; i <= 10; i++)
     {
         le_avcTest_SimulateLwm2mEvent(LWM2MCORE_EVENT_DOWNLOAD_PROGRESS,
-                                      LWM2MCORE_PKG_SW, 1024, 10*i);
+                                      LWM2MCORE_SW_UPDATE_TYPE, 1024, 10*i);
         SynchronizeTest();
     }
     // Test get update type
@@ -460,7 +469,7 @@ static void* AirVantageUnitTestThread
     SynchronizeTest();
 
     le_avcTest_SimulateLwm2mEvent(LWM2MCORE_EVENT_UPDATE_STARTED,
-                                  LWM2MCORE_PKG_SW, -1, -1);
+                                  LWM2MCORE_SW_UPDATE_TYPE, -1, -1);
     SynchronizeTest();
 
     // Test restart session

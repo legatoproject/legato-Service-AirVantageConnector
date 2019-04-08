@@ -20,14 +20,12 @@
 //--------------------------------------------------------------------------------------------------
 static lwm2mcore_Ref_t CoapClientRef;
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Is a push stream in progress?
  */
 //--------------------------------------------------------------------------------------------------
 static bool PushBusy = false;
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -48,14 +46,12 @@ typedef struct
 }
 CoapMessageData_t;
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Event for reporting receieved CoAP messages to user application.
  */
 //--------------------------------------------------------------------------------------------------
 static le_event_Id_t CoapMessageEvent;
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -64,14 +60,12 @@ static le_event_Id_t CoapMessageEvent;
 //--------------------------------------------------------------------------------------------------
 static lwm2mcore_CoapResponse_t CoapResponse;
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * CoAP notification
  */
 //--------------------------------------------------------------------------------------------------
 static lwm2mcore_CoapNotification_t CoapNotification;
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -80,15 +74,17 @@ static lwm2mcore_CoapNotification_t CoapNotification;
 //--------------------------------------------------------------------------------------------------
 static lwm2mcore_CoapRequest_t* CoapRequestRef;
 
-
 //--------------------------------------------------------------------------------------------------
 /**
- * Convert lwm2mCore stream status to legato stream status
+ * Convert Lwm2mCore stream status to legato stream status
+ *
+ * @return
+ *     - Lwm2mCore stream status
  */
 //--------------------------------------------------------------------------------------------------
 static le_coap_StreamStatus_t ConvertLwm2mStreamStatus
 (
-    lwm2mcore_StreamStatus_t lwm2mStreamStatus
+    lwm2mcore_StreamStatus_t lwm2mStreamStatus   ///< [IN] Stream status in Lwm2mCore
 )
 {
     switch (lwm2mStreamStatus)
@@ -129,11 +125,14 @@ static le_coap_StreamStatus_t ConvertLwm2mStreamStatus
 //--------------------------------------------------------------------------------------------------
 /**
  * Convert legato stream status to lwm2mcore stream status
+ *
+ * @return
+ *     - Legato stream status
  */
 //--------------------------------------------------------------------------------------------------
 static lwm2mcore_StreamStatus_t ConvertLeStreamStatus
 (
-    le_coap_StreamStatus_t leStreamStatus
+    le_coap_StreamStatus_t leStreamStatus    ///< [IN] Stream status in Legato
 )
 {
     switch (leStreamStatus)
@@ -170,15 +169,17 @@ static lwm2mcore_StreamStatus_t ConvertLeStreamStatus
     }
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Convert lwm2mcore ack status to legato push status
+ *
+ * @return
+ *     - Push status
  */
 //--------------------------------------------------------------------------------------------------
 static le_coap_PushStatus_t ConvertAckToPushStatus
 (
-    lwm2mcore_AckResult_t result
+    lwm2mcore_AckResult_t result     ///< [IN] Acknowledge status in Lwm2mCore
 )
 {
     if (result == LWM2MCORE_ACK_RECEIVED)
@@ -189,7 +190,6 @@ static le_coap_PushStatus_t ConvertAckToPushStatus
     return LE_COAP_PUSH_FAILED;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Handles CoAP messages from server such as read, write, execute and streams (block transfers)
@@ -197,7 +197,7 @@ static le_coap_PushStatus_t ConvertAckToPushStatus
 //--------------------------------------------------------------------------------------------------
 static void CoapMessageHandler
 (
-    lwm2mcore_CoapRequest_t* requestRef
+    lwm2mcore_CoapRequest_t* requestRef    ///< [IN] CoAP request reference
 )
 {
     const char* uriPtr;
@@ -257,7 +257,6 @@ static void CoapMessageHandler
     le_event_Report(CoapMessageEvent, &coapMsgData, sizeof(coapMsgData));
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * This function sends CoAP Ack messages to external app.
@@ -265,11 +264,12 @@ static void CoapMessageHandler
 //--------------------------------------------------------------------------------------------------
 static void CoapAckHandler
 (
-    lwm2mcore_AckResult_t ackResult
+    lwm2mcore_AckResult_t ackResult     ///< [IN] Acknowledge status
 )
 {
     lwm2mcore_CoapNotification_t* coapNotificationPtr = &CoapNotification;
-    le_coap_PushHandlerFunc_t handlerPtr = (le_coap_PushHandlerFunc_t) coapNotificationPtr->callbackRef;
+    le_coap_PushHandlerFunc_t handlerPtr =
+                              (le_coap_PushHandlerFunc_t)coapNotificationPtr->callbackRef;
 
     le_coap_PushStatus_t pushStatus = ConvertAckToPushStatus(ackResult);
 
@@ -285,7 +285,6 @@ static void CoapAckHandler
         LE_WARN("Callback handler doesn't exist");
     }
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -312,7 +311,6 @@ static void FirstLayerCoapMessageHandler
                       coapMsgDataPtr->payloadLength,
                       le_event_GetContextPtr());
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -359,7 +357,6 @@ le_coap_MessageEventHandlerRef_t le_coap_AddMessageEventHandler
     return (le_coap_MessageEventHandlerRef_t)handlerRef;
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * CoAP add message event handler
@@ -377,7 +374,6 @@ void le_coap_RemoveMessageEventHandler
     lwm2mcore_SetCoapAckHandler(NULL);
 }
 
-
 //--------------------------------------------------------------------------------------------------
 /**
  * Sends asynchronous CoAP response to server.
@@ -393,22 +389,14 @@ void le_coap_RemoveMessageEventHandler
 //--------------------------------------------------------------------------------------------------
 le_result_t le_coap_SendResponse
 (
-    uint16_t messageId,
-        ///< [IN] message id
-    const uint8_t* tokenPtr,
-        ///< [IN] token
-    size_t tokenLength,
-        ///< [IN] token Length
-    uint16_t contentType,
-        ///< [IN] content type
-    le_coap_Code_t responseCode,
-        ///< [IN] result of CoAP operation
-    le_coap_StreamStatus_t streamStatus,
-        ///< [IN] Status of the transmit stream
-    const uint8_t* payloadPtr,
-        ///< [IN] payload
-    size_t payloadLength
-        ///< [IN] payload Length
+    uint16_t messageId,                  ///< [IN] Message identifier
+    const uint8_t* tokenPtr,             ///< [IN] Token pointer
+    size_t tokenLength,                  ///< [IN] Token length
+    uint16_t contentType,                ///< [IN] Content type
+    le_coap_Code_t responseCode,         ///< [IN] Result of CoAP operation
+    le_coap_StreamStatus_t streamStatus, ///< [IN] Status of the transmit stream
+    const uint8_t* payloadPtr,           ///< [IN] Payload pointer
+    size_t payloadLength                 ///< [IN] Payload Length
 )
 {
     bool result;
@@ -440,11 +428,11 @@ le_result_t le_coap_SendResponse
     coapResponsePtr->streamStatus = ConvertLeStreamStatus(streamStatus);
     coapResponsePtr->payloadLength = payloadLength;
     coapResponsePtr->messageId = messageId;
-    coapResponsePtr->payload = (uint8_t*)payloadPtr;
+    coapResponsePtr->payloadPtr = (uint8_t*)payloadPtr;
 
     // Allow app to send token as well.
     // Might be useful to respond with just tokens for unsolicited responses.
-    coapResponsePtr->tokenPtr = (uint8_t*)tokenPtr;
+    memcpy((char*)coapResponsePtr->token, (const char*)tokenPtr, tokenLength);
     coapResponsePtr->tokenLength = tokenLength;
 
     result = lwm2mcore_SendResponse(CoapClientRef, &CoapResponse);
@@ -456,7 +444,6 @@ le_result_t le_coap_SendResponse
 
     return LE_FAULT;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -474,24 +461,15 @@ le_result_t le_coap_SendResponse
 //--------------------------------------------------------------------------------------------------
 le_result_t le_coap_Push
 (
-    const char* uriPtr,
-        ///< [IN] URI where push should end
-    const uint8_t* tokenPtr,
-        ///< [IN] token
-    size_t tokenLength,
-        ///< [IN] token length
-    uint16_t contentType,
-        ///< [IN] content type
-    le_coap_StreamStatus_t streamStatus,
-        ///< [IN] Status of transmit stream
-    const uint8_t* payloadPtr,
-        ///< [IN] payload
-    size_t payloadLength,
-        ///< [IN] payload Length
-    le_coap_PushHandlerFunc_t handlerPtr,
-        ///< [IN] Push result callback
-    void* contextPtr
-        ///< [IN] Context pointer
+    const char* uriPtr,                   ///< [IN] URI where push should end
+    const uint8_t* tokenPtr,              ///< [IN] Token pointer
+    size_t tokenLength,                   ///< [IN] Token length
+    uint16_t contentType,                 ///< [IN] Content type
+    le_coap_StreamStatus_t streamStatus,  ///< [IN] Status of transmit stream
+    const uint8_t* payloadPtr,            ///< [IN] Payload pointer
+    size_t payloadLength,                 ///< [IN] Payload Length
+    le_coap_PushHandlerFunc_t handlerPtr, ///< [IN] Push result callback
+    void* contextPtr                      ///< [IN] Context pointer
 )
 {
     bool result;
@@ -579,7 +557,6 @@ le_result_t le_coap_Push
 
     return LE_FAULT;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 /**

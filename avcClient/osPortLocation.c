@@ -10,6 +10,9 @@
 #include <lwm2mcore/location.h>
 #include "legato.h"
 #include "interfaces.h"
+#include "le_pos_interface.h"
+#include "le_gnss_interface.h"
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -165,7 +168,7 @@ lwm2mcore_Sid_t lwm2mcore_GetAltitude
     switch (result)
     {
         case LE_OK:
-            altitudeLen = snprintf(bufferPtr, *lenPtr, "%d", altitude);
+            altitudeLen = snprintf(bufferPtr, *lenPtr, "%"PRIu32, altitude);
             if (*lenPtr < altitudeLen)
             {
                 sID = LWM2MCORE_ERR_OVERFLOW;

@@ -9,18 +9,24 @@
  *
  */
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <netdb.h>
-#include <resolv.h>
-#include <lwm2mcore/lwm2mcore.h>
-#include <lwm2mcore/udp.h>
 #include "legato.h"
 #include "interfaces.h"
 
+#ifdef LE_CONFIG_LINUX
+#   include <sys/socket.h>
+#   include <netinet/in.h>
+#   include <arpa/inet.h>
+#   include <unistd.h>
+#   include <sys/stat.h>
+#   include <netdb.h>
+#   include <resolv.h>
+#endif
+#ifdef LE_CONFIG_CUSTOM_OS
+#   include "custom_os/gai_stubs.h"
+#endif
+
+#include <lwm2mcore/lwm2mcore.h>
+#include <lwm2mcore/udp.h>
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -71,6 +77,11 @@ static void Lwm2mClientReceive
         // We retrieve the data received
         numBytes = recvfrom (readfs, buffer, LWM2MCORE_UDP_MAX_PACKET_SIZE,
                             0, (struct sockaddr *)&addr, &addrLen);
+        if ((numBytes < 0) && (errno == EBADF))
+        {
+            LE_DEBUG("Received on closed socket, ignoring");
+            return;
+        }
 
         if (0 > numBytes)
         {
@@ -185,7 +196,7 @@ static le_result_t ResolveIpAddress
     rc = getaddrinfo(urlStrPtr, NULL, &hints, &resultPtr);
     if (rc)
     {
-        LE_ERROR("IP %s not resolved: %s", urlStrPtr,  gai_strerror(rc));
+        LE_ERROR("IP %s not resolved: %s", urlStrPtr, gai_strerror(rc));
         return LE_FAULT;
     }
 
@@ -198,6 +209,7 @@ static le_result_t ResolveIpAddress
         return LE_OK;
     }
     LE_ERROR("IP %s not resolved", urlStrPtr);
+    freeaddrinfo(resultPtr);
     return LE_FAULT;
 }
 
@@ -313,6 +325,9 @@ bool lwm2mcore_UdpOpen
                                                 SocketConfig.sock,
                                                 Lwm2mClientReceive,
                                                 POLLIN);
+        LE_DEBUG("Opened lwm2m UDP socket %d with FD monitor %p", SocketConfig.sock,
+            Lwm2mMonitorRef);
+
         if (Lwm2mMonitorRef != NULL)
         {
             result = true;
@@ -349,6 +364,12 @@ bool lwm2mcore_UdpClose
     LE_DEBUG ("close sock %d -> %d", config.sock, rc);
     if (0 == rc)
     {
+        if (config.sock == SocketConfig.sock)
+        {
+            // Delete FD monitor if the socket was opened in lwm2mcore_UdpOpen().
+            LE_DEBUG("Closed lwm2m UDP socket %d with FD monitor %p", config.sock, Lwm2mMonitorRef);
+            le_fdMonitor_Delete(Lwm2mMonitorRef);
+        }
         result = true;
     }
 

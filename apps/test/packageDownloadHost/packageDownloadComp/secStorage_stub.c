@@ -30,3 +30,11 @@ void le_secStore_ConnectService
 {
     LE_DEBUG("Stub");
 }
+
+void le_secStore_DisconnectService
+(
+    void
+)
+{
+    LE_DEBUG("Stub");
+}

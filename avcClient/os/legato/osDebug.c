@@ -39,7 +39,7 @@ void lwm2mcore_Assert
 {
     if (!(condition))
     {
-        LE_FATAL("Assertion at function %s: line %d !!!!!!", functionPtr, line);
+        LE_FATAL("Assertion at function %s: line %"PRIu32" !!!!!!", functionPtr, line);
     }
 }
 

@@ -48,6 +48,7 @@ processes:
 extern:
 {
     avcDaemon.avcDaemon.le_avc
+    avcDaemon.avcDaemon.le_tpf
     avcDaemon.avcDaemon.le_avdata
     avcDaemon.avcDaemon.le_coap
 }

@@ -197,4 +197,41 @@ void avcClient_Init
    void
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize the AVC update client sub-component.
+ *
+ * @note This function should be called during the initializaion phase of the AVC daemon.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_UpdateInit
+(
+   void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize the AVC device client sub-component.
+ *
+ * @note This function should be called during the initializaion phase of the AVC daemon.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_DeviceInit
+(
+   void
+);
+//--------------------------------------------------------------------------------------------------
+/**
+ * LwM2M client entry point to exucute fwupdate.
+ *
+ * @return
+ *      - LE_OK in case of success.
+ *      - LE_FAULT in case of failure.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcClient_LaunchFwUpdate
+(
+    void
+);
+
 #endif // LEGATO_AVC_CLIENT_INCLUDE_GUARD

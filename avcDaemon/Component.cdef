@@ -4,6 +4,7 @@ provides:
     {
         airVantage/le_avc.api
         airVantage/le_avdata.api
+        airVantage/le_tpf.api
         airVantage/le_coap.api
     }
 }
@@ -47,6 +48,7 @@ requires:
         ${LEGATO_ROOT}/components/3rdParty/zlib
         ${LEGATO_ROOT}/components/appCfg
         ${LEGATO_ROOT}/components/watchdogChain
+        ${LEGATO_ROOT}/components/httpClientLibrary
     }
 
     lib:
@@ -67,6 +69,7 @@ sources:
     assetData.c
     avData.c
     coap.c
+    tpfServer.c
     avcServer.c
     timeseriesData.c
     push.c
@@ -79,14 +82,18 @@ sources:
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortConnectivity.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortDevice.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortLocation.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortSecurity.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortSecurityOpenSSL.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortCredentials.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortCredentialsCommon.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortServer.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortUpdate.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortParamStorage.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcAppUpdate/avcAppUpdate.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/sslUtilities.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloaderCallbacks.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/sslLayOutPEM.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/sslCheckCertificate.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloader.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/downloader.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/defaultDerKey.c
 
     // LWM2MCore: Adaptation layer
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osDebug.c
@@ -96,6 +103,7 @@ sources:
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osUdp.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osSem.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osMutex.c
+
 }
 
 cflags:
@@ -114,9 +122,11 @@ cflags:
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader
+    -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/3rdParty/tinyhttp
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/3rdParty/wakaama/core
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/3rdParty/wakaama/core/er-coap-13
     -I${LEGATO_ROOT}/3rdParty/tinycbor/src
+    -I${LEGATO_ROOT}/components/httpClientLibrary
     -std=gnu99
     -DWITH_SHA256
     -fvisibility=default

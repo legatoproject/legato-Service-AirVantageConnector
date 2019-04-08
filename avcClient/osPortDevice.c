@@ -8,14 +8,25 @@
  */
 
 #include <lwm2mcore/device.h>
-#include <sys/reboot.h>
 #include "legato.h"
+#ifndef LE_CONFIG_CUSTOM_OS
+#include <sys/reboot.h>
+#endif
 #include "interfaces.h"
 #include "assetData.h"
-#include <sys/utsname.h>
+#ifndef LE_CONFIG_CUSTOM_OS
 #include "avcAppUpdate.h"
+#include <sys/utsname.h>
+#endif
 #include "avcServer.h"
 #include "avcSim.h"
+
+#ifdef LE_CONFIG_CUSTOM_OS
+#include "version.h"
+#include "custom_os/sync.h"
+#endif
+
+#include "avcClient.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -138,6 +149,20 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Default timer value for reboot request
+ */
+//--------------------------------------------------------------------------------------------------
+#define DEFAULT_REBOOT_TIMER  2
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Timer to treat platform reboot
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t TreatRebootTimer;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Function pointer to get a component version
  *
  * @return
@@ -202,6 +227,7 @@ static size_t GetModemVersion
     return returnedLen;
 }
 
+#ifndef LE_CONFIG_CUSTOM_OS
 //--------------------------------------------------------------------------------------------------
 /**
  * Attempt to read the LK version string from the file system.
@@ -237,7 +263,9 @@ static size_t GetLkVersion
     LE_INFO("App Bootloader version %s, returnedLen %zd", versionBufferPtr, returnedLen);
     return returnedLen;
 }
+#endif
 
+#ifndef LE_CONFIG_CUSTOM_OS
 //--------------------------------------------------------------------------------------------------
 /**
  * Attempt to read the Linux version string from the file system.
@@ -272,7 +300,9 @@ static size_t GetOsVersion
     }
     return returnedLen;
 }
+#endif
 
+#ifndef LE_CONFIG_CUSTOM_OS
 //--------------------------------------------------------------------------------------------------
 /**
  * Attempt to read the root FS version string from the file system.
@@ -320,7 +350,9 @@ static size_t GetRfsVersion
     }
     return returnedLen;
 }
+#endif
 
+#ifndef LE_CONFIG_CUSTOM_OS
 //--------------------------------------------------------------------------------------------------
 /**
  * Attempt to read the user FS version string from the file system.
@@ -368,7 +400,9 @@ static size_t GetUfsVersion
     }
     return returnedLen;
 }
+#endif
 
+#ifndef LE_CONFIG_CUSTOM_OS
 //--------------------------------------------------------------------------------------------------
 /**
  * Attempt to read the Legato version string from the file system.
@@ -419,7 +453,9 @@ static size_t ReadLegatoVersion
     }
     return returnedLen;
 }
+#endif
 
+#ifndef LE_CONFIG_CUSTOM_OS
 //--------------------------------------------------------------------------------------------------
 /**
  * Get the Legato baseline version string from the file system.
@@ -494,7 +530,9 @@ static size_t GetCustomerPriVersion
     }
     return returnedLen;
 }
+#endif
 
+#ifndef LE_CONFIG_CUSTOM_OS
 //--------------------------------------------------------------------------------------------------
 /**
  * Attempt to read the Carrier PRI version string from the file system.
@@ -535,7 +573,9 @@ static size_t GetCarrierPriVersion
     }
     return returnedLen;
 }
+#endif
 
+#ifndef LE_CONFIG_CUSTOM_OS
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve MCU version
@@ -554,8 +594,8 @@ static size_t GetMcuVersion
 
     if (NULL != versionBufferPtr)
     {
+#if LE_CONFIG_SOTA
         char mcuVersion[LE_ULPM_MAX_VERS_LEN+1];
-
         if (LE_OK == le_ulpm_GetFirmwareVersion(mcuVersion, sizeof(mcuVersion)))
         {
             if (strlen(mcuVersion))
@@ -568,6 +608,7 @@ static size_t GetMcuVersion
             }
         }
         else
+#endif /* end LE_CONFIG_SOTA */
         {
             LE_ERROR("Failed to retrieve MCU version");
             returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
@@ -576,6 +617,7 @@ static size_t GetMcuVersion
     }
     return returnedLen;
 }
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -591,6 +633,42 @@ static void LaunchReboot
     sync();
     // Reboot the system
     reboot(RB_AUTOBOOT);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Launch the timer to treat the platform reboot request
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t LaunchRebootRequestTimer
+(
+    void
+)
+{
+    le_clk_Time_t interval = { .sec = DEFAULT_REBOOT_TIMER };
+    if ((LE_OK == le_timer_SetInterval(TreatRebootTimer, interval))
+     && (LE_OK == le_timer_Start(TreatRebootTimer)))
+    {
+        return LE_OK;
+    }
+    return LE_FAULT;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Called when the timer for platform reboot expires
+ */
+//--------------------------------------------------------------------------------------------------
+static void TreatRebootExpiryHandler
+(
+    le_timer_Ref_t timerRef    ///< Timer that expired
+)
+{
+    avcServer_QueryReboot(LaunchReboot);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -762,6 +840,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
     ComponentVersion_t versionInfo[] =
     {
       { MODEM_TAG,              GetModemVersion             },
+#ifndef LE_CONFIG_CUSTOM_OS
       { LK_TAG,                 GetLkVersion                },
       { LINUX_TAG,              GetOsVersion                },
       { ROOT_FS_TAG,            GetRfsVersion               },
@@ -771,6 +850,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
       { CUSTOMER_PRI_TAG,       GetCustomerPriVersion       },
       { CARRIER_PRI_TAG,        GetCarrierPriVersion        },
       { MCU_TAG,                GetMcuVersion               }
+#endif
     };
 
     if ((!bufferPtr) || (!lenPtr))
@@ -779,14 +859,14 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
     }
 
     remainingLen = *lenPtr;
-    LE_DEBUG("remainingLen %d", remainingLen);
+    LE_DEBUG("remainingLen %"PRIu32, remainingLen);
 
     for (i = 0; i < NUM_ARRAY_MEMBERS(versionInfo); i++)
     {
         if (NULL != versionInfo[i].funcPtr)
         {
             len = versionInfo[i].funcPtr(tmpBufferPtr, FW_BUFFER_LENGTH);
-            LE_DEBUG("len %zd - remainingLen %d", len, remainingLen);
+            LE_DEBUG("len %zu - remainingLen %"PRIu32, len, remainingLen);
             /* len doesn't contain the final \0
              * remainingLen contains the final \0
              * So we have to keep one byte for \0
@@ -801,11 +881,15 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
             {
                 snprintf(bufferPtr + strlen(bufferPtr),
                          remainingLen,
+#ifdef AV_SYSTEM_CONFIGURATION
+                         "%s",
+#else
                          "%s%s",
                          versionInfo[i].tagPtr,
+#endif
                          tmpBufferPtr);
                 remainingLen -= len;
-                LE_DEBUG("remainingLen %d", remainingLen);
+                LE_DEBUG("remainingLen %"PRIu32, remainingLen);
             }
         }
     }
@@ -1408,17 +1492,36 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceTemperature
 {
     lwm2mcore_Sid_t sID;
     le_result_t result;
-    le_temp_SensorRef_t pcSensorRef;
+    le_temp_SensorRef_t sensorRef;
     int32_t temp;
+    int i;
+    // List of sensors classified by order of priority
+    const char* sensorName[] = {"POWER_CONTROLLER", "POWER_AMPLIFIER"};
 
     if (!valuePtr)
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    // Retrieve the power controller temperature
-    pcSensorRef = le_temp_Request("POWER_CONTROLLER");
-    result = le_temp_GetTemperature(pcSensorRef, &temp);
+    // Get the temperature sensor reference
+    for (i = 0; i < NUM_ARRAY_MEMBERS(sensorName); i++)
+    {
+        sensorRef = le_temp_Request(sensorName[i]);
+        if (sensorRef)
+        {
+            LE_INFO("Found sensor: %s", sensorName[i]);
+            break;
+        }
+    }
+
+    if (!sensorRef)
+    {
+        LE_WARN("No temperature sensor present in the current target");
+        return LWM2MCORE_ERR_INVALID_STATE;
+    }
+
+    // Retrieve the temperature
+    result = le_temp_GetTemperature(sensorRef, &temp);
     if (LE_OK == result)
     {
         *valuePtr = temp;
@@ -1450,13 +1553,20 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceUnexpectedResets
 )
 {
     uint64_t count;
+    le_result_t result;
 
     if (!valuePtr)
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    if (LE_OK != le_info_GetUnexpectedResetsCount(&count))
+    result = le_info_GetUnexpectedResetsCount(&count);
+    LE_DEBUG("le_info_GetUnexpectedResetsCount %d", result);
+    if (LE_UNSUPPORTED == result)
+    {
+        return LWM2MCORE_ERR_INVALID_STATE;
+    }
+    else if (LE_OK != result)
     {
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
@@ -1483,14 +1593,24 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceTotalResets
 )
 {
     uint64_t expected, unexpected;
+    le_result_t resultExpected;
+    le_result_t resultUnexpected;
 
     if (!valuePtr)
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    if ( (LE_OK != le_info_GetExpectedResetsCount(&expected)) ||
-         (LE_OK != le_info_GetUnexpectedResetsCount(&unexpected)) )
+    resultExpected = le_info_GetExpectedResetsCount(&expected);
+    resultUnexpected = le_info_GetUnexpectedResetsCount(&unexpected);
+    LE_DEBUG("le_info_GetExpectedResetsCount %d", resultExpected);
+    LE_DEBUG("le_info_GetUnexpectedResetsCount %d", resultUnexpected);
+
+    if ((LE_UNSUPPORTED == resultExpected) || (LE_UNSUPPORTED == resultUnexpected))
+    {
+        return LWM2MCORE_ERR_INVALID_STATE;
+    }
+    else if ((LE_OK != resultExpected) || (LE_OK != resultUnexpected))
     {
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
@@ -1505,6 +1625,12 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceTotalResets
  * Request to reboot the device
  * This API needs to have a procedural treatment
  *
+ * @warning The client MUST acknowledge this function before treating the reboot request, in order
+ * to allow LwM2MCore to acknowledge the LwM2M server that the reboot request is correctly taken
+ * into account.
+ * Advice: launch a timer (value could be decided by the client implementation) in order to treat
+ * the reboot request.
+ *
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
@@ -1515,8 +1641,26 @@ lwm2mcore_Sid_t lwm2mcore_RebootDevice
     void
 )
 {
-    // Check if reboot can be launched now
-    avcServer_QueryReboot(LaunchReboot);
+    // Launch timer as requested by LwM2MCore
+    if (LE_OK == LaunchRebootRequestTimer())
+    {
+        return LWM2MCORE_ERR_COMPLETED_OK;
+    }
+    return LWM2MCORE_ERR_GENERAL_ERROR;
+}
 
-    return LWM2MCORE_ERR_COMPLETED_OK;
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize the AVC device client sub-component.
+ *
+ * @note This function should be called during the initializaion phase of the AVC daemon.
+ */
+//--------------------------------------------------------------------------------------------------
+void avcClient_DeviceInit
+(
+   void
+)
+{
+    TreatRebootTimer = le_timer_Create("launch timer for reboot");
+    le_timer_SetHandler(TreatRebootTimer, TreatRebootExpiryHandler);
 }

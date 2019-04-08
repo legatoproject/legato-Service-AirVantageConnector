@@ -14,6 +14,12 @@
 #include "avcFsConfig.h"
 #include "avcFs.h"
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Maximum length of a parameter file name
+ */
+//--------------------------------------------------------------------------------------------------
+#define PARAM_PATH_MAX (sizeof(PKGDWL_LEFS_DIR) + 16)
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -40,10 +46,10 @@ lwm2mcore_Sid_t lwm2mcore_SetParam
 
     le_result_t result;
     int pathLen;
-    char path[LE_FS_PATH_MAX_LEN];
-    memset(path, 0, LE_FS_PATH_MAX_LEN);
-    pathLen = snprintf(path, LE_FS_PATH_MAX_LEN, "%s/param%d", PKGDWL_LEFS_DIR, paramId);
-    if (pathLen > LE_FS_PATH_MAX_LEN)
+    char path[PARAM_PATH_MAX];
+    memset(path, 0, PARAM_PATH_MAX);
+    pathLen = snprintf(path, PARAM_PATH_MAX, "%s/param%d", PKGDWL_LEFS_DIR, paramId);
+    if (pathLen >= PARAM_PATH_MAX)
     {
         return LWM2MCORE_ERR_INCORRECT_RANGE;
     }
@@ -83,12 +89,12 @@ lwm2mcore_Sid_t lwm2mcore_GetParam
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    char path[LE_FS_PATH_MAX_LEN];
+    char path[PARAM_PATH_MAX];
     le_result_t result;
     int pathLen;
-    memset(path, 0, LE_FS_PATH_MAX_LEN);
-    pathLen = snprintf(path, LE_FS_PATH_MAX_LEN, "%s/param%d", PKGDWL_LEFS_DIR, paramId);
-    if (pathLen > LE_FS_PATH_MAX_LEN)
+    memset(path, 0, PARAM_PATH_MAX);
+    pathLen = snprintf(path, PARAM_PATH_MAX, "%s/param%d", PKGDWL_LEFS_DIR, paramId);
+    if (pathLen >= PARAM_PATH_MAX)
     {
         return LWM2MCORE_ERR_INCORRECT_RANGE;
     }
@@ -126,12 +132,12 @@ lwm2mcore_Sid_t lwm2mcore_DeleteParam
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    char path[LE_FS_PATH_MAX_LEN];
+    char path[PARAM_PATH_MAX];
     le_result_t result;
     int pathLen;
-    memset(path, 0, LE_FS_PATH_MAX_LEN);
-    pathLen = snprintf(path, LE_FS_PATH_MAX_LEN, "%s/param%d", PKGDWL_LEFS_DIR, paramId);
-    if (pathLen > LE_FS_PATH_MAX_LEN)
+    memset(path, 0, PARAM_PATH_MAX);
+    pathLen = snprintf(path, PARAM_PATH_MAX, "%s/param%d", PKGDWL_LEFS_DIR, paramId);
+    if (pathLen >= PARAM_PATH_MAX)
     {
         return LWM2MCORE_ERR_INCORRECT_RANGE;
     }

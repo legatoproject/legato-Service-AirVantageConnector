@@ -11,7 +11,7 @@
 #define _PACKAGEDOWNLOADER_H
 
 #include <lwm2mcore/update.h>
-#include <lwm2mcorePackageDownloader.h>
+#include <lwm2mcore/lwm2mcorePackageDownloader.h>
 #include <legato.h>
 #include <interfaces.h>
 
@@ -23,7 +23,8 @@
 typedef struct
 {
     const char*      fifoPtr;               ///< Store FIFO pointer
-    int              downloadFd;            ///< Download FIFO file descriptor
+    int              downloadFd;            ///< Download file descriptor
+    int              recvFd;                ///< Reception file descriptor in case of a PIPE
     void*            ctxPtr;                ///< Context pointer
     le_thread_Ref_t  mainRef;               ///< Main thread reference
     const char*      certPtr;               ///< PEM certificate path
@@ -45,20 +46,6 @@ le_result_t packageDownloader_Init
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Set firmware update state
- *
- * @return
- *  - DWL_OK     The function succeeded
- *  - DWL_FAULT  The function failed
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateState
-(
-    lwm2mcore_FwUpdateState_t fwUpdateState     ///< [IN] New FW update state
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Set firmware update result
  *
  * @return
@@ -69,19 +56,6 @@ lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateState
 lwm2mcore_DwlResult_t packageDownloader_SetFwUpdateResult
 (
     lwm2mcore_FwUpdateResult_t fwUpdateResult   ///< [IN] New FW update result
-);
-//--------------------------------------------------------------------------------------------------
-/**
- * Function for setting software update state
- *
- * @return
- *  - DWL_OK     The function succeeded
- *  - DWL_FAULT  The function failed
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateState
-(
-    lwm2mcore_SwUpdateState_t swUpdateState     ///< [IN] New SW update state
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -96,36 +70,6 @@ lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateState
 lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateResult
 (
     lwm2mcore_SwUpdateResult_t swUpdateResult   ///< [IN] New SW update result
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get firmware update state
- *
- * @return
- *  - LE_OK             The function succeeded
- *  - LE_BAD_PARAMETER  Null pointer provided
- *  - LE_FAULT          The function failed
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetFwUpdateState
-(
-    lwm2mcore_FwUpdateState_t* fwUpdateStatePtr     ///< [INOUT] FW update state
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Get firmware update result
- *
- * @return
- *  - LE_OK             The function succeeded
- *  - LE_BAD_PARAMETER  Null pointer provided
- *  - LE_FAULT          The function failed
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t packageDownloader_GetFwUpdateResult
-(
-    lwm2mcore_FwUpdateResult_t* fwUpdateResultPtr   ///< [INOUT] FW update result
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -227,15 +171,57 @@ le_result_t packageDownloader_GetSwUpdateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Get connection notification status
+ * The aim of this function is to check at the boot if a connection is need to notify the server
+ * that a download is complete and ready to be installed.
+ *
+ * @return
+ *  - LE_OK             The function succeeded
+ *  - LE_BAD_PARAMETER  Null pointer provided
+ *  - LE_FAULT          The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_GetConnectionNotificationState
+(
+    bool* isConnectionNeededPtr                  ///< [OUT] Is connection enabled?
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set connection notification status
+ * The aim of this function is to query a connection in the boot if the server was not notified by
+ * the download complete.
+ *
+ * @return
+ *  - LE_OK     The function succeeded
+ *  - LE_FAULT  The function failed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_SetConnectionNotificationState
+(
+    bool isConnectionNeeded                     ///< [IN] Is connection enabled ?
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Download and store a package
  *
  */
 //--------------------------------------------------------------------------------------------------
 void packageDownloader_StartDownload
 (
-    const char*            uriPtr,  ///< Package URI
     lwm2mcore_UpdateType_t type,    ///< Update type (FW/SW)
     bool                   resume   ///< Indicates if it is a download resume
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Finalize package downloading
+ */
+//--------------------------------------------------------------------------------------------------
+void packageDownloader_FinalizeDownload
+(
+    le_result_t   downloadStatus    ///< [IN] Package download final status
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -280,6 +266,7 @@ bool packageDownloader_CheckDownloadToSuspend
     void
 );
 
+#ifndef LE_CONFIG_CUSTOM_OS
 //--------------------------------------------------------------------------------------------------
 /**
  * Store package information necessary to resume a download if necessary (URI and package type)
@@ -309,6 +296,7 @@ le_result_t packageDownloader_DeleteResumeInfo
 (
     void
 );
+#endif /* !LE_CONFIG_CUSTOM_OS */
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -320,6 +308,7 @@ void packageDownloader_DeleteFwUpdateInfo
     void
 );
 
+#ifndef LE_CONFIG_CUSTOM_OS
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve package information necessary to resume a download (URI and package type)
@@ -364,6 +353,7 @@ le_result_t packageDownloader_GetUpdatePackageSize
 (
     uint64_t* packageSizePtr        ///< [OUT] Package size
 );
+#endif /* !LE_CONFIG_CUSTOM_OS */
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -396,6 +386,34 @@ le_result_t packageDownloader_BytesLeftToDownload
                                 ///<       data if suspend state was LE_AVC_DOWNLOAD_PENDING,
                                 ///<       LE_DOWNLOAD_IN_PROGRESS or LE_DOWNLOAD_COMPLETE.
                                 ///<       Otherwise undefined.
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get resume position from FW update
+ *
+ * @return
+ *   - LE_OK                If function succeeded
+ *   - LE_FAULT             If function failed
+ */
+//--------------------------------------------------------------------------------------------------
+uint64_t packageDownloader_GetResumePosition
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if the downloader thread is running
+ *
+ * @return
+ *   - LE_OK                If function succeeded
+ *   - LE_BAD_PARAMETER     Null pointer provided
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t packageDownloader_IsDownloadInProgress
+(
+    bool*    isDownloadPtr   ///< [INOUT] Download thread state (true = running, false = stopped)
 );
 
 #endif /*_PACKAGEDOWNLOADER_H */
