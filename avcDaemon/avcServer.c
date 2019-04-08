@@ -2564,6 +2564,7 @@ static void CheckNotificationToSend
     uint64_t numBytesToDownload = 0;
     le_avc_Status_t avcStatus;
     le_avc_ErrorCode_t errorCode;
+    bool tpfState = false;
 
     if (AVC_IDLE != CurrentState)
     {
@@ -2648,6 +2649,13 @@ static void CheckNotificationToSend
         {
             LE_DEBUG("No download to resume");
             return;
+        }
+
+        if ((LE_OK == tpfServer_GetTpfState(&tpfState)) && tpfState)
+        {
+             LE_INFO("tpfState to resume");
+             le_tpf_Start();
+             return;
         }
 
         if (QueryDownloadHandlerRef == NULL)

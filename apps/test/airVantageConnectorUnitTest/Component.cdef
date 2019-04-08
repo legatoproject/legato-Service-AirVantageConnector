@@ -4,6 +4,7 @@ requires:
     {
         airVantage/le_avc.api                               [types-only]
         airVantage/le_avdata.api                            [types-only]
+        airVantage/le_tpf.api                               [types-only]
         le_cfg.api                                          [types-only]
         le_data.api                                         [types-only]
         modemServices/le_sms.api                            [types-only]

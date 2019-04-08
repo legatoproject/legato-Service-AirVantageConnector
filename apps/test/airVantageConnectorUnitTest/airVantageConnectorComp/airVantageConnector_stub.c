@@ -1128,6 +1128,25 @@ le_result_t tpfServer_SetTpfState
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Start a package download from a 3rd party server
+ *
+ * This will sent a request to the server to start a download.
+ *
+ * @return
+ *      - LE_OK if connection request has been sent.
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_tpf_Start
+(
+    void
+)
+{
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Delete an SMS message.
  *
  */
@@ -1140,3 +1159,4 @@ void le_sms_Delete
 {
     return;
 }
+
