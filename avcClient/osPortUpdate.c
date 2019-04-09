@@ -969,3 +969,46 @@ void avcClient_UpdateInit
     TreatInstallTimer = le_timer_Create("launch timer for install treatment");
     le_timer_SetHandler(TreatInstallTimer, TreatInstallExpiryHandler);
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * @brief Function to indicate that the server reads the update result resource.
+ *
+ * @remark Platform adaptor function which needs to be defined on client side.
+ *
+ * @return
+ *  - LWM2MCORE_ERR_COMPLETED_OK on success
+ *  - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid
+ *  - LWM2MCORE_ERR_GENERAL_ERROR on failure
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_UpdateResultWasNotified
+(
+    lwm2mcore_UpdateType_t type     ///< [IN] Update type
+)
+{
+    bool notifRequested = false;
+    le_avc_Status_t updateStatus = LE_AVC_NO_UPDATE;
+    le_avc_ErrorCode_t errorCode = LE_AVC_ERR_NONE;
+    le_fwupdate_UpdateStatus_t fwUpdateErrorCode = LE_FWUPDATE_UPDATE_STATUS_OK;
+    le_result_t result;
+
+    if (LWM2MCORE_FW_UPDATE_TYPE != type)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    result = packageDownloader_GetFwUpdateNotification(&notifRequested,
+                                                       &updateStatus,
+                                                       &errorCode,
+                                                       &fwUpdateErrorCode);
+    LE_DEBUG("notifRequested %d", notifRequested);
+    if ((LE_OK == result) && (notifRequested))
+    {
+        result = packageDownloader_SetFwUpdateNotification(false,
+                                                           LE_AVC_NO_UPDATE,
+                                                           LE_AVC_ERR_NONE,
+                                                           LE_FWUPDATE_UPDATE_STATUS_OK);
+    }
+    return (result != LE_OK) ? LWM2MCORE_ERR_GENERAL_ERROR : LWM2MCORE_ERR_COMPLETED_OK;
+}

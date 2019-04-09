@@ -91,6 +91,7 @@ typedef struct
     bool                notifRequested;     ///< Indicates if a notification is requested
     le_avc_Status_t     updateStatus;       ///< Update status
     le_avc_ErrorCode_t  errorCode;          ///< Error code
+    uint32_t            fwUpdateErrorCode;  ///< FW update error code
 }
 FwUpdateNotif_t;
 
@@ -723,15 +724,17 @@ le_result_t packageDownloader_GetUpdatePackageSize
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_SetFwUpdateNotification
 (
-    bool                notifRequested,     ///< [IN] Indicates if a notification is requested
-    le_avc_Status_t     updateStatus,       ///< [IN] Update status
-    le_avc_ErrorCode_t  errorCode           ///< [IN] Error code
+    bool                        notifRequested, ///< [IN] Indicates if a notification is requested
+    le_avc_Status_t             updateStatus,   ///< [IN] Update status
+    le_avc_ErrorCode_t          errorCode,      ///< [IN] Error code
+    le_fwupdate_UpdateStatus_t  fwErrorCode     ///< [IN] FW update error code
 )
 {
     FwUpdateNotif_t notification;
     notification.notifRequested = notifRequested;
     notification.updateStatus = updateStatus;
     notification.errorCode = errorCode;
+    notification.fwUpdateErrorCode = (uint32_t)fwErrorCode;
 
     le_result_t result = WriteFs(FW_UPDATE_NOTIFICATION_PATH,
                                  (uint8_t*)&notification,
@@ -759,16 +762,17 @@ le_result_t packageDownloader_SetFwUpdateNotification
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetFwUpdateNotification
 (
-    bool*               notifRequestedPtr,  ///< [OUT] Indicates if a notification is requested
-    le_avc_Status_t*    updateStatusPtr,    ///< [OUT] Update status
-    le_avc_ErrorCode_t* errorCodePtr        ///< [OUT] Error code
+    bool*                       notifRequestedPtr,  ///< [OUT] Is a notification requested?
+    le_avc_Status_t*            updateStatusPtr,    ///< [OUT] Update status
+    le_avc_ErrorCode_t*         errorCodePtr,       ///< [OUT] Error code
+    le_fwupdate_UpdateStatus_t* fwErrorCodePtr      ///< [IN] FW update error code
 )
 {
     le_result_t result;
     FwUpdateNotif_t notification;
     size_t size = sizeof(FwUpdateNotif_t);
 
-    if ((!notifRequestedPtr) || (!updateStatusPtr) || (!errorCodePtr))
+    if ((!notifRequestedPtr) || (!updateStatusPtr) || (!errorCodePtr) || (!fwErrorCodePtr))
     {
         LE_ERROR("Invalid input parameter");
         return LE_FAULT;
@@ -780,10 +784,29 @@ le_result_t packageDownloader_GetFwUpdateNotification
         LE_ERROR("Failed to read %s: %s", FW_UPDATE_NOTIFICATION_PATH, LE_RESULT_TXT(result));
         return LE_FAULT;
     }
-
-    *notifRequestedPtr = notification.notifRequested;
-    *updateStatusPtr = notification.updateStatus;
-    *errorCodePtr = notification.errorCode;
+    // The aim of this check is to avoid a reboot in loop if a local update is done from an old
+    // soft to new one which include this modification.
+    if (sizeof(FwUpdateNotif_t) != size)
+    {
+        // Delete the old file
+        result = DeleteFs(FW_UPDATE_NOTIFICATION_PATH);
+        if (LE_OK != result)
+        {
+            LE_ERROR("Failed to delete %s: %s", FW_UPDATE_NOTIFICATION_PATH, LE_RESULT_TXT(result));
+            return LE_FAULT;
+        }
+        *notifRequestedPtr = false;
+        *updateStatusPtr = LE_AVC_NO_UPDATE;
+        *errorCodePtr = LE_AVC_ERR_NONE;
+        *fwErrorCodePtr = LE_FWUPDATE_UPDATE_STATUS_OK;
+    }
+    else
+    {
+        *notifRequestedPtr = notification.notifRequested;
+        *updateStatusPtr = notification.updateStatus;
+        *errorCodePtr = notification.errorCode;
+        *fwErrorCodePtr = (le_fwupdate_UpdateStatus_t)notification.fwUpdateErrorCode;
+    }
 
     return LE_OK;
 }

@@ -563,9 +563,10 @@ lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateState
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_SetFwUpdateNotification
 (
-    bool                notifRequested,     ///< [IN] Indicates if a notification is requested
-    le_avc_Status_t     updateStatus,       ///< [IN] Update status
-    le_avc_ErrorCode_t  errorCode           ///< [IN] Error code
+    bool                        notifRequested, ///< [IN] Indicates if a notification is requested
+    le_avc_Status_t             updateStatus,   ///< [IN] Update status
+    le_avc_ErrorCode_t          errorCode,      ///< [IN] Error code
+    le_fwupdate_UpdateStatus_t  fwErrorCode     ///< [IN] FW update error code
 )
 {
     return LE_OK;

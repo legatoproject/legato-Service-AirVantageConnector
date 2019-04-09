@@ -2495,18 +2495,20 @@ static void PollingTimerExpiryHandler
 //--------------------------------------------------------------------------------------------------
 static le_result_t CheckFwInstallResult
 (
-    bool*   isFwUpdateToNotifyPtr,  ///< [INOUT] Is a FW update needed to be notified to the server?
-    le_avc_StatusHandlerFunc_t statusHandlerPtr,  ///< Pointer on handler function
-    void*                      contextPtr         ///< Context
+    bool*                       isFwUpdateToNotifyPtr,  ///< [INOUT] Is a FW update needed to be
+                                                        ///< notified to the server?
+    le_avc_StatusHandlerFunc_t  statusHandlerPtr,       ///< [IN] Pointer on handler function
+    void*                       contextPtr              ///< [IN] Context
 )
 {
-    bool isFwUpdateOnGoing;
+    bool isFwUpdateOnGoing = false;
     bool notify = false;
     *isFwUpdateToNotifyPtr = false;
 
     if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_IsFwUpdateOnGoing(&isFwUpdateOnGoing))
     {
-        return LE_OK;
+        LE_ERROR("Fail to check FW update state");
+        return LE_FAULT;
     }
 
     // Check if a FW update was ongoing
@@ -2591,7 +2593,7 @@ static le_result_t CheckFwInstallResult
 
         *isFwUpdateToNotifyPtr = true;
         avcServer_UpdateStatus(updateStatus, LE_AVC_FIRMWARE_UPDATE, -1, -1, errorCode);
-        packageDownloader_SetFwUpdateNotification(true, updateStatus, errorCode);
+        packageDownloader_SetFwUpdateNotification(true, updateStatus, errorCode, fwUpdateStatus);
 
         if (IsTpfOngoing())
         {
@@ -2601,8 +2603,25 @@ static le_result_t CheckFwInstallResult
 
         avcServer_QueryConnection(LE_AVC_FIRMWARE_UPDATE, statusHandlerPtr, contextPtr);
     }
+    else
+    {
+        // Check if a connection is required because the update result was not notified to
+        // the server
+        bool notifRequested = false;
+        le_avc_ErrorCode_t errorCode = LE_AVC_ERR_NONE;
+        le_avc_Status_t updateStatus = LE_AVC_NO_UPDATE;
+        le_fwupdate_UpdateStatus_t fwUpdateErrorCode = LE_FWUPDATE_UPDATE_STATUS_OK;
+        le_result_t result = packageDownloader_GetFwUpdateNotification(&notifRequested,
+                                                                       &updateStatus,
+                                                                       &errorCode,
+                                                                       &fwUpdateErrorCode);
+        if ((LE_OK == result) && (notifRequested))
+        {
+            avcServer_QueryConnection(LE_AVC_FIRMWARE_UPDATE, statusHandlerPtr, contextPtr);
+        }
+    }
 
-    return LE_FAULT;
+    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2613,8 +2632,8 @@ static le_result_t CheckFwInstallResult
 //--------------------------------------------------------------------------------------------------
 static void CheckNotificationToSend
 (
-   le_avc_StatusHandlerFunc_t statusHandlerPtr,  ///< Pointer on handler function
-   void*                      contextPtr         ///< Context
+   le_avc_StatusHandlerFunc_t statusHandlerPtr,  ///< [IN] Pointer on handler function
+   void*                      contextPtr         ///< [IN] Context
 )
 {
     bool notify = false;
@@ -2630,7 +2649,11 @@ static void CheckNotificationToSend
         // startup, this notification needs to be resent again to the newly registred applications
         avcStatus = LE_AVC_NO_UPDATE;
         errorCode = LE_AVC_ERR_NONE;
-        if ((LE_OK == packageDownloader_GetFwUpdateNotification(&notify, &avcStatus, &errorCode))
+        le_fwupdate_UpdateStatus_t fwUpdateErrorCode = LE_FWUPDATE_UPDATE_STATUS_OK;
+        if ((LE_OK == packageDownloader_GetFwUpdateNotification(&notify,
+                                                                &avcStatus,
+                                                                &errorCode,
+                                                                &fwUpdateErrorCode))
             && (notify))
         {
             avcServer_UpdateStatus(avcStatus, LE_AVC_FIRMWARE_UPDATE, -1, -1, errorCode);

@@ -117,9 +117,10 @@ le_result_t packageDownloader_SetFwUpdateInstallPending
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_SetFwUpdateNotification
 (
-    bool                notifRequested,     ///< [IN] Indicates if a notification is requested
-    le_avc_Status_t     updateStatus,       ///< [IN] Update status
-    le_avc_ErrorCode_t  errorCode           ///< [IN] Error code
+    bool                        notifRequested, ///< [IN] Indicates if a notification is requested
+    le_avc_Status_t             updateStatus,   ///< [IN] Update status
+    le_avc_ErrorCode_t          errorCode,      ///< [IN] Error code
+    le_fwupdate_UpdateStatus_t  fwErrorCode     ///< [IN] FW update error code
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -136,9 +137,10 @@ le_result_t packageDownloader_SetFwUpdateNotification
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_GetFwUpdateNotification
 (
-    bool*               notifRequestedPtr,  ///< [OUT] Indicates if a notification is requested
-    le_avc_Status_t*    updateStatusPtr,    ///< [OUT] Update status
-    le_avc_ErrorCode_t* errorCodePtr        ///< [OUT] Error code
+    bool*                       notifRequestedPtr,  ///< [OUT] Is a notification requested?
+    le_avc_Status_t*            updateStatusPtr,    ///< [OUT] Update status
+    le_avc_ErrorCode_t*         errorCodePtr,       ///< [OUT] Error code
+    le_fwupdate_UpdateStatus_t* fwErrorCodePtr      ///< [IN] FW update error code
 );
 
 //--------------------------------------------------------------------------------------------------

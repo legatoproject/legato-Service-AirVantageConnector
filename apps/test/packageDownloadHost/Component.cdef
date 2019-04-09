@@ -3,6 +3,7 @@ requires:
     api:
     {
         airVantage/le_avc.api               [types-only]
+        le_fwupdate.api                     [types-only]
     }
 }
 
