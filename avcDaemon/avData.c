@@ -1233,7 +1233,11 @@ static void RecursiveRestore
         le_cfg_GetNodeName(iterRef, "", nodeName, LE_CFG_STR_LEN_BYTES);
         le_cfg_nodeType_t type = le_cfg_GetNodeType(iterRef, "");
 
-        snprintf(strBuffer, sizeof(strBuffer), "%s/%s", path, nodeName);
+        if (snprintf(strBuffer, sizeof(strBuffer), "%s/%s", path, nodeName) >= sizeof(strBuffer))
+        {
+            LE_ERROR("Unable to restore %s/%s (buffer truncated)", path, nodeName);
+            continue;
+        }
 
         // keep iterating
         if (type == LE_CFG_TYPE_STEM)
