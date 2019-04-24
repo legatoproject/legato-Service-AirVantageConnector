@@ -136,6 +136,12 @@
 //--------------------------------------------------------------------------------------------------
 #define WAKEUP_SMS_DECODED_DATA_BUF_SIZE    64
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Timestamp for 2000 January 1st
+ */
+//--------------------------------------------------------------------------------------------------
+#define DEFAULT_TIMESTAMP                   946684800
 
 #ifdef LE_CONFIG_SMS_SERVICE_ENABLED
 //--------------------------------------------------------------------------------------------------
@@ -1773,6 +1779,12 @@ static void InitPollingTimer
         // Current time, in seconds since Epoch.
         time_t currentTime = time(NULL);
 
+        if (currentTime < DEFAULT_TIMESTAMP)
+        {
+            LE_ERROR("Can't retrieve time");
+            return;
+        }
+
         // Time elapsed since last poll
         int32_t timeElapsed = 0;
 
@@ -1828,6 +1840,22 @@ static void InitPollingTimer
         {
             LE_FATAL("Setting polling timer failed with result %d %s", result, LE_RESULT_TXT(result));
         }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to initialize the polling timer
+ */
+//--------------------------------------------------------------------------------------------------
+void avcServer_InitPollingTimer
+(
+    void
+)
+{
+    if (!le_timer_IsRunning(PollingTimerRef))
+    {
+        InitPollingTimer();
     }
 }
 
@@ -2060,7 +2088,10 @@ static void ProcessUpdateStatus
 
         case LE_AVC_SESSION_STOPPED:
             avcClient_StopActivityTimer();
-            InitPollingTimer();
+            if (!le_timer_IsRunning(PollingTimerRef))
+            {
+                InitPollingTimer();
+            }
             // These events do not cause a state transition
 #if LE_CONFIG_ENABLE_AV_DATA
             avData_ReportSessionState(LE_AVDATA_SESSION_STOPPED);

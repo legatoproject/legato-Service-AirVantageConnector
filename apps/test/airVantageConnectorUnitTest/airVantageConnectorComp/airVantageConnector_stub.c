@@ -1160,3 +1160,20 @@ void le_sms_Delete
     return;
 }
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * This function must be called to register an handler for Network registration state change.
+ *
+ * @return A handler reference, which is only needed for later removal of the handler.
+ *
+ * @note Doesn't return on failure, so there's no need to check the return value for errors.
+ */
+//--------------------------------------------------------------------------------------------------
+le_mrc_NetRegStateEventHandlerRef_t le_mrc_AddNetRegStateEventHandler
+(
+    le_mrc_NetRegStateHandlerFunc_t handlerFuncPtr, ///< [IN] The handler function.
+    void*                           contextPtr      ///< [IN] The handler's context.
+)
+{
+    return NULL;
+}

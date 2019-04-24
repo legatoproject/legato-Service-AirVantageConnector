@@ -1165,6 +1165,23 @@ le_result_t avcClient_Connect
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Network registration state handler
+ */
+//--------------------------------------------------------------------------------------------------
+static void NetRegHandler
+(
+    le_mrc_NetRegState_t state,         ///< [IN] MRC state
+    void*                contextPtr     ///< [IN] Context
+)
+{
+    if ((LE_MRC_REG_HOME == state) || (LE_MRC_REG_ROAMING == state))
+    {
+        avcServer_InitPollingTimer();
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * LwM2M client entry point to close a connection.
  *
  * @return
@@ -1505,6 +1522,9 @@ void avcClient_Init
     ActivityTimerEventsPool = le_mem_InitStaticPool(ActivityTimerEventsPool,
                                                     ACTIVITY_TIMER_EVENTS_POOL_SIZE,
                                                     sizeof(bool));
+
+    // Register for network Service state changes
+    le_mrc_AddNetRegStateEventHandler(NetRegHandler, NULL);
 
     avcClient_UpdateInit();
     avcClient_DeviceInit();

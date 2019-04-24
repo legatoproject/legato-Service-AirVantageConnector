@@ -27,6 +27,7 @@ requires:
         modemServices/le_sms.api
         modemServices/le_sim.api
         modemServices/le_mdc.api
+        modemServices/le_mrc.api
         le_cellnet.api
     }
 

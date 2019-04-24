@@ -411,4 +411,13 @@ le_result_t avcServer_SetPollingTimerInSeconds
     uint32_t pollingTimeSecs ///< [IN] Polling timer interval, seconds
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to initialize the polling timer
+ */
+//--------------------------------------------------------------------------------------------------
+void avcServer_InitPollingTimer
+(
+    void
+);
 #endif // LEGATO_AVC_SERVER_INCLUDE_GUARD
