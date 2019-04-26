@@ -173,6 +173,9 @@ static downloaderResult_t ConvertResult
         case LE_COMM_ERROR:
             return DOWNLOADER_RECV_ERROR;
 
+        case LE_FORMAT_ERROR:
+            return DOWNLOADER_CERTIF_ERROR;
+
         default:
             return DOWNLOADER_ERROR;
     }
