@@ -101,6 +101,7 @@ lwm2mcore_Sid_t lwm2mcore_Base64Encode
 {
     BIO *bio, *b64;
     BUF_MEM *bufferPtr;
+    int res;
     lwm2mcore_Sid_t rc = LWM2MCORE_ERR_COMPLETED_OK;
 
     if (!dstLen || !src || !dst || (0 == srcLen))
@@ -115,9 +116,12 @@ lwm2mcore_Sid_t lwm2mcore_Base64Encode
 
     BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL); // Ignore newlines - write everything in one line
     BIO_write(bio, src, srcLen);
-    BIO_flush(bio);
+    res = BIO_flush(bio);
+    LE_WARN_IF(res != 1, "BIO_flush failed");
+
     BIO_get_mem_ptr(bio, &bufferPtr);
-    BIO_set_close(bio, BIO_NOCLOSE);
+    res = BIO_set_close(bio, BIO_NOCLOSE);
+    LE_WARN_IF(res != 1, "BIO_set_close failed");
 
     // Check if the output buffer can hold encoded string + '\0'
     if (*dstLen < strlen((*bufferPtr).data) + 1)
