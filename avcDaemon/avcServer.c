@@ -571,8 +571,16 @@ static bool IsUserSession = false;
 /**
  * Is update ready to install?
  */
-// ------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 static bool IsPkgReadyToInstall = false;
+
+// -------------------------------------------------------------------------------------------------
+/**
+ * Send install result notification to registered application
+ */
+// -------------------------------------------------------------------------------------------------
+static le_avc_Status_t   UpdateStatusNotification  = LE_AVC_NO_UPDATE;
+static bool              NotifyApplication = false;
 
 //--------------------------------------------------------------------------------------------------
 // Local functions
@@ -1991,7 +1999,10 @@ static void ProcessUpdateStatus
             }
             avcClient_StartActivityTimer();
             AvcErrorCode = data->errorCode;
-            break;
+            // Forward notifications unrelated to user agreement to interested applications
+            NotifyApplication = true;
+            UpdateStatusNotification = data->updateStatus;
+            return;
 
         case LE_AVC_NO_UPDATE:
             if (AVC_DOWNLOAD_PENDING != CurrentState)
@@ -2010,7 +2021,10 @@ static void ProcessUpdateStatus
             {
                 tpfServer_SetTpfState(false);
             }
-            break;
+            // Forward notifications unrelated to user agreement to interested applications
+            NotifyApplication = true;
+            UpdateStatusNotification = data->updateStatus;
+            return;
 
         case LE_AVC_SESSION_STARTED:
             if (PollingTimerRef != NULL)
@@ -3087,7 +3101,10 @@ le_avc_StatusEventHandlerRef_t le_avc_AddStatusEventHandler
     // Check if any notification needs to be sent to the application concerning
     // firmware update and application update.
     CheckNotificationToSend(handlerPtr, contextPtr);
-
+    if (NotifyApplication)
+    {
+        handlerPtr(UpdateStatusNotification, -1, -1, StatusHandlerContextPtr);
+    }
     return (le_avc_StatusEventHandlerRef_t)handlerRef;
 }
 
@@ -4623,7 +4640,6 @@ COMPONENT_INIT
 #if LE_CONFIG_SOTA
     avcApp_Init();
 #endif
-
     // Check if any notification needs to be sent to the application concerning
     // firmware update and application update
 #if LE_CONFIG_SOTA
