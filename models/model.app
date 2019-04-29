@@ -18,7 +18,6 @@
             <action impl="LWM2M_CONFIGURE_HEARTBEAT"/>
             <action impl="LWM2M_AIRPRIME_BUNDLE_INSTALL"/>
             <action impl="LWM2M_LEGATO_SYSTEM_UPDATE"/>
-            <action impl="LWM2M_LEGATO_WAKEUP" config="secure"/>
         </dm>
         <include>
             <file name="oma.cp"/>
