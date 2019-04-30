@@ -151,6 +151,20 @@ lwm2mcore_Sid_t lwm2mcore_GetLifetime
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Retrieve the module identity (IMEI)
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_GetDeviceImei
+(
+    char*   bufferPtr,  ///< [IN]    data buffer pointer
+    size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
+)
+{
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Function to know what is the current connection
  *
  */

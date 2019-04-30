@@ -13,7 +13,6 @@
 #undef LE_MDC_IPV6_ADDR_MAX_BYTES
 #undef LE_MDC_APN_NAME_MAX_BYTES
 #include "interfaces.h"
-#include "avcClient.h"
 
 //--------------------------------------------------------------------------------------------------
 // Symbol and Enum definitions
@@ -85,6 +84,13 @@ static uint16_t SignalBarsTable[SIGNAL_BARS_WITH_MAX][SIGNAL_BARS_RANGE] =
     {  125, 100,  95,  85,  75, 0 },    ///< RSSI (CDMA)
     {   63,  15,  13,  11,   9, 0 }     ///< ECIO (CDMA)
 };
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Static data connection state for agent.
+ */
+//--------------------------------------------------------------------------------------------------
+static bool DataConnected = false;
 
 //--------------------------------------------------------------------------------------------------
 // Static functions
@@ -751,7 +757,7 @@ static le_data_Technology_t GetConnectedTechnology
     void
 )
 {
-    return avcClient_IsDataConnected() ? le_data_GetTechnology() : LE_DATA_MAX;
+    return DataConnected ? le_data_GetTechnology() : LE_DATA_MAX;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -770,7 +776,7 @@ static le_data_Technology_t GetConnectedTechnology
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetNetworkBearer
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetNetworkBearer
 (
     lwm2mcore_networkBearer_enum_t* valuePtr    ///< [INOUT] data buffer
 )
@@ -839,7 +845,7 @@ lwm2mcore_Sid_t lwm2mcore_GetNetworkBearer
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
 (
     lwm2mcore_networkBearer_enum_t* bearersListPtr,     ///< [IN]    bearers list pointer
     uint16_t* bearersNbPtr                              ///< [INOUT] bearers number
@@ -944,7 +950,7 @@ lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetSignalStrength
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetSignalStrength
 (
     int32_t* valuePtr   ///< [INOUT] data buffer
 )
@@ -1062,7 +1068,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSignalStrength
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetLinkQuality
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetLinkQuality
 (
     int* valuePtr  ///< [INOUT] data buffer
 )
@@ -1189,7 +1195,7 @@ lwm2mcore_Sid_t lwm2mcore_GetLinkQuality
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetIpAddresses
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetIpAddresses
 (
     char ipAddrList[CONN_MONITOR_IP_ADDRESSES_MAX_NB][CONN_MONITOR_IP_ADDR_MAX_BYTES],
                             ///< [INOUT] IP addresses list
@@ -1245,7 +1251,7 @@ lwm2mcore_Sid_t lwm2mcore_GetIpAddresses
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetRouterIpAddresses
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRouterIpAddresses
 (
     char ipAddrList[CONN_MONITOR_ROUTER_IP_ADDRESSES_MAX_NB][CONN_MONITOR_IP_ADDR_MAX_BYTES],
                             ///< [INOUT] IP addresses list
@@ -1301,7 +1307,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRouterIpAddresses
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetLinkUtilization
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetLinkUtilization
 (
     uint8_t* valuePtr   ///< [INOUT] data buffer
 )
@@ -1330,7 +1336,7 @@ lwm2mcore_Sid_t lwm2mcore_GetLinkUtilization
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetAccessPointNames
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAccessPointNames
 (
     char apnList[CONN_MONITOR_APN_MAX_NB][CONN_MONITOR_APN_MAX_BYTES],  ///< [INOUT] APN list
     uint16_t* apnNbPtr                                                  ///< [INOUT] APN number
@@ -1384,7 +1390,7 @@ lwm2mcore_Sid_t lwm2mcore_GetAccessPointNames
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetCellId
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetCellId
 (
     uint32_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -1446,7 +1452,7 @@ lwm2mcore_Sid_t lwm2mcore_GetCellId
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetMncMcc
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetMncMcc
 (
     uint16_t* mncPtr,   ///< [INOUT] MNC buffer, NULL if not needed
     uint16_t* mccPtr    ///< [INOUT] MCC buffer, NULL if not needed
@@ -1518,7 +1524,7 @@ lwm2mcore_Sid_t lwm2mcore_GetMncMcc
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetSignalBars
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetSignalBars
 (
     uint8_t* valuePtr   ///< [INOUT] data buffer
 )
@@ -1569,7 +1575,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSignalBars
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
 (
     char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
@@ -1639,7 +1645,7 @@ lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetRoamingIndicator
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRoamingIndicator
 (
     uint8_t* valuePtr   ///< [INOUT] data buffer
 )
@@ -1717,7 +1723,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRoamingIndicator
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetEcIo
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetEcIo
 (
     int32_t* valuePtr   ///< [INOUT] data buffer
 )
@@ -1820,7 +1826,7 @@ lwm2mcore_Sid_t lwm2mcore_GetEcIo
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetRsrp
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRsrp
 (
     int32_t* valuePtr   ///< [INOUT] data buffer
 )
@@ -1913,7 +1919,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRsrp
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetRsrq
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRsrq
 (
     int32_t* valuePtr   ///< [INOUT] data buffer
 )
@@ -2005,7 +2011,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRsrq
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetRscp
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRscp
 (
     int32_t* valuePtr   ///< [INOUT] data buffer
 )
@@ -2104,7 +2110,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRscp
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetLac
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetLac
 (
     uint32_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -2166,7 +2172,7 @@ lwm2mcore_Sid_t lwm2mcore_GetLac
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetServingCellLteTracAreaCode
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetServingCellLteTracAreaCode
 (
     uint16_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -2228,7 +2234,7 @@ lwm2mcore_Sid_t lwm2mcore_GetServingCellLteTracAreaCode
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetSmsTxCount
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetSmsTxCount
 (
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -2266,7 +2272,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSmsTxCount
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetSmsRxCount
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetSmsRxCount
 (
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -2305,7 +2311,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSmsRxCount
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetTxData
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetTxData
 (
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -2369,7 +2375,7 @@ lwm2mcore_Sid_t lwm2mcore_GetTxData
  *      - LWM2MCORE_ERR_INVALID_STATE in case of invalid state to treat the resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetRxData
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRxData
 (
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -2431,7 +2437,7 @@ lwm2mcore_Sid_t lwm2mcore_GetRxData
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_StartConnectivityCounters
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_StartConnectivityCounters
 (
     void
 )
@@ -2465,7 +2471,7 @@ lwm2mcore_Sid_t lwm2mcore_StartConnectivityCounters
  *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_StopConnectivityCounters
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_StopConnectivityCounters
 (
     void
 )
@@ -2485,4 +2491,35 @@ lwm2mcore_Sid_t lwm2mcore_StopConnectivityCounters
     }
 
     return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Callback for the connection state.
+ */
+//--------------------------------------------------------------------------------------------------
+static void DataConnectionStateHandler
+(
+    const char* intfNamePtr,    ///< [IN] Interface name.
+    bool connected,             ///< [IN] connection state (true = connected, else false).
+    void* contextPtr            ///< [IN] User data.
+)
+{
+    LE_UNUSED(intfNamePtr);
+    LE_UNUSED(contextPtr);
+
+    DataConnected = connected;
+}
+
+
+COMPONENT_INIT
+{
+    LE_INFO("start dm component");
+
+    // Initialize the bearer and register for data connection status.
+    // We wont be requesting a data connection in this component, but we need to know
+    // if data connection is established.
+    le_data_ConnectService();
+
+    le_data_AddConnectionStateHandler(DataConnectionStateHandler, NULL);
 }

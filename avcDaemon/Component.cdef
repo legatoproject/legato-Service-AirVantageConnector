@@ -18,21 +18,14 @@ requires:
         le_appCtrl.api
         le_cfg.api
         le_data.api
-        le_ulpm.api
-        modemServices/le_info.api
-        modemServices/le_ips.api
-        modemServices/le_mdc.api
-        modemServices/le_mrc.api
-        modemServices/le_sim.api
-        modemServices/le_sms.api
-        modemServices/le_temp.api
-        positioning/le_gnss.api
-        positioning/le_pos.api
         le_appInfo.api
         le_fwupdate.api
         le_update.api
         le_framework.api
         le_secStore.api
+        modemServices/le_sms.api
+        modemServices/le_sim.api
+        modemServices/le_mdc.api
         le_cellnet.api
     }
 
@@ -79,15 +72,15 @@ sources:
 
     // AVC
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/avcClient.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortConnectivity.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortDevice.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortLocation.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortSecurityOpenSSL.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortCredentials.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortCredentialsCommon.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortServer.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortUpdate.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortParamStorage.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortSim.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortAction.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortTime.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcAppUpdate/avcAppUpdate.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/sslLayOutPEM.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/sslCheckCertificate.c
@@ -103,7 +96,6 @@ sources:
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osUdp.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osSem.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/os/legato/osMutex.c
-
 }
 
 cflags:

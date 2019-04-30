@@ -20,7 +20,6 @@
 #endif
 #include "avcServer.h"
 #include "avcSim.h"
-#include "sessionManager.h"
 
 #ifdef LE_CONFIG_CUSTOM_OS
 #include "version.h"
@@ -28,7 +27,6 @@
 #endif
 
 #include "avcClient.h"
-#include <lwm2mcore/lwm2mcore.h>
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -149,29 +147,6 @@
 //--------------------------------------------------------------------------------------------------
 #define SPACE " "
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Default timer value for reboot request
- */
-//--------------------------------------------------------------------------------------------------
-#define DEFAULT_REBOOT_TIMER  2
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Config tree root directory and node paths for clock time configurations
- * Note: These 2 defines are temporary. After the new Legato Clock Service interface le_clkSync is
- * added, these defines will be there in le_clkSync.api and these ones can be removed.
- */
-//--------------------------------------------------------------------------------------------------
-#define LE_CLKSYNC_CONFIG_TREE_ROOT_SOURCE          "clockTime:/source"
-#define LE_CLKSYNC_CONFIG_NODE_SOURCE_AVC_TIMESTAMP "timeStamp"
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Timer to treat platform reboot
- */
-//--------------------------------------------------------------------------------------------------
-static le_timer_Ref_t TreatRebootTimer;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -240,6 +215,7 @@ static size_t GetModemVersion
 }
 
 #ifndef LE_CONFIG_CUSTOM_OS
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Attempt to read the LK version string from the file system.
@@ -259,16 +235,7 @@ static size_t GetLkVersion
 
     if (NULL != versionBufferPtr)
     {
-        /* If the download is in progress (le_fwupdate_Download() hasn't returned yet),
-         * any other le_fwupdate_*() API will be blocked. Avoid calling it during this time.
-         */
-        if (avcServer_IsDownloadInProgress())
-        {
-            LE_ERROR("Can't get LK version, download is in progress; using cached '%s'",
-                     LkVersionCache);
-            returnedLen = snprintf(versionBufferPtr, len, "%s", LkVersionCache);
-        }
-        else if (LE_OK != le_fwupdate_GetAppBootloaderVersion(versionBufferPtr, len))
+        if (LE_OK != le_fwupdate_GetAppBootloaderVersion(versionBufferPtr, len))
         {
             returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
@@ -642,57 +609,6 @@ static size_t GetMcuVersion
 }
 #endif
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Launch device reboot.
- */
-//--------------------------------------------------------------------------------------------------
-static void LaunchReboot
-(
-    void
-)
-{
-    // Sync file systems before rebooting
-    sync();
-    // Reboot the system
-    reboot(RB_AUTOBOOT);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Launch the timer to treat the platform reboot request
- *
- * @return
- *      - LE_OK on success
- *      - LE_FAULT on failure
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t LaunchRebootRequestTimer
-(
-    void
-)
-{
-    le_clk_Time_t interval = { .sec = DEFAULT_REBOOT_TIMER };
-    if ((LE_OK == le_timer_SetInterval(TreatRebootTimer, interval))
-     && (LE_OK == le_timer_Start(TreatRebootTimer)))
-    {
-        return LE_OK;
-    }
-    return LE_FAULT;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Called when the timer for platform reboot expires
- */
-//--------------------------------------------------------------------------------------------------
-static void TreatRebootExpiryHandler
-(
-    le_timer_Ref_t timerRef    ///< Timer that expired
-)
-{
-    avcServer_QueryReboot(LaunchReboot);
-}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -706,7 +622,7 @@ static void TreatRebootExpiryHandler
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetDeviceManufacturer
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceManufacturer
 (
     char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
@@ -754,7 +670,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceManufacturer
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetDeviceModelNumber
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceModelNumber
 (
     char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
@@ -802,7 +718,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceModelNumber
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetDeviceSerialNumber
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceSerialNumber
 (
     char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
@@ -850,7 +766,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceSerialNumber
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
 (
     char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
@@ -932,7 +848,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetBatteryLevel
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetBatteryLevel
 (
     uint8_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -979,7 +895,7 @@ lwm2mcore_Sid_t lwm2mcore_GetBatteryLevel
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetDeviceCurrentTime
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceCurrentTime
 (
     uint64_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -1005,47 +921,6 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceCurrentTime
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Initiate the setting of the device time (UNIX time in seconds) to the given clock time by
- * archiving this input time and registering a post LWM2M request processing handler so that
- * after a response is sent out over for this device clock setting request, then the actual clock
- * change execution thru this handler can be carried out. This is because if this execution isn't
- * carried out in this chronological arrangement, the sudden clock change will fail the sending
- * out of the response, e.g. over DTLS, and the subsequent outstanding LWM2M jobs on its queue.
- * In another word, the response has to go out 1st before the clock change happens.
- *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_SetDeviceCurrentTime
-(
-    uint64_t inputTime  ///< [IN] Current clock time given
-)
-{
-    LE_DEBUG("input time %ld", (long)inputTime);
-
-    if (!lwm2mcore_AddPostRequestHandler(lwm2mcore_UpdateSystemClock))
-    {
-        LE_ERROR("Failed to initiate clock time update");
-        return LWM2MCORE_ERR_GENERAL_ERROR;
-    }
-
-    // Save inputTime onto config tree to make this given value persistent across system restart
-    // in case it is needed as a last resort system clock time. This can happen to a device
-    // after a restart & its total failure to get any more up-to-date clock so that its system
-    // clock has to restart from 1970/1/1 again. Then this last archived clock time provided by
-    // an AV server is still relatively more up-to-date for use.
-    le_cfg_IteratorRef_t cfg;
-    cfg = le_cfg_CreateWriteTxn(LE_CLKSYNC_CONFIG_TREE_ROOT_SOURCE);
-    le_cfg_SetInt(cfg, LE_CLKSYNC_CONFIG_NODE_SOURCE_AVC_TIMESTAMP, inputTime);
-    le_cfg_CommitTxn(cfg);
-
-    return LWM2MCORE_ERR_COMPLETED_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
  * Retrieve the module identity (IMEI)
  * This API needs to have a procedural treatment
  *
@@ -1056,7 +931,7 @@ lwm2mcore_Sid_t lwm2mcore_SetDeviceCurrentTime
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetDeviceImei
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceImei
 (
     char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
@@ -1118,7 +993,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceImei
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetIccid
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetIccid
 (
     char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
@@ -1179,133 +1054,6 @@ lwm2mcore_Sid_t lwm2mcore_GetIccid
     return sID;
 }
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Retrieve the currently used SIM card
- * This API needs to have a procedural treatment
- *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetCurrentSimCard
-(
-    uint8_t*   currentSimPtr  ///< [OUT]    Currently used SIM card
-)
-{
-    if (!currentSimPtr)
-    {
-        return LWM2MCORE_ERR_INVALID_ARG;
-    }
-
-    *currentSimPtr = GetCurrentSimCard();
-    LE_DEBUG("lwm2mcore_GetCurrentSimCard: %d", *currentSimPtr);
-
-    return LWM2MCORE_ERR_COMPLETED_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Set SIM mode
- * This API needs to have a procedural treatment
- *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
- *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_SetSimMode
-(
-    char*   bufferPtr,  ///< [IN]    data buffer pointer
-    size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
-)
-{
-    char* savePtr = NULL;
-    char* token = NULL;
-    SimMode_t mode = MODE_MAX;
-
-    if ((!bufferPtr) || (!lenPtr))
-    {
-        return LWM2MCORE_ERR_INVALID_ARG;
-    }
-
-    // Received parameter format is: ['1'='x']. So, extract the value of x from the string.
-    if (NULL != strtok_r(bufferPtr, "=", &savePtr))
-    {
-        token = strtok_r(NULL, "'", &savePtr);
-        if (token)
-        {
-            mode = atoi(token);
-        }
-    }
-
-    if ((mode >= MODE_MAX) || (mode <= MODE_IN_PROGRESS))
-    {
-        LE_ERROR("Invalid mode: %d", mode);
-        return LWM2MCORE_ERR_INVALID_ARG;
-    }
-
-    SimModeInit();
-    SetSimMode(mode);
-
-    LE_DEBUG("lwm2mcore_SetSimMode: %x", mode);
-
-    return LWM2MCORE_ERR_COMPLETED_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Retrieve the current SIM mode
- * This API needs to have a procedural treatment
- *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetCurrentSimMode
-(
-    uint8_t*   simModePtr  ///< [OUT]    SIM mode pointer
-)
-{
-    if (!simModePtr)
-    {
-        return LWM2MCORE_ERR_INVALID_ARG;
-    }
-
-    *simModePtr = GetCurrentSimMode();
-    LE_DEBUG("lwm2mcore_GetCurrentSimMode: %d", *simModePtr);
-
-    return LWM2MCORE_ERR_COMPLETED_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Retrieve the last SIM switch procedure status
- * This API needs to have a procedural treatment
- *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetLastSimSwitchStatus
-(
-    uint8_t*   switchStatusPtr  ///< [OUT]    SIM switch status
-)
-{
-    if (!switchStatusPtr)
-    {
-        return LWM2MCORE_ERR_INVALID_ARG;
-    }
-
-    *switchStatusPtr = GetLastSimSwitchStatus();
-    LE_DEBUG("lwm2mcore_GetLastSimSwitchStatus: %d", *switchStatusPtr);
-
-    return LWM2MCORE_ERR_COMPLETED_OK;
-}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1320,7 +1068,7 @@ lwm2mcore_Sid_t lwm2mcore_GetLastSimSwitchStatus
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetSubscriptionIdentity
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetSubscriptionIdentity
 (
     char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
@@ -1477,7 +1225,7 @@ lwm2mcore_Sid_t lwm2mcore_GetSubscriptionIdentity
  *      - LWM2MCORE_ERR_OVERFLOW in case of buffer overflow
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetMsisdn
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetMsisdn
 (
     char*   bufferPtr,  ///< [IN]    data buffer pointer
     size_t* lenPtr      ///< [INOUT] length of input buffer and length of the returned data
@@ -1549,7 +1297,7 @@ lwm2mcore_Sid_t lwm2mcore_GetMsisdn
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetDeviceTemperature
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceTemperature
 (
     int32_t* valuePtr   ///< [INOUT] data buffer
 )
@@ -1611,7 +1359,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceTemperature
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetDeviceUnexpectedResets
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceUnexpectedResets
 (
     uint32_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -1651,7 +1399,7 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceUnexpectedResets
  *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
  */
 //--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_GetDeviceTotalResets
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceTotalResets
 (
     uint32_t* valuePtr  ///< [INOUT] data buffer
 )
@@ -1682,49 +1430,4 @@ lwm2mcore_Sid_t lwm2mcore_GetDeviceTotalResets
     *valuePtr = (uint32_t)(expected + unexpected);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Request to reboot the device
- * This API needs to have a procedural treatment
- *
- * @warning The client MUST acknowledge this function before treating the reboot request, in order
- * to allow LwM2MCore to acknowledge the LwM2M server that the reboot request is correctly taken
- * into account.
- * Advice: launch a timer (value could be decided by the client implementation) in order to treat
- * the reboot request.
- *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
- */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_RebootDevice
-(
-    void
-)
-{
-    // Launch timer as requested by LwM2MCore
-    if (LE_OK == LaunchRebootRequestTimer())
-    {
-        return LWM2MCORE_ERR_COMPLETED_OK;
-    }
-    return LWM2MCORE_ERR_GENERAL_ERROR;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Initialize the AVC device client sub-component.
- *
- * @note This function should be called during the initializaion phase of the AVC daemon.
- */
-//--------------------------------------------------------------------------------------------------
-void avcClient_DeviceInit
-(
-   void
-)
-{
-    TreatRebootTimer = le_timer_Create("launch timer for reboot");
-    le_timer_SetHandler(TreatRebootTimer, TreatRebootExpiryHandler);
 }

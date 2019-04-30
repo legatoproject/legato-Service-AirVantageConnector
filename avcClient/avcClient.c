@@ -13,6 +13,7 @@
 #include <lwm2mcore/lwm2mcore.h>
 #include <lwm2mcore/timer.h>
 #include <lwm2mcore/security.h>
+#include <lwm2mcore/device.h>
 
 #include "legato.h"
 #include "interfaces.h"
@@ -312,13 +313,15 @@ static void BearerEventCb
     if (connected)
     {
         char endpointPtr[LWM2MCORE_ENDPOINT_LEN] = {0};
+        size_t endpointLength = LWM2MCORE_ENDPOINT_LEN;
 
         // Register objects to LwM2M and set the device endpoint:
         // - Endpoint shall be unique for each client: IMEI/ESN/MEID.
         // - The number of objects we will be passing through and the objects array.
 
         // Get the device endpoint: IMEI.
-        if (LE_OK != le_info_GetImei((char*)endpointPtr, (uint32_t) LWM2MCORE_ENDPOINT_LEN))
+        if (LWM2MCORE_ERR_COMPLETED_OK !=
+                lwm2mcore_GetDeviceImei((char*)endpointPtr, &endpointLength))
         {
             LE_ERROR("Error to retrieve the device IMEI");
             return;
@@ -364,13 +367,15 @@ static void TpfBearerEventCb
     if (connected)
     {
         char endpointPtr[LWM2MCORE_ENDPOINT_LEN] = {0};
+        size_t endpointLength = LWM2MCORE_ENDPOINT_LEN;
         uint16_t nbrObject = 0;
         // Register objects to LwM2M and set the device endpoint:
         // - Endpoint shall be unique for each client: IMEI/ESN/MEID.
         // - The number of objects we will be passing through and the objects array.
 
         // Get the device endpoint: IMEI.
-        if (LE_OK != le_info_GetImei((char*)endpointPtr, (uint32_t)LWM2MCORE_ENDPOINT_LEN))
+        if (LWM2MCORE_ERR_COMPLETED_OK !=
+                lwm2mcore_GetDeviceImei((char*)endpointPtr, &endpointLength))
         {
             LE_ERROR("Error to retrieve the device IMEI");
             return;
@@ -1440,20 +1445,6 @@ void avcClient_ResetRetryTimer
     ResetRetryTimers();
 }
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Get the data connection state.
- *
- * @return true if connected.
- */
-//--------------------------------------------------------------------------------------------------
-bool avcClient_IsDataConnected
-(
-    void
-)
-{
-    return DataConnected;
-}
 
 //--------------------------------------------------------------------------------------------------
 /**

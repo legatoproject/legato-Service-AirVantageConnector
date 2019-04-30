@@ -6,7 +6,7 @@ sandboxed: false
 
 executables:
 {
-    avcDaemon = (avcDaemon)
+    avcDaemon = (avcDaemon deviceManagement)
 }
 
 bundles:
@@ -64,25 +64,34 @@ requires:
 
 bindings:
 {
+    // avcDaemon dependencies
     avcDaemon.avcDaemon.le_instStat -> <root>.le_instStat
     avcDaemon.avcDaemon.le_appCtrl -> <root>.le_appCtrl
     avcDaemon.avcDaemon.le_appRemove -> <root>.le_appRemove
     avcDaemon.avcDaemon.le_appInfo -> <root>.le_appInfo
     avcDaemon.avcDaemon.le_framework -> <root>.le_framework
     avcDaemon.avcDaemon.le_update -> <root>.le_update
-    avcDaemon.avcDaemon.le_ulpm -> powerMgr.le_ulpm
     avcDaemon.avcDaemon.le_data -> dataConnectionService.le_data
     avcDaemon.avcDaemon.le_fwupdate -> fwupdateService.le_fwupdate
-    avcDaemon.avcDaemon.le_info -> modemService.le_info
-    avcDaemon.avcDaemon.le_ips  -> modemService.le_ips
-    avcDaemon.avcDaemon.le_mdc  -> modemService.le_mdc
-    avcDaemon.avcDaemon.le_mrc  -> modemService.le_mrc
-    avcDaemon.avcDaemon.le_sim  -> modemService.le_sim
-    avcDaemon.avcDaemon.le_sms  -> modemService.le_sms
-    avcDaemon.avcDaemon.le_temp -> modemService.le_temp
-    avcDaemon.avcDaemon.le_pos -> positioningService.le_pos
-    avcDaemon.avcDaemon.le_gnss -> positioningService.le_gnss
     avcDaemon.avcDaemon.le_secStore -> secStore.le_secStore
-    avcDaemon.watchdogChain.le_wdog -> <root>.le_wdog
+    avcDaemon.avcDaemon.le_sms  -> modemService.le_sms
+    avcDaemon.avcDaemon.le_sim  -> modemService.le_sim
+    avcDaemon.avcDaemon.le_mdc  -> modemService.le_mdc
     avcDaemon.avcDaemon.le_cellnet -> cellNetService.le_cellnet
+    avcDaemon.watchdogChain.le_wdog -> <root>.le_wdog
+
+    // Device management bindings
+    avcDaemon.deviceManagement.le_ulpm -> powerMgr.le_ulpm
+    avcDaemon.deviceManagement.le_data -> dataConnectionService.le_data
+    avcDaemon.deviceManagement.le_info -> modemService.le_info
+    avcDaemon.deviceManagement.le_ips  -> modemService.le_ips
+    avcDaemon.deviceManagement.le_mdc  -> modemService.le_mdc
+    avcDaemon.deviceManagement.le_mrc  -> modemService.le_mrc
+    avcDaemon.deviceManagement.le_sim  -> modemService.le_sim
+    avcDaemon.deviceManagement.le_sms  -> modemService.le_sms
+    avcDaemon.deviceManagement.le_temp -> modemService.le_temp
+    avcDaemon.deviceManagement.le_pos -> positioningService.le_pos
+    avcDaemon.deviceManagement.le_gnss -> positioningService.le_gnss
+    avcDaemon.deviceManagement.le_cellnet -> cellNetService.le_cellnet
+    avcDaemon.deviceManagement.le_fwupdate -> fwupdateService.le_fwupdate
 }
