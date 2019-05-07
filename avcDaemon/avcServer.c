@@ -2135,7 +2135,10 @@ static void ProcessUpdateStatus
 
         case LE_AVC_CERTIFICATION_OK:
             LE_DEBUG("Package certified");
-            tpfServer_GetTpfState(&state);
+            if(LE_OK != tpfServer_GetTpfState(&state))
+            {
+                LE_ERROR("fail to get sate of third party fota");
+            }
             if(!state)
             {
                 // Query connection to server if module reboot
