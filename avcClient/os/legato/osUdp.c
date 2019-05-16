@@ -21,6 +21,9 @@
 #   include <netdb.h>
 #   include <resolv.h>
 #endif
+#ifdef LE_CONFIG_CUSTOM_OS
+#   include "gai_stubs.h"
+#endif
 
 #include <lwm2mcore/lwm2mcore.h>
 #include <lwm2mcore/udp.h>
@@ -137,6 +140,7 @@ static int CreateSocket
     struct addrinfo hints;
     struct addrinfo *res;
     struct addrinfo *p;
+    int enable = 1;
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = config.af;
@@ -154,6 +158,13 @@ static int CreateSocket
         s = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
         if (s >= 0)
         {
+            if(-1 == setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)))
+            {
+                close(s);
+                s = - 1;
+                continue;
+            }
+
             if (-1 == bind(s, p->ai_addr, p->ai_addrlen))
             {
                 close(s);
@@ -316,31 +327,29 @@ bool lwm2mcore_UdpOpen
     SocketConfig.type = LWM2MCORE_SOCK_TYPE_MAX;
     SocketConfig.proto = LWM2MCORE_SOCK_UDP;
     SocketConfig.sock = CreateSocket(LOCAL_PORT, SocketConfig);
-    LE_DEBUG ("sock %d", SocketConfig.sock);
+    LE_DEBUG("sock %d", SocketConfig.sock);
     memcpy (configPtr, &SocketConfig, sizeof (lwm2mcore_SocketConfig_t));
 
     if (SocketConfig.sock < 0)
     {
-        LE_FATAL ("Failed to open socket: %d %s.", errno, LE_ERRNO_TXT(errno));
+        LE_ERROR("Failed to open socket: %d %s.", errno, LE_ERRNO_TXT(errno));
+        return false;
     }
-    else
+
+    Lwm2mMonitorRef = le_fdMonitor_Create ("LWM2M Client",
+                                            SocketConfig.sock,
+                                            Lwm2mClientReceive,
+                                            POLLIN);
+    LE_DEBUG("Opened lwm2m UDP socket %d with FD monitor %p", SocketConfig.sock, Lwm2mMonitorRef);
+
+    if (Lwm2mMonitorRef != NULL)
     {
-        Lwm2mMonitorRef = le_fdMonitor_Create ("LWM2M Client",
-                                                SocketConfig.sock,
-                                                Lwm2mClientReceive,
-                                                POLLIN);
-        LE_DEBUG("Opened lwm2m UDP socket %d with FD monitor %p", SocketConfig.sock,
-            Lwm2mMonitorRef);
-
-        if (Lwm2mMonitorRef != NULL)
-        {
-            result = true;
-            // Register the callback
-            udpCb = callback;
-        }
+        result = true;
+        // Register the callback
+        udpCb = callback;
     }
 
-    LE_DEBUG ("lwm2mcore_UdpOpen %d", result);
+    LE_DEBUG("lwm2mcore_UdpOpen %d", result);
     return result;
 }
 
@@ -440,6 +449,7 @@ bool lwm2mcore_UdpConnect
         struct addrinfo* servinfoPtr = NULL;
         struct addrinfo* p;
         int sockfd;
+        int enable = 1;
 
         // Add the route if the default route is not set by the data connection service
         if (!le_data_GetDefaultRouteStatus())
@@ -471,6 +481,13 @@ bool lwm2mcore_UdpConnect
             {
                 *slPtr = p->ai_addrlen;
                 memcpy(saPtr, p->ai_addr, p->ai_addrlen);
+
+                if(-1 == setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)))
+                {
+                    close(sockfd);
+                    sockfd = - 1;
+                    continue;
+                }
 
                 if (-1 == connect(sockfd, p->ai_addr, p->ai_addrlen))
                 {
