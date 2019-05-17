@@ -22,8 +22,8 @@
  * Maximum buffer allocated for all push operations.
  */
 //--------------------------------------------------------------------------------------------------
-#define MAX_PUSH_BUFFER_BYTES (MAX_PUSH_QUEUE*AVDATA_PUSH_BUFFER_BYTES)
-
+#define MAX_PUSH_BUFFER_BYTES ((AVDATA_PUSH_BUFFER_BYTES) > (AVDATA_PUSH_STREAM_BYTES) ? \
+            (AVDATA_PUSH_BUFFER_BYTES) : (AVDATA_PUSH_STREAM_BYTES))
 
 //--------------------------------------------------------------------------------------------------
 /**
