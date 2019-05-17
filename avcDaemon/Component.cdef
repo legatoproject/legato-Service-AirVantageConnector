@@ -132,6 +132,7 @@ cflags:
     -fvisibility=default
     -DAVDATA_READ_BUFFER_BYTES=4096
     -DAVDATA_PUSH_BUFFER_BYTES=4096
+    -DAVDATA_PUSH_STREAM_BYTES=20000
 }
 
 ldflags:

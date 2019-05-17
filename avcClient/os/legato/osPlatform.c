@@ -24,7 +24,12 @@
  * Largest block of memory that can be allocated by LWM2M
  */
 //--------------------------------------------------------------------------------------------------
+#if LE_CONFIG_ENABLE_AV_DATA
+#define LWM2M_MEM_MAX ((AVDATA_PUSH_BUFFER_BYTES) > (AVDATA_PUSH_STREAM_BYTES) ? \
+            (AVDATA_PUSH_BUFFER_BYTES) : (AVDATA_PUSH_STREAM_BYTES))
+#else
 #define LWM2M_MEM_MAX   1100
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
