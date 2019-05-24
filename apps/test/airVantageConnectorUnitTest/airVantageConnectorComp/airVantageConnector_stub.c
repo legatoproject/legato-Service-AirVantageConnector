@@ -896,6 +896,26 @@ le_result_t le_data_GetTime
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Get the date and time from the configured server using the configured time protocol.
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_data_GetDateTime
+(
+    uint16_t* yearPtr,          ///< [OUT] UTC Year A.D. [e.g. 2017].
+    uint16_t* monthPtr,         ///< [OUT] UTC Month into the year [range 1...12].
+    uint16_t* dayPtr,           ///< [OUT] UTC Days into the month [range 1...31].
+    uint16_t* hoursPtr,         ///< [OUT] UTC Hours into the day [range 0..23].
+    uint16_t* minutesPtr,       ///< [OUT] UTC Minutes into the hour [range 0..59].
+    uint16_t* secondsPtr,       ///< [OUT] UTC Seconds into the minute [range 0..59].
+    uint16_t* millisecondsPtr   ///< [OUT] UTC Milliseconds into the second [range 0..999].
+)
+{
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Release a previously requested data connection
  */
 //--------------------------------------------------------------------------------------------------

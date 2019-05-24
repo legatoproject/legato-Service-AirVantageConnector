@@ -275,8 +275,8 @@ static void CheckDateTimeValidity
         uint16_t year, month, day, hour, minute, second, millisecond;
 
         // Retrieve the date and time from a server.
-        if ((LE_OK != le_data_GetDate(&year, &month, &day))
-            || (LE_OK != le_data_GetTime(&hour, &minute, &second, &millisecond)))
+        if (LE_OK != le_data_GetDateTime(&year, &month, &day,
+                                         &hour, &minute, &second, &millisecond))
         {
             LE_ERROR("Unable to retrieve date or time from server");
             return;
