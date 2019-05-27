@@ -1177,3 +1177,27 @@ le_mrc_NetRegStateEventHandlerRef_t le_mrc_AddNetRegStateEventHandler
 {
     return NULL;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Return the downloaded update package write position.
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_BAD_PARAMETER Invalid parameter
+ *      - LE_FAULT on failure
+ */;
+//--------------------------------------------------------------------------------------------------
+le_result_t le_fwupdate_GetResumePosition
+(
+    size_t *positionPtr     ///< [OUT] Update package read position
+)
+{
+    LE_DEBUG("Stub");
+    if (!positionPtr)
+    {
+        return LE_BAD_PARAMETER;
+    }
+    *positionPtr = 0;
+    return LE_OK;
+}

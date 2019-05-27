@@ -402,6 +402,20 @@ static void TpfBearerEventCb
             LE_DEBUG("Package adress : %s",buffer);
             LE_DEBUG("URL length : %zd",bufferLen);
 
+            // Check if TPF download should be resumed
+            size_t offset = 0;
+            if (LE_OK != le_fwupdate_GetResumePosition(&offset))
+            {
+                offset = 0;
+            }
+
+            if (offset)
+            {
+                LE_INFO("Resume TPF download at offset: %zu", offset);
+                lwm2mcore_ResumePackageDownloader(LWM2MCORE_FW_UPDATE_TYPE);
+                return;
+            }
+
             // Define the URI
             uri.oid = FW_UPDATE_OBJECT_ID;   //object 5
             uri.oiid = FW_UPDATE_OBJECT_INSTANCE_ID;  // only one ressource
