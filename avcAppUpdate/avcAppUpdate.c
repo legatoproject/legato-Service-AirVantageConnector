@@ -592,12 +592,13 @@ static assetData_InstanceDataRef_t GetObject9InstanceForApp
 {
     // Attempt to read the mapping from the configuration.
     assetData_InstanceDataRef_t instanceRef = NULL;
+    int instanceId = -1;
 #if LE_CONFIG_ENABLE_CONFIG_TREE
     LE_DEBUG("Getting object 9 instance for application '%s'.", appNamePtr);
     le_cfg_IteratorRef_t iterRef = le_cfg_CreateReadTxn(CFG_OBJECT_INFO_PATH);
 
     le_cfg_GoToNode(iterRef, appNamePtr);
-    int instanceId = le_cfg_GetInt(iterRef, "oiid", -1);
+    instanceId = le_cfg_GetInt(iterRef, "oiid", -1);
     le_cfg_CancelTxn(iterRef);
 #endif
     if (instanceId != -1)
