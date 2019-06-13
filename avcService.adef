@@ -104,6 +104,7 @@ bindings:
     avcDaemon.avcDaemon.le_mrc  -> modemService.le_mrc
 
     avcDaemon.httpClientLibrary.le_mdc  -> modemService.le_mdc
+    avcDaemon.socketLibrary.le_mdc      -> modemService.le_mdc
 
     // Device management bindings
     avcDaemon.deviceManagement.le_data -> dataConnectionService.le_data
