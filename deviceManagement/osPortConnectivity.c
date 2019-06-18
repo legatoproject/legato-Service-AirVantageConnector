@@ -853,13 +853,37 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
 {
     lwm2mcore_Sid_t sID;
     le_data_Technology_t technology;
+    uint16_t maxBearersNb;
 
     if ((!bearersListPtr) || (!bearersNbPtr))
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
+    // Conversion table
+    lwm2mcore_networkBearer_enum_t bearerConversion[] =
+    {
+        [LE_MRC_BITMASK_RAT_GSM]     = LWM2MCORE_NETWORK_BEARER_GSM,
+        [LE_MRC_BITMASK_RAT_UMTS]    = LWM2MCORE_NETWORK_BEARER_WCDMA,
+        [LE_MRC_BITMASK_RAT_TDSCDMA] = LWM2MCORE_NETWORK_BEARER_TD_SCDMA,
+        [LE_MRC_BITMASK_RAT_LTE]     = LWM2MCORE_NETWORK_BEARER_LTE_FDD,
+        [LE_MRC_BITMASK_RAT_CDMA]    = LWM2MCORE_NETWORK_BEARER_CDMA2000,
+        [LE_MRC_BITMASK_RAT_CATM1]   = LWM2MCORE_NETWORK_BEARER_LTE_FDD,
+        [LE_MRC_BITMASK_RAT_NB1]     = LWM2MCORE_NETWORK_BEARER_NB_IOT
+    };
+
+    for (uint32_t i = 0; i < NUM_ARRAY_MEMBERS(bearerConversion); ++i)
+    {
+        if ((i != LE_MRC_BITMASK_RAT_GSM) && (i != LE_MRC_BITMASK_RAT_UMTS) &&
+                (i != LE_MRC_BITMASK_RAT_TDSCDMA) && (i != LE_MRC_BITMASK_RAT_LTE) &&
+                (i != LE_MRC_BITMASK_RAT_CDMA) && (i != LE_MRC_BITMASK_RAT_CATM1) &&
+                (i != LE_MRC_BITMASK_RAT_NB1))
+        {
+            bearerConversion[i] = 0;
+        }
+    }
     technology = le_data_GetFirstUsedTechnology();
+    maxBearersNb = *bearersNbPtr;
     *bearersNbPtr = 0;
 
     do
@@ -870,54 +894,48 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
             {
                 // Use the supported network bearers for now, to remove when asynchronous
                 // response is supported
-                le_mrc_RatBitMask_t ratBitMask = 0;
+                le_mrc_RatBitMask_t ratBitMask = 0, i = LE_MRC_BITMASK_RAT_GSM;
 
                 if (LE_OK != le_mrc_GetRatPreferences(&ratBitMask))
                 {
                     return LWM2MCORE_ERR_GENERAL_ERROR;
                 }
 
-                if (LE_MRC_BITMASK_RAT_ALL == ratBitMask)
+                do
                 {
-                    *(bearersListPtr + (*bearersNbPtr)) = LWM2MCORE_NETWORK_BEARER_GSM;
-                    (*bearersNbPtr)++;
-                    *(bearersListPtr + (*bearersNbPtr)) = LWM2MCORE_NETWORK_BEARER_WCDMA;
-                    (*bearersNbPtr)++;
-                    *(bearersListPtr + (*bearersNbPtr)) = LWM2MCORE_NETWORK_BEARER_LTE_FDD;
-                    (*bearersNbPtr)++;
-                    *(bearersListPtr + (*bearersNbPtr)) = LWM2MCORE_NETWORK_BEARER_CDMA2000;
-                    (*bearersNbPtr)++;
+                    if ((LE_MRC_BITMASK_RAT_ALL == ratBitMask) || (ratBitMask & i))
+                    {
+                        if ((*bearersNbPtr) < maxBearersNb)
+                        {
+                            bearersListPtr[*bearersNbPtr] = bearerConversion[i];
+                            (*bearersNbPtr)++;
+                        }
+                        else
+                        {
+                            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+                            goto end;
+                        }
+                    }
+                    i = i << 1;
                 }
-                else
-                {
-                    if (ratBitMask & LE_MRC_BITMASK_RAT_GSM)
-                    {
-                        *(bearersListPtr + (*bearersNbPtr)) = LWM2MCORE_NETWORK_BEARER_GSM;
-                        (*bearersNbPtr)++;
-                    }
-                    if (ratBitMask & LE_MRC_BITMASK_RAT_UMTS)
-                    {
-                        *(bearersListPtr + (*bearersNbPtr)) = LWM2MCORE_NETWORK_BEARER_WCDMA;
-                        (*bearersNbPtr)++;
-                    }
-                    if (ratBitMask & LE_MRC_BITMASK_RAT_LTE)
-                    {
-                        *(bearersListPtr + (*bearersNbPtr)) = LWM2MCORE_NETWORK_BEARER_LTE_FDD;
-                        (*bearersNbPtr)++;
-                    }
-                    if (ratBitMask & LE_MRC_BITMASK_RAT_CDMA)
-                    {
-                        *(bearersListPtr + (*bearersNbPtr)) = LWM2MCORE_NETWORK_BEARER_CDMA2000;
-                        (*bearersNbPtr)++;
-                    }
-                }
+                while (i < LE_MRC_BITMASK_RAT_ALL);
+
                 sID = LWM2MCORE_ERR_COMPLETED_OK;
             }
             break;
 
             case LE_DATA_WIFI:
-                *(bearersListPtr + (*bearersNbPtr)) = LWM2MCORE_NETWORK_BEARER_WLAN;
-                (*bearersNbPtr)++;
+                if ((*bearersNbPtr) < maxBearersNb)
+                {
+                    bearersListPtr[*bearersNbPtr] = LWM2MCORE_NETWORK_BEARER_WLAN;
+                    (*bearersNbPtr)++;
+                }
+                else
+                {
+                    sID = LWM2MCORE_ERR_GENERAL_ERROR;
+                    goto end;
+                }
+
                 sID = LWM2MCORE_ERR_COMPLETED_OK;
                 break;
 
@@ -928,10 +946,9 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
 
         technology = le_data_GetNextUsedTechnology();
     }
-    while (   (LE_DATA_MAX != technology)
-           && (*bearersNbPtr <= CONN_MONITOR_AVAIL_NETWORK_BEARER_MAX_NB)
-           && (LWM2MCORE_ERR_COMPLETED_OK == sID));
+    while ((LE_DATA_MAX != technology) && (LWM2MCORE_ERR_COMPLETED_OK == sID));
 
+end:
     LE_DEBUG("Result: %d", sID);
     return sID;
 }
