@@ -372,7 +372,7 @@ le_result_t packageDownloader_SuspendDownload
 //--------------------------------------------------------------------------------------------------
 /**
  * Get the number of bytes to download on resume. Function will give valid data if suspend
- * state was LE_AVC_DOWNLOAD_PENDING, LE_DOWNLOAD_IN_PROGRESS or LE_DOWNLOAD_COMPLETE.
+ * state was LE_AVC_DOWNLOAD_PENDING or LE_DOWNLOAD_COMPLETE.
  *
  * @return
  *   - LE_OK                If function succeeded
@@ -383,9 +383,8 @@ le_result_t packageDownloader_SuspendDownload
 le_result_t packageDownloader_BytesLeftToDownload
 (
     uint64_t *numBytes          ///< [OUT] Number of bytes to download on resume. Will give valid
-                                ///<       data if suspend state was LE_AVC_DOWNLOAD_PENDING,
-                                ///<       LE_DOWNLOAD_IN_PROGRESS or LE_DOWNLOAD_COMPLETE.
-                                ///<       Otherwise undefined.
+                                ///<       data if suspend state was LE_AVC_DOWNLOAD_PENDING or
+                                ///<       LE_DOWNLOAD_COMPLETE. Otherwise undefined.
 );
 
 //--------------------------------------------------------------------------------------------------

@@ -243,16 +243,27 @@ static size_t GetLkVersion
 )
 {
     size_t returnedLen = 0;
+    static char LkVersionCache[FW_BUFFER_LENGTH] = UNKNOWN_VERSION;
 
     if (NULL != versionBufferPtr)
     {
-        le_result_t result = le_fwupdate_GetAppBootloaderVersion(versionBufferPtr, len);
-        if (LE_OK != result)
+        /* If the download is in progress (le_fwupdate_Download() hasn't returned yet),
+         * any other le_fwupdate_*() API will be blocked. Avoid calling it during this time.
+         */
+        if (avcServer_IsDownloadInProgress())
+        {
+            LE_ERROR("Can't get LK version, download is in progress; using cached '%s'",
+                     LkVersionCache);
+            returnedLen = snprintf(versionBufferPtr, len, "%s", LkVersionCache);
+        }
+        else if (LE_OK != le_fwupdate_GetAppBootloaderVersion(versionBufferPtr, len))
         {
             returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
         else
         {
+            // update the cached LK version
+            snprintf(LkVersionCache, sizeof(LkVersionCache), "%s", versionBufferPtr);
             returnedLen = strlen(versionBufferPtr);
         }
     }

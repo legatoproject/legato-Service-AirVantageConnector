@@ -815,13 +815,17 @@ static int EventHandler
                 avcServer_UpdateStatus(LE_AVC_SESSION_BS_STARTED, LE_AVC_UNKNOWN_UPDATE,
                                        -1, -1, LE_AVC_ERR_NONE);
             }
-            else
+            else if (!avcServer_IsDownloadInProgress())
             {
                 LE_DEBUG("Connected to DM");
                 avcServer_UpdateStatus(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
                                        -1, -1, LE_AVC_ERR_NONE);
 
                 SessionStarted = true;
+            }
+            else
+            {
+                LE_WARN("FOTA Download is in progress, ignore duplicate start session request");
             }
             ResetRetryTimers();
             AuthenticationPhase = false;

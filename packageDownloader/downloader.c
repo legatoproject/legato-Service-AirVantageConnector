@@ -438,8 +438,6 @@ static void BodyResponseCb
 {
     PackageUriDetails.downloadedBytes += (uint32_t)size;
 
-    LE_DEBUG("Chunk: %d, downloaded: %"PRIu32, size, PackageUriDetails.downloadedBytes);
-
     if (DWL_OK != lwm2mcore_PackageDownloaderReceiveData((uint8_t*)dataPtr,
                                                          (size_t)size,
                                                          PackageUriDetails.opaquePtr))

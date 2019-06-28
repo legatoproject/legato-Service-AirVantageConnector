@@ -1532,7 +1532,7 @@ le_result_t packageDownloader_SuspendDownload
 //--------------------------------------------------------------------------------------------------
 /**
  * Get the number of bytes to download on resume. Function will give valid data if suspend
- * state was LE_AVC_DOWNLOAD_PENDING, LE_DOWNLOAD_IN_PROGRESS or LE_DOWNLOAD_COMPLETE.
+ * state was LE_AVC_DOWNLOAD_PENDING or LE_DOWNLOAD_COMPLETE.
  *
  * @return
  *   - LE_OK                If function succeeded
@@ -1543,9 +1543,8 @@ le_result_t packageDownloader_SuspendDownload
 le_result_t packageDownloader_BytesLeftToDownload
 (
     uint64_t *numBytes          ///< [OUT] Number of bytes to download on resume. Will give valid
-                                ///<       data if suspend state was LE_AVC_DOWNLOAD_PENDING,
-                                ///<       LE_DOWNLOAD_IN_PROGRESS or LE_DOWNLOAD_COMPLETE.
-                                ///<       Otherwise undefined.
+                                ///<       data if suspend state was LE_AVC_DOWNLOAD_PENDING or
+                                ///<       LE_DOWNLOAD_COMPLETE. Otherwise undefined.
 )
 {
     lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
@@ -1572,6 +1571,17 @@ le_result_t packageDownloader_BytesLeftToDownload
     {
         LE_DEBUG("No download to resume");
         return LE_FAULT;
+    }
+
+    /* If the download is in progress, resume position shouldn't be requested.
+     * In FOTA case, that means le_fwupdate_Download() hasn't returned yet,
+     * any other le_fwupdate_*() API will be blocked.
+     */
+    if ((GetDownloadStatus() == DOWNLOAD_STATUS_ACTIVE))
+    {
+        LE_ERROR("Wrong state to obtain resume position: download is in progress");
+        *numBytes = packageSize;
+        return LE_OK;
     }
 
     switch (updateType)
@@ -1688,6 +1698,13 @@ void lwm2mcore_ResumePackageDownloader
     uint64_t numBytesToDownload = 0;
 
     LE_DEBUG("lwm2mcore_ResumePackageDownloader type %d", updateType);
+    if ((GetDownloadStatus() == DOWNLOAD_STATUS_ACTIVE))
+    {
+        // Resume called in the wrong state
+        LE_ERROR("Can't resume: download is in progress");
+        return;
+    }
+
     if (LE_OK != packageDownloader_BytesLeftToDownload(&numBytesToDownload))
     {
         LE_ERROR("Unable to retrieve bytes left to download");
