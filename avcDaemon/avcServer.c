@@ -1237,8 +1237,8 @@ static void SendUpdateStatusEvent
     eventData.contextPtr = contextPtr;
 
     LE_DEBUG("Reporting %s", AvcSessionStateToStr(updateStatus));
-    LE_DEBUG("Number of bytes to download %"PRIu32, eventData.totalNumBytes);
-    LE_DEBUG("Progress %"PRIu32, eventData.progress);
+    LE_DEBUG("Number of bytes to download %"PRId32, eventData.totalNumBytes);
+    LE_DEBUG("Progress %"PRId32, eventData.progress);
     LE_DEBUG("ContextPtr %p", eventData.contextPtr);
 
     // Send the event to interested applications
@@ -3116,7 +3116,7 @@ le_avc_StatusEventHandlerRef_t le_avc_AddStatusEventHandler
     CheckNotificationToSend(handlerPtr, contextPtr);
     if (NotifyApplication)
     {
-        handlerPtr(UpdateStatusNotification, -1, -1, StatusHandlerContextPtr);
+        handlerPtr(UpdateStatusNotification, -1, -1, contextPtr);
     }
     return (le_avc_StatusEventHandlerRef_t)handlerRef;
 }
