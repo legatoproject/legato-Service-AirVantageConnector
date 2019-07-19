@@ -2002,7 +2002,7 @@ static void ProcessUpdateStatus
             // Forward notifications unrelated to user agreement to interested applications
             NotifyApplication = true;
             UpdateStatusNotification = data->updateStatus;
-            return;
+            break;
 
         case LE_AVC_NO_UPDATE:
             if (AVC_DOWNLOAD_PENDING != CurrentState)
@@ -2024,7 +2024,7 @@ static void ProcessUpdateStatus
             // Forward notifications unrelated to user agreement to interested applications
             NotifyApplication = true;
             UpdateStatusNotification = data->updateStatus;
-            return;
+            break;
 
         case LE_AVC_SESSION_STARTED:
             if (PollingTimerRef != NULL)
