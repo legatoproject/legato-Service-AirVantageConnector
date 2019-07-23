@@ -796,6 +796,7 @@ static int EventHandler
                 LE_ERROR("Session failure on bootstrap server");
                 le_event_Report(BsFailureEventId, NULL, 0);
             }
+            SessionStarted = false;
             break;
 
         case LWM2MCORE_EVENT_SESSION_FINISHED:
@@ -870,10 +871,12 @@ static int EventHandler
             else if (!avcServer_IsDownloadInProgress())
             {
                 LE_DEBUG("Connected to DM");
-                avcServer_UpdateStatus(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
-                                       -1, -1, LE_AVC_ERR_NONE);
-
-                SessionStarted = true;
+                if (!SessionStarted)
+                {
+                    avcServer_UpdateStatus(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
+                                           -1, -1, LE_AVC_ERR_NONE);
+                    SessionStarted = true;
+                }
             }
             else
             {
@@ -917,8 +920,11 @@ static int EventHandler
                 LE_DEBUG("Authentication to DM started");
             }
             AuthenticationPhase = true;
-            avcServer_UpdateStatus(LE_AVC_AUTH_STARTED, LE_AVC_UNKNOWN_UPDATE,
-                                   -1, -1, LE_AVC_ERR_NONE);
+            if (!SessionStarted)
+            {
+                avcServer_UpdateStatus(LE_AVC_AUTH_STARTED, LE_AVC_UNKNOWN_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
+            }
             break;
 
         case LWM2MCORE_EVENT_AUTHENTICATION_FAILED:
