@@ -299,6 +299,7 @@ le_result_t packageDownloader_DeleteResumeInfo
 
     return LE_OK;
 }
+
 #endif /* !LE_CONFIG_CUSTOM_OS */
 
 //--------------------------------------------------------------------------------------------------
@@ -891,12 +892,6 @@ static le_result_t RequestDownload
         // to determine if the download was successful
         le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
         return LE_IO_ERROR;
-    }
-
-    // Initialize the package downloader, except for a download resume
-    if (!dwlCtxPtr->resume)
-    {
-        lwm2mcore_PackageDownloaderInit();
     }
 
     downloaderResult = lwm2mcore_StartPackageDownloader(dwlCtxPtr);

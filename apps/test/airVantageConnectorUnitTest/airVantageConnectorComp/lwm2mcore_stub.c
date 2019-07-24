@@ -514,6 +514,38 @@ lwm2mcore_Sid_t lwm2mcore_GetDownloadInfo
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Initialize the package downloader.
+ *
+ * This function is called to initialize the package downloader: the associated workspace is
+ * deleted if necessary to be able to start a new download.
+ */
+//--------------------------------------------------------------------------------------------------
+void lwm2mcore_PackageDownloaderInit
+(
+    void
+)
+{
+    return;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete the package downloader resume info.
+ *
+ * This function is called to delete resume related information from the package downloader
+ * workspace.
+ */
+//--------------------------------------------------------------------------------------------------
+void lwm2mcore_DeletePackageDownloaderResumeInfo
+(
+    void
+)
+{
+    return;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * @brief Function to check if a FW update is on-going
  * This function returns true if the FW upate install was accepted (lwm2mcore_SetUpdateAccepted)
  * and before final FW update ()lwm2mcore_SetUpdateResult)

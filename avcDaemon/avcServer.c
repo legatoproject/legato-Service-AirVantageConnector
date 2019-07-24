@@ -2496,6 +2496,17 @@ static le_result_t CheckFwInstallResult
             }
         }
         LE_DEBUG("Send notif FW updateStatus %d", updateStatus);
+
+        // fwupdate done, It may either fail or pass, clear the resume information. We clean
+        // resume info at the beginning of avcDaemon start but that part of the code may not
+        // executed if only modem/yocto is upgraded. Clear it again as it is harmless to do so.
+
+#ifndef LE_CONFIG_CUSTOM_OS
+        packageDownloader_DeleteResumeInfo();
+#endif /* !LE_CONFIG_CUSTOM_OS */
+
+        lwm2mcore_DeletePackageDownloaderResumeInfo();
+
         *isFwUpdateToNotifyPtr = true;
         avcServer_UpdateStatus(updateStatus, LE_AVC_FIRMWARE_UPDATE, -1, -1, errorCode);
         packageDownloader_SetFwUpdateNotification(true, updateStatus, errorCode);
@@ -4625,10 +4636,11 @@ COMPONENT_INIT
     // Clear resume data if necessary
     if (updateInfo_IsNewSys())
     {
-        bool isFwUpdateOnGoing;
+        bool isFwUpdateOnGoing = false;
         LE_INFO("New system installed. Removing old SOTA/FOTA resume info");
 #ifndef LE_CONFIG_CUSTOM_OS
         // New system installed, all old(SOTA or FOTA) resume info are invalid. Delete them.
+        // Also packageDownloader workspace should be cleaned
         packageDownloader_DeleteResumeInfo();
 #endif /* !LE_CONFIG_CUSTOM_OS */
 #if LE_CONFIG_SOTA
@@ -4636,13 +4648,21 @@ COMPONENT_INIT
         avcApp_DeletePackage();
 #endif /* end LE_CONFIG_SOTA */
 
-        // For FOTA new firmware installation cause device reboot. In that case, FW update state and
+        // For FOTA new firmware upgrade cause device reboot. In that case, FW update state and
         // should be notified to server. In that case, don't delete FW update installation info.
         // Otherwise delete all FW update info.
-        if ((LWM2MCORE_ERR_COMPLETED_OK == lwm2mcore_IsFwUpdateOnGoing(&isFwUpdateOnGoing))
-         && (!isFwUpdateOnGoing))
+        if ((LWM2MCORE_ERR_COMPLETED_OK == lwm2mcore_IsFwUpdateOnGoing(&isFwUpdateOnGoing)) &&
+            (isFwUpdateOnGoing))
         {
+            // FOTA installation on progress, keep only installation info and delete all resume
+            // info.
+            lwm2mcore_DeletePackageDownloaderResumeInfo();
+        }
+        else
+        {
+            // No FOTA/stale FOTA. Clear all FOTA related information include state and result
             packageDownloader_DeleteFwUpdateInfo();
+            lwm2mcore_PackageDownloaderInit();
         }
 
         // Remove new system flag.

@@ -38,6 +38,23 @@ void lwm2mcore_PackageDownloaderInit
     void
 )
 {
+    return;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Delete the package downloader resume info.
+ *
+ * This function is called to delete resume related information from the package downloader
+ * workspace.
+ */
+//--------------------------------------------------------------------------------------------------
+void lwm2mcore_DeletePackageDownloaderResumeInfo
+(
+    void
+)
+{
+    return;
 }
 
 //--------------------------------------------------------------------------------------------------
