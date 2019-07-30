@@ -1549,6 +1549,7 @@ static void UpdateProgressHandler
             // Delete the SOTA resume info.
             packageDownloader_DeleteResumeInfo();
 #endif /* end LE_CONFIG_SOTA */
+            lwm2mcore_DeletePackageDownloaderResumeInfo();
             // Check and resume install if necessary.
             le_event_Report(InstallResumeEventId, NULL, 0);
             break;
@@ -2774,6 +2775,7 @@ le_result_t avcApp_DeleteObj9Instance
 #ifndef LE_CONFIG_CUSTOM_OS
                 packageDownloader_DeleteResumeInfo();
 #endif
+                lwm2mcore_DeletePackageDownloaderResumeInfo();
                 DeletePackage();
                 avcServer_ResetQueryHandlers();
                 assetData_DeleteInstance(instanceRef);

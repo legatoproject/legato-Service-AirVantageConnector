@@ -1231,6 +1231,38 @@ void packageDownloader_FinalizeDownload
             }
         }
     }
+    else if (LWM2MCORE_SW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
+    {
+        if (downloader_CheckDownloadToSuspend())
+        {
+            le_avc_ErrorCode_t errorCode = LE_AVC_ERR_NONE;
+
+            if (LE_OK != downloadStatus)
+            {
+                switch (downloadStatus)
+                {
+                    case LE_COMM_ERROR:
+                    case LE_TERMINATED:
+                    case LE_FAULT:
+                    case LE_TIMEOUT:
+                        errorCode = LE_AVC_ERR_NETWORK;
+                        break;
+
+                    case LE_NO_MEMORY:
+                        errorCode = LE_AVC_ERR_RAM;
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            ErrorCode = errorCode;
+            le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
+                                           ResumeDownloadRequest,
+                                           NULL,
+                                           NULL);
+        }
+    }
 
 end:
     SetDownloadStatus(DOWNLOAD_STATUS_IDLE);

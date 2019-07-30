@@ -514,6 +514,40 @@ lwm2mcore_Sid_t lwm2mcore_LaunchUpdate
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Clean the stale workspace of aborted SOTA/FOTA job
+ */
+//--------------------------------------------------------------------------------------------------
+void lwm2mcore_CleanStaleData
+(
+    lwm2mcore_UpdateType_t type     ///< [IN] Update type
+)
+{
+    // Delete all unfinished/aborted SOTA/FOTA job info
+    switch (type)
+    {
+        case LWM2MCORE_FW_UPDATE_TYPE:
+            // Delete old FOTA job info.
+            packageDownloader_DeleteFwUpdateInfo();
+            // Delete aborted/stale stored SOTA job info. Otherwise, they may create problem during
+            // FOTA suspend resume activity.
+            avcApp_DeletePackage();
+            break;
+
+        case LWM2MCORE_SW_UPDATE_TYPE:
+            // Delete stale FOTA job info only. No need to delete stale SOTA job info. Because for
+            // SOTA, delete command is explicitly sent from server.
+            packageDownloader_DeleteFwUpdateInfo();
+            break;
+
+        default:
+            LE_ERROR("Unknown download type");
+            break;
+    }
+
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * The server requires the package name
  *
  * @return
