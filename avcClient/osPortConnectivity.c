@@ -544,7 +544,6 @@ static lwm2mcore_Sid_t GetCellularApn
 
     do
     {
-        LE_DEBUG("Profile index: %"PRIu32, i);
         profileRef = le_mdc_GetProfile(i);
 
         if (profileRef)
@@ -553,6 +552,8 @@ static lwm2mcore_Sid_t GetCellularApn
             switch (result)
             {
                 case LE_OK:
+                    LE_DEBUG("APN name %s collected for profile index: %"PRIu32,
+                             apnList[*apnNbPtr], i);
                     (*apnNbPtr)++;
                     sID = LWM2MCORE_ERR_COMPLETED_OK;
                     break;
@@ -563,6 +564,10 @@ static lwm2mcore_Sid_t GetCellularApn
 
                 case LE_BAD_PARAMETER:
                     sID = LWM2MCORE_ERR_INVALID_ARG;
+                    break;
+
+                case LE_NOT_FOUND:
+                    // No cellular profile found at this index, skip it
                     break;
 
                 default:
@@ -578,6 +583,7 @@ static lwm2mcore_Sid_t GetCellularApn
            && (LWM2MCORE_ERR_COMPLETED_OK == sID)
           );
 
+    LE_DEBUG("Number of APN names collected %d", *apnNbPtr);
     return sID;
 }
 
