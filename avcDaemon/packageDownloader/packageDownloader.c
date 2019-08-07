@@ -24,6 +24,10 @@
 #include "avcClient/avcClient.h"
 #include "avcServer/avcServer.h"
 
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+#include <lwm2mcore/fileTransfer.h>
+#include "avcFileTransfer/avFileTransfer.h"
+#endif /* LE_CONFIG_AVC_FEATURE_FILETRANSFER */
 //--------------------------------------------------------------------------------------------------
 /**
  * Download statuses
@@ -123,6 +127,12 @@ static void UpdateStatus
         {
             avcServer_QueryConnection(LE_AVC_APPLICATION_UPDATE, NULL, NULL);
         }
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+        else if (LWM2MCORE_FILE_TRANSFER_TYPE == pkgDwlPtr->data.updateType)
+        {
+            avcServer_QueryConnection(LE_AVC_FILE_TRANSFER, NULL, NULL);
+        }
+#endif
         else
         {
             LE_ERROR("Incorrect update type %d", pkgDwlPtr->data.updateType);
@@ -1400,6 +1410,134 @@ void packageDownloader_FinalizeDownload
         }
     }
 #endif /* LE_CONFIG_SOTA */
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+    else if (LWM2MCORE_FILE_TRANSFER_TYPE == pkgDwlPtr->data.updateType)
+    {
+        le_result_t* storeThreadReturnPtr = 0;
+        if (StoreFwRef)
+        {
+            le_thread_Join(StoreFwRef, (void**) &storeThreadReturnPtr);
+            StoreFwRef = NULL;
+            if (NULL == storeThreadReturnPtr)
+            {
+                LE_CRIT("Store thread returns NULL pointer");
+                return;
+            }
+            LE_DEBUG("Store thread joined with main thread");
+        }
+        // If store thread terminated earlier, then FwUpdateResult already has the right value.
+        // Hence no need to reassign it again.
+        LE_DEBUG("Store thread finished with return value = %s",
+                                                LE_RESULT_TXT(*storeThreadReturnPtr));
+
+        // Need to handle download suspend/abort cases. Value of downloadStatus may be LE_OK in case
+        // of session stop or poor network. So returning LE_OK shouldn't considered as download
+        // completed.
+        // Check if the downloaded is suspended
+        if (downloader_CheckDownloadToSuspend())
+        {
+            switch (*storeThreadReturnPtr)
+            {
+                case LE_OK:
+                case LE_CLOSED:
+                    // Download can be resumed in these cases, hence consider download status
+                    // as suspended.
+                    downloadStatus = LE_SUSPENDED;
+                    if (LWM2MCORE_ERR_COMPLETED_OK !=
+                            lwm2mcore_SetFileTransferState(LWM2MCORE_FILE_TRANSFER_STATE_SUSPENDED))
+                    {
+                        LE_ERROR("Failed to set the file transfer state to suspended");
+                    }
+                    break;
+                default:
+                    // Store thread returns bad value. This should be considered as final
+                    // download status
+                    LE_ERROR("Download suspended. But store thread returns error (%s). This"
+                            " will be considered as final download status",
+                            LE_RESULT_TXT(*storeThreadReturnPtr));
+                    downloadStatus = *storeThreadReturnPtr;
+                    break;
+            }
+        }
+
+        if (downloader_CheckDownloadToAbort())
+        {
+            // Download was aborted
+            LE_DEBUG("Download was aborted storeThreadReturnPtr %d", *storeThreadReturnPtr);
+            switch (*storeThreadReturnPtr)
+            {
+                case LE_OK:
+                case LE_CLOSED:
+                    downloadStatus = LE_SUSPENDED;
+                    break;
+                default:
+                    // Store thread returns bad value. This should be considered as final
+                    // download status
+                    LE_ERROR("Download aborted. But store thread returns error (%s). This"
+                            " will be considered as final download status",
+                            LE_RESULT_TXT(*storeThreadReturnPtr));
+                    downloadStatus = *storeThreadReturnPtr;
+                    break;
+            }
+        }
+
+        switch (downloadStatus)
+        {
+            case LE_OK:
+            {
+                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_COMPLETE,
+                                       LE_AVC_FILE_TRANSFER,
+                                       -1,
+                                       -1,
+                                       LE_AVC_ERR_NONE);
+                // Trigger a connection to the server: the update state and result will be
+                // read to determine if the download was successful
+                le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
+                                               UpdateStatus,
+                                               NULL,
+                                               NULL);
+            }
+            break;
+
+            // Note: This function will only send update status to notification handler for LE_OK
+            // case because of the dependency on store function (thread). For all other cases,
+            // notification will be sent by package downloader event handler (currently resides in
+            // avcClient.c).
+            case LE_SUSPENDED:
+                avFileTransfer_TreatProgress(false, 0);
+                if (downloader_CheckDownloadToAbort()
+                 || downloader_CheckDownloadToSuspend())
+                {
+                    // Download was aborted or suspended
+                    LE_DEBUG("Download was aborted or suspended");
+                    le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
+                                                   UpdateStatus,
+                                                   NULL,
+                                                   NULL);
+                }
+
+                if (downloader_CheckDownloadToAbort())
+                {
+                    // In case of abort, make a break in order to not call ResumeDownloadRequest
+                    break;
+                }
+
+            case LE_COMM_ERROR:
+            case LE_TIMEOUT:
+            case LE_TERMINATED:
+            case LE_NO_MEMORY:
+                le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
+                                               ResumeDownloadRequest,
+                                               NULL,
+                                               NULL);
+                break;
+            default:
+                // Some real error. Report download failure and cancel the SOTA/FOTA job
+                le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,  UpdateStatus, NULL, NULL);
+                break;
+        }
+    }
+#endif /* LE_CONFIG_AVC_FEATURE_FILETRANSFER */
 
 end:
     SetDownloadStatus(DOWNLOAD_STATUS_IDLE);
@@ -1512,6 +1650,143 @@ thread_end:
     return (void*)&ret;
 }
 
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+//--------------------------------------------------------------------------------------------------
+/**
+ * Pass the received stream to File Stream Service for further processing.
+ */
+//--------------------------------------------------------------------------------------------------
+static void* ProcessReceivedStream
+(
+    void* ctxPtr    ///< [IN] Context pointer
+)
+{
+    lwm2mcore_PackageDownloader_t* pkgDwlPtr;
+    packageDownloader_DownloadCtx_t* dwlCtxPtr;
+    le_result_t result;
+    bool fileStreamInitError = false;
+    int fd;
+    static le_result_t ret;
+
+    // Initialize the return value at every start
+    ret = LE_OK;
+    FwUpdateResult = LE_OK;
+
+    pkgDwlPtr = (lwm2mcore_PackageDownloader_t*)ctxPtr;
+    dwlCtxPtr = pkgDwlPtr->ctxPtr;
+
+    LE_DEBUG("Starting to process received stream, resume %d", dwlCtxPtr->resume);
+
+    // Connect to services used by this thread
+    le_fileStreamServer_ConnectService();
+    le_fileStreamClient_ConnectService();
+
+    // Open the FIFO file descriptor to read downloaded data, non blocking
+    fd = le_fd_Open(dwlCtxPtr->fifoPtr, O_RDONLY | O_NONBLOCK);
+    if (-1 == fd)
+    {
+        LE_ERROR("Failed to open FIFO %d", errno);
+        ret = LE_IO_ERROR;
+        goto thread_end;
+    }
+
+    // Initialize the File stream process, except for a download resume
+    if (!dwlCtxPtr->resume)
+    {
+        result = le_fileStreamServer_InitStream();
+        switch (result)
+        {
+            case LE_OK:
+                LE_DEBUG("File stream initialization successful");
+                break;
+
+            case LE_UNSUPPORTED:
+                LE_DEBUG("File stream initialization not supported");
+                break;
+
+            case LE_NO_MEMORY:
+                LE_ERROR("File stream error: memory allocation issue");
+                lwm2mcore_SuspendDownload();
+                // Do not return, the FIFO should be opened in order to unblock the Download thread
+                fileStreamInitError = true;
+                break;
+
+            default:
+                LE_ERROR("File stream error: %s", LE_RESULT_TXT(result));
+                // Indicate that the download should be aborted
+                lwm2mcore_AbortDownload();
+
+                // Do not return, the FIFO should be opened in order to unblock the Download thread
+                fileStreamInitError = true;
+                break;
+        }
+    }
+
+    // There was an error during the File stream , stop here
+    if (fileStreamInitError)
+    {
+        if (LE_NO_MEMORY == result)
+        {
+            ret = result;
+        }
+        else
+        {
+            ret = LE_FAULT;
+        }
+        goto thread_end_close_fd;
+    }
+
+    result = le_fileStreamServer_Download(fd);
+
+    // ToDo: Use an event instead of polling
+    // wait for download to finish
+    while(le_fileStreamServer_IsBusy())
+    {
+        sleep(1);
+        LE_DEBUG("Wait for le_fileStreamServer_Download() to finish");
+    }
+
+    LE_DEBUG("le_fileStreamServer_Download() returns %d", result);
+    ret = result;
+
+    if (LE_OK != result)
+    {
+        char failureCause[30];
+        memset(failureCause, 0, 30);
+        snprintf(failureCause, 30, "File transfer error %d", result);
+        lwm2mcore_SetFileTransferState(LWM2MCORE_FILE_TRANSFER_STATE_IDLE);
+        lwm2mcore_SetFileTransferResult(LWM2MCORE_FILE_TRANSFER_RESULT_FAILURE);
+        lwm2mcore_SetFileTransferFailureCause(failureCause, strlen(failureCause));
+        // Should abort because it implies that no handler
+        // TODO: What result to report to server?
+        //lwm2mcore_AbortDownload();
+        //lwm2mcore_PackageDownloaderInit();
+        avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
+                               LE_AVC_FILE_TRANSFER,
+                               -1,
+                               -1,
+                               LE_AVC_ERR_INTERNAL);
+    }
+
+thread_end_close_fd:
+    //FileStreamResult = result;
+    // Only close fd if it is open in this thread.
+    if (fd != -1)
+    {
+        if (le_fd_Close(fd) == -1)
+        {
+            LE_WARN("Failed to close fifo FD");
+        }
+    }
+
+thread_end:
+    StoreFwRef = NULL;
+    le_fileStreamServer_DisconnectService();
+    le_fileStreamClient_DisconnectService();
+    return (void*)&ret;
+}
+#endif
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Start package downloading and storing process.
@@ -1572,6 +1847,22 @@ void packageDownloader_StartDownload
             dwlCtx.fifoPtr = NULL;
             break;
 
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+        case LWM2MCORE_FILE_TRANSFER_TYPE:
+            if (resume)
+            {
+                // Retrieve offset from client application
+                if (LE_OK != le_fileStreamServer_GetResumePosition(&offset))
+                {
+                    offset = 0;
+                    resume = false;
+                }
+            }
+            dwlCtx.storePackage = (void*)ProcessReceivedStream;
+            dwlCtx.fifoPtr = FIFO_PATH;
+            break;
+#endif
+
         default:
             LE_ERROR("Unknown download type");
             return;
@@ -1587,7 +1878,11 @@ void packageDownloader_StartDownload
     SetDownloadStatus(DOWNLOAD_STATUS_ACTIVE);
     LE_INFO("Download type: %d, resume:%d, offset:%zd", type, resume, offset);
 
-    if (LWM2MCORE_FW_UPDATE_TYPE == type)
+    if ((LWM2MCORE_FW_UPDATE_TYPE == type)
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+        || (LWM2MCORE_FILE_TRANSFER_TYPE == type)
+#endif
+        )
     {
         // Start the Store thread for a FOTA update
         StoreFwRef = le_thread_Create("Store", (le_thread_MainFunc_t)dwlCtx.storePackage, (void*)&PkgDwl);
@@ -1762,6 +2057,25 @@ le_result_t packageDownloader_BytesLeftToDownload
 
         }
         break;
+
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+        case LWM2MCORE_FILE_TRANSFER_TYPE:
+        {
+            size_t resumePos = 0;
+
+            if (LE_OK != le_fileStreamServer_GetResumePosition(&resumePos))
+            {
+                LE_CRIT("Failed to get file stream resume position");
+                resumePos = 0;
+            }
+
+            LE_DEBUG("File stream resume position: %zd", resumePos);
+            *numBytes = packageSize - resumePos;
+
+            LE_DEBUG("Number of bytes to download: %"PRIu64"", *numBytes);
+        }
+        break;
+#endif
 
         default:
             LE_CRIT("Incorrect update type");

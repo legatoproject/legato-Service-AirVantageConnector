@@ -8,6 +8,9 @@ provides:
 #endif
         airVantage/le_tpf.api
         airVantage/le_coap.api
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+        airVantage/le_avtransfer.api
+#endif
     }
 }
 
@@ -36,6 +39,10 @@ requires:
 #endif
 #if ${MK_CONFIG_AT_IP_SSL} = y
         le_certStore.api [optional]
+#endif
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+        fileStream/le_fileStreamServer.api
+        fileStream/le_fileStreamClient.api
 #endif
     }
 
@@ -87,6 +94,9 @@ sources:
     avcFs/avcFs.c
     avcComm/avcComm.c
     avcSim/avcSim.c
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+    avcFileTransfer/avFileTransfer.c
+#endif
 
     avcClient/avcClient.c
 #if ${LE_CONFIG_SOCKET_LIB_USE_OPENSSL} = y
@@ -106,6 +116,9 @@ sources:
     avcClient/osPortUpdate.c
     avcClient/osPortParamStorage.c
     avcClient/osPortTime.c
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+    avcClient/osPortStreamMgmt.c
+#endif
     avcClient/osPortAction.c
     avcClient/osPortSim.c
 
@@ -145,6 +158,8 @@ sources:
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader/update.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/lwm2mcoreCoapHandlers.c
     ${LEGATO_ROOT}/3rdParty/Lwm2mCore/security/lwm2mcoreSecurity.c
+
+    ${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader/fileTransfer.c
 
 
     // Wakaama
@@ -194,6 +209,9 @@ cflags:
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/3rdParty/tinyhttp
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/3rdParty/wakaama/core
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/3rdParty/wakaama/core/er-coap-13
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+    -I${LEGATO_ROOT}/components/fileStream
+#endif
 #if ${LE_CONFIG_LINUX} = y
     -I${LEGATO_ROOT}/framework/liblegato/linux
     -I${LEGATO_ROOT}/3rdParty/tinycbor/src

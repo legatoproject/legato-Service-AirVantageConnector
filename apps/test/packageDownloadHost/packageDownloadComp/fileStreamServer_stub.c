@@ -1,7 +1,7 @@
 /**
- * @file fwupdateServer.c
+ * @file fileStreamServer_stub.c
  *
- * This file is a stubbed version of the fwupdateServer that implements the FW Update API
+ * This file is a stubbed version of the fileStreamServer
  *
  * Copyright (C) Sierra Wireless Inc.
  *
@@ -59,7 +59,7 @@ static void ReadUint
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Download the firmware image file into FWUPDATE_STORE_FILE
+ * Download the firmware image file into /tmp/fwupdate.txt
  *
  * @return
  *      - LE_OK              On success
@@ -71,7 +71,7 @@ static void ReadUint
  *      The process exits, if an invalid file descriptor (e.g. negative) is given.
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t le_fwupdate_Download
+le_result_t le_fileStreamServer_Download
 (
     int fd
         ///< [IN]
@@ -126,8 +126,6 @@ le_result_t le_fwupdate_Download
             if (LE_OK != result)
             {
                 LE_ERROR("failed to write %s: %s", FWUPDATE_STORE_FILE, LE_RESULT_TXT(result));
-                le_fs_Close(fileRef);
-                return result;
             }
         }
 
@@ -158,10 +156,7 @@ le_result_t le_fwupdate_Download
     }
 
     LE_INFO("Expected size: %zu, received size: %zu", fullImageLength, totalCount);
-    if (fullImageLength != totalCount)
-    {
-        LE_CRIT("File download did not succeed");
-    }
+    LE_ASSERT(fullImageLength == totalCount);
 
     result = le_fs_Close(fileRef);
     if (LE_OK != result)
@@ -175,99 +170,10 @@ le_result_t le_fwupdate_Download
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Download initialization:
- *  - for single and dual systems, it resets resume position,
- *  - for dual systems, it synchronizes the systems if needed.
- *
- * @note
- *      When invoked, resuming a previous download is not possible, a full update package has to be
- *      downloaded.
- *
- * @return
- *      - LE_OK         On success
- *      - LE_FAULT      On failure
- *      - LE_IO_ERROR   Dual systems platforms only -- The synchronization fails due to
- *                      unrecoverable ECC errors. In this case, the update without synchronization
- *                      is forced, but the whole system must be updated to ensure that the new
- *                      update system will be workable
- *                      ECC stands for Error-Correction-Code: some errors may be corrected. If this
- *                      correction fails, a unrecoverable error is registered and the data become
- *                      corrupted.
+  * Init function
  */
 //--------------------------------------------------------------------------------------------------
-le_result_t le_fwupdate_InitDownload
-(
-    void
-)
-{
-    LE_DEBUG("Stub");
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Return the downloaded update package write position.
- *
- * @return
- *      - LE_OK on success
- *      - LE_BAD_PARAMETER Invalid parameter
- *      - LE_FAULT on failure
- */;
-//--------------------------------------------------------------------------------------------------
-le_result_t le_fwupdate_GetResumePosition
-(
-    size_t *positionPtr     ///< [OUT] Update package read position
-)
-{
-    LE_DEBUG("Stub");
-    if (!positionPtr)
-    {
-        return LE_BAD_PARAMETER;
-    }
-    *positionPtr = 0;
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Return the update status, which is either the last status of the systems swap if it failed, or
- * the status of the secondary bootloader (SBL).
- *
- * @return
- *      - LE_OK on success
- *      - LE_BAD_PARAMETER Invalid parameter
- *      - LE_FAULT on failure
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t le_fwupdate_GetUpdateStatus
-(
-    le_fwupdate_UpdateStatus_t *statusPtr, ///< [OUT] Returned update status
-    char *statusLabelPtr,                  ///< [OUT] Points to the string matching the status
-    size_t statusLabelLength               ///< [IN]  Maximum label length
-)
-{
-    LE_DEBUG("Stub");
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Request to install the package. Calling this API will result in a system reset.
- *
- * Dual System: After reset, the UPDATE and ACTIVE systems will be swapped.
- * Single System: After reset, the image in the FOTA partition will be installed on the device.
- *
- * @note On success, a device reboot will be initiated.
- *
- *
- * @return
- *      - LE_BUSY          Download is ongoing, install is not allowed
- *      - LE_UNSUPPORTED   The feature is not supported
- *      - LE_FAULT         On failure
- *
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t le_fwupdate_Install
+le_result_t le_fileStreamServer_InitStream
 (
     void
 )
@@ -289,7 +195,7 @@ le_result_t le_fwupdate_Install
  * This function is created automatically.
  */
 //--------------------------------------------------------------------------------------------------
-void le_fwupdate_ConnectService
+void le_fileStreamServer_ConnectService
 (
     void
 )
@@ -309,10 +215,47 @@ void le_fwupdate_ConnectService
  * This function is created automatically.
  */
 //--------------------------------------------------------------------------------------------------
-void le_fwupdate_DisconnectService
+void le_fileStreamServer_DisconnectService
 (
     void
 )
 {
     LE_DEBUG("Stub");
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Find resume position of the stream currently in progress
+ *
+ * @return
+ *      - LE_OK if able to retrieve resume position
+ *      - LE_FAULT otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_fileStreamServer_GetResumePosition
+(
+    size_t* resumePosPtr
+)
+{
+    *resumePosPtr = 0;
+    LE_DEBUG("stub");
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Find if a stream is currently in progress
+ *
+ * @return
+ *      - 0 if not busy
+ *      - 1 if busy
+ */
+//--------------------------------------------------------------------------------------------------
+bool le_fileStreamServer_IsBusy
+(
+    void
+)
+{
+    LE_DEBUG("stub");
+    return false;
 }

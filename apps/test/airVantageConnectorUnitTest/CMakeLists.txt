@@ -32,6 +32,7 @@ mkexe(${TEST_EXEC}
     -i ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/
     -i ${LEGATO_ROOT}/interfaces/airVantage/
     -i ${LEGATO_ROOT}/interfaces/atServices/
+    -i ${LEGATO_ROOT}/interfaces/fileStream/
     -i ${LEGATO_ROOT}/interfaces/modemServices/
     -i ${LEGATO_ROOT}/interfaces/
     -i ${PA_DIR}/simu/components/le_pa_avc

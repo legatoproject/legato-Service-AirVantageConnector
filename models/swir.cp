@@ -39,6 +39,25 @@
           <variable default-label="Time update status" path="3" type="int"></variable>
         </node>
 
+        <node default-label="File Transfer Object" path="33406">
+          <setting default-label="File Name" path="0" type="string"></setting>
+          <setting default-label="File Class" path="1" type="string"></setting>
+          <setting default-label="File URI" path="2" type="string"></setting>
+          <setting default-label="Hash" path="3" type="string"></setting>
+          <setting default-label="Direction" path="4" type="int"></setting>
+          <variable default-label="State" path="5" type="int"></variable>
+          <variable default-label="Result" path="6" type="int"></variable>
+          <variable default-label="Percentage of completion" path="7" type="int"></variable>
+          <variable default-label="Failure reason" path="8" type="string"></variable>
+        </node>
+
+        <node default-label="File Sync Object" path="33407">
+          <variable default-label="File Name" path="0" type="string"></variable>
+          <variable default-label="File Class" path="1" type="string"></variable>
+          <variable default-label="Hash" path="2" type="string"></variable>
+          <variable default-label="Origin" path="3" type="int"></variable>
+        </node>
+
         <node default-label="SIM APDU Configuration" path="33408">
           <setting default-label="SIM APDU Config" path="0" type="binary"></setting>
           <command default-label="SIM APDU operation" path="1"></command>

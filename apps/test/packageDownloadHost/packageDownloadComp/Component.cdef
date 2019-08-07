@@ -6,6 +6,10 @@ requires:
         le_fwupdate.api                     [types-only]
         airVantage/le_avc.api               [types-only]
         le_limit.api                        [types-only]
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+        fileStream/le_fileStreamClient.api      [types-only]
+        fileStream/le_fileStreamServer.api      [types-only]
+#endif
     }
 
     lib:
@@ -23,6 +27,9 @@ sources:
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/packageDownloader/defaultDerKey.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient/osPortParamStorage.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient/osPortUpdate.c
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient/osPortStreamMgmt.c
+#endif
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcFs/avcFs.c
 
     // Stubbed files in the AVC
@@ -34,6 +41,10 @@ sources:
     lwm2mcore_stub.c
     le_httpClient_stub.c
     tpfServer_stub.c
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+    fileStreamClient_stub.c
+    fileStreamServer_stub.c
+#endif
 }
 
 cflags:
@@ -54,4 +65,7 @@ cflags:
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager/
     -DWITH_LOGS
     -DLWM2M_WITH_LOGS
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+    -DLWM2M_OBJECT_33406
+#endif
 }

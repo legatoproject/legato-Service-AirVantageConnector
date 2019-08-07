@@ -570,7 +570,7 @@ static void ConnectionStateHandler
         {
             // This can happen if initial connection made for sending notification to avms
             // fails after boot up
-           LE_WARN("AVC: Disconnected even though we are not connected\n");
+            LE_WARN("AVC: Disconnected even though we are not connected\n");
         }
     }
 }
@@ -597,6 +597,20 @@ static int PackageEventHandler
     switch (status.event)
     {
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_DETAILS:
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            // For file transfer, check the error Code
+            // If the error code is not 0, it means that the file download can not be made
+            // (use case: not enough space in the device)
+            if ((LWM2MCORE_FILE_TRANSFER_TYPE == status.u.pkgStatus.pkgType)
+             && (status.u.pkgStatus.errorCode))
+            {
+                // The file can not be downloaded
+                LE_WARN("The file can not be downloaded");
+                le_fileStreamServer_DeleteFileByInstance(LE_FILESTREAMSERVER_INSTANCE_ID_DOWNLOAD);
+                return -1;
+            }
+#endif
+
             // Received a new download request: clear all query handler references which might be
             // left by previous aborted or stale SOTA/FOTA jobs.
             avcServer_ResetQueryHandlers();
@@ -622,6 +636,14 @@ static int PackageEventHandler
                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            else if (LWM2MCORE_FILE_TRANSFER_TYPE == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_IN_PROGRESS, LE_AVC_FILE_TRANSFER,
+                                       status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
+            }
+#endif
             else
             {
                 LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
@@ -638,7 +660,6 @@ static int PackageEventHandler
             // For SOTA there is no store thread, but status will be sent by the same function
             // that deals with finalizing the download.
             LE_INFO("PackageDownloader finished. PackageType: %d", status.u.pkgStatus.pkgType);
-
             break;
 
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FAILED:
@@ -654,6 +675,14 @@ static int PackageEventHandler
                                        status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
                                        ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            else if (LWM2MCORE_FILE_TRANSFER_TYPE == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED, LE_AVC_FILE_TRANSFER,
+                                       status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
+                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
+            }
+#endif
             else
             {
                 LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
@@ -671,6 +700,12 @@ static int PackageEventHandler
                 avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_APPLICATION_UPDATE,
                                        -1, 0, LE_AVC_ERR_NONE);
             }
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            else if (LWM2MCORE_FILE_TRANSFER_TYPE == status.u.pkgStatus.pkgType)
+            {
+                LE_ERROR("Install not possible for file stream type");
+            }
+#endif
             else
             {
                 LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
@@ -688,6 +723,12 @@ static int PackageEventHandler
                 avcServer_UpdateStatus(LE_AVC_INSTALL_COMPLETE, LE_AVC_APPLICATION_UPDATE,
                                        -1, -1, LE_AVC_ERR_NONE);
             }
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            else if (LWM2MCORE_FILE_TRANSFER_TYPE == status.u.pkgStatus.pkgType)
+            {
+                LE_ERROR("Install not possible for file stream type");
+            }
+#endif
             else
             {
                 LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
@@ -705,6 +746,12 @@ static int PackageEventHandler
                 avcServer_UpdateStatus(LE_AVC_INSTALL_FAILED, LE_AVC_APPLICATION_UPDATE,
                                        -1, -1, ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
             }
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            else if (LWM2MCORE_FILE_TRANSFER_TYPE == status.u.pkgStatus.pkgType)
+            {
+                LE_ERROR("Install not possible for file stream type");
+            }
+#endif
             else
             {
                 LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
@@ -722,6 +769,13 @@ static int PackageEventHandler
                 avcServer_UpdateStatus(LE_AVC_CERTIFICATION_OK, LE_AVC_APPLICATION_UPDATE,
                                        -1, -1, LE_AVC_ERR_NONE);
             }
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            else if (LWM2MCORE_FILE_TRANSFER_TYPE == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateStatus(LE_AVC_CERTIFICATION_OK, LE_AVC_FILE_TRANSFER,
+                                       -1, -1, LE_AVC_ERR_NONE);
+            }
+#endif
             else
             {
                 LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
@@ -739,6 +793,13 @@ static int PackageEventHandler
                 avcServer_UpdateStatus(LE_AVC_CERTIFICATION_KO, LE_AVC_APPLICATION_UPDATE,
                                        -1, -1, LE_AVC_ERR_BAD_PACKAGE);
             }
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            else if (LWM2MCORE_FILE_TRANSFER_TYPE == status.u.pkgStatus.pkgType)
+            {
+                avcServer_UpdateStatus(LE_AVC_CERTIFICATION_KO, LE_AVC_FILE_TRANSFER,
+                                       -1, -1, LE_AVC_ERR_NONE);
+            }
+#endif
             else
             {
                 LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
@@ -772,13 +833,27 @@ static int PackageEventHandler
                                                -1,
                                                LE_AVC_ERR_BAD_PACKAGE);
                     }
-                    else
+                    else if (LWM2MCORE_SW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
                     {
                         avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
                                                LE_AVC_APPLICATION_UPDATE,
                                                -1,
                                                -1,
                                                LE_AVC_ERR_BAD_PACKAGE);
+                    }
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+                    else if (LWM2MCORE_FILE_TRANSFER_TYPE == status.u.pkgStatus.pkgType)
+                    {
+                        avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
+                                               LE_AVC_FILE_TRANSFER,
+                                               -1,
+                                               -1,
+                                               LE_AVC_ERR_BAD_PACKAGE);
+                    }
+#endif
+                    else
+                    {
+                        LE_ERROR("Not yet supported package type %d", status.u.pkgStatus.pkgType);
                     }
                     break;
 

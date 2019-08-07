@@ -14,6 +14,9 @@
 #include "lwm2mcore/timer.h"
 #include "lwm2mcore/coapHandlers.h"
 #include "avcAppUpdate/avcAppUpdate.h"
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+#include "le_fileStreamClient_common.h"
+#endif
 
 //--------------------------------------------------------------------------------------------------
 // airVantage connector stubbing

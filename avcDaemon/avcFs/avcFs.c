@@ -163,7 +163,14 @@ le_result_t DeleteFs
     result = le_fs_Delete(pathPtr);
     if (LE_OK != result)
     {
-        LE_ERROR("failed to delete %s: %s", pathPtr, LE_RESULT_TXT(result));
+        if (LE_NOT_FOUND == result)
+        {
+            LE_DEBUG("failed to delete %s: %s", pathPtr, LE_RESULT_TXT(result));
+        }
+        else
+        {
+            LE_ERROR("failed to delete %s: %s", pathPtr, LE_RESULT_TXT(result));
+        }
     }
 
     return result;

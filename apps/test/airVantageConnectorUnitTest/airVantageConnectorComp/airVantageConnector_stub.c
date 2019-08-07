@@ -1239,3 +1239,20 @@ le_result_t le_mrc_GetPacketSwitchedState
     *statePtr = LE_MRC_REG_HOME;
     return LE_OK;
 }
+
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+//--------------------------------------------------------------------------------------------------
+/**
+ * Process download stream status events. Receive status and process it locally or pass to
+ * interested applications.
+ */
+//--------------------------------------------------------------------------------------------------
+void le_fileStreamServer_DownloadStatus
+(
+    le_fileStreamClient_DownloadState_t status,       ///< [IN] Download status
+    int32_t bytesLeft,                                ///< [IN] Number of bytes left to be downloaded
+    int32_t progress                                  ///< [IN] Download progress in %
+)
+{
+}
+#endif

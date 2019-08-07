@@ -32,6 +32,11 @@
 #include "avcClient/avcClient.h"
 #include "coap/coap.h"
 
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+#include <lwm2mcore/fileTransfer.h>
+#include "avcFileTransfer/avFileTransfer.h"
+#endif
+
 //--------------------------------------------------------------------------------------------------
 // Definitions
 //--------------------------------------------------------------------------------------------------
@@ -752,6 +757,12 @@ static le_avc_UpdateType_t ConvertToAvcType
             avcType = LE_AVC_APPLICATION_UPDATE;
             break;
 
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+        case LWM2MCORE_FILE_TRANSFER_TYPE:
+            avcType = LE_AVC_FILE_TRANSFER;
+            break;
+#endif
+
         default:
             avcType = LE_AVC_UNKNOWN_UPDATE;
             break;
@@ -891,6 +902,11 @@ static const char* UpdateTypeToStr
         case LE_AVC_APPLICATION_UPDATE:
             resultPtr = "LE_AVC_APPLICATION_UPDATE";
             break;
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+        case LE_AVC_FILE_TRANSFER:
+            resultPtr = "LE_AVC_FILE_TRANSFER";
+            break;
+#endif
         default:
             resultPtr = "LE_AVC_UNKNOWN_UPDATE";
             break;
@@ -1347,7 +1363,6 @@ static le_result_t RespondToConnectionPending
         StartDeferTimer(LE_AVC_USER_AGREEMENT_CONNECTION, DEFAULT_DEFER_TIMER_VALUE);
         // Notify registered control app.
         SendUpdateStatusEvent(LE_AVC_CONNECTION_PENDING, -1, -1, StatusHandlerContextPtr);
-
     }
     else
     {
@@ -1372,8 +1387,9 @@ static le_result_t RespondToConnectionPending
 //--------------------------------------------------------------------------------------------------
 static le_result_t RespondToDownloadPending
 (
-    int32_t totalNumBytes,          ///< [IN] Remaining number of bytes to download
-    int32_t dloadProgress           ///< [IN] Download progress
+    le_avc_UpdateType_t     updateType,     ///< [IN] Update type
+    int32_t                 totalNumBytes,          ///< [IN] Remaining number of bytes to download
+    int32_t                 dloadProgress           ///< [IN] Download progress
 )
 {
     le_result_t result = LE_BUSY;
@@ -1391,27 +1407,89 @@ static le_result_t RespondToDownloadPending
     }
 
     // Otherwise check user agreement
-    if (LE_OK != le_avc_GetUserAgreement(LE_AVC_USER_AGREEMENT_DOWNLOAD, &isUserAgreementEnabled))
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+    if(LE_AVC_FILE_TRANSFER == updateType)
     {
-        // Use default configuration if read fails
-        LE_WARN("Using default user agreement configuration");
-        isUserAgreementEnabled = USER_AGREEMENT_DEFAULT;
+#   ifdef LE_CONFIG_LINUX
+        if (LE_OK != le_avtransfer_GetUserAgreement(LE_AVTRANSFER_USER_AGREEMENT_DOWNLOAD,
+                                                    &isUserAgreementEnabled))
+        {
+            // Use default configuration if read fails
+            LE_WARN("Using default user agreement configuration");
+            isUserAgreementEnabled = USER_AGREEMENT_DEFAULT;
+        }
+#   else // RTOS
+        // On RTOS, by default enable user agreement which requires user to take action to accept
+        // file transfer
+        isUserAgreementEnabled = true;
+#   endif // LE_CONFIG_LINUX
     }
+    else
+#endif /* LE_CONFIG_AVC_FEATURE_FILETRANSFER */
+    {
+        if (LE_OK != le_avc_GetUserAgreement(LE_AVC_USER_AGREEMENT_DOWNLOAD,
+                                             &isUserAgreementEnabled))
+        {
+            // Use default configuration if read fails
+            LE_WARN("Using default user agreement configuration");
+            isUserAgreementEnabled = USER_AGREEMENT_DEFAULT;
+        }
+    }
+
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+    if (LE_AVC_FILE_TRANSFER == updateType)
+    {
+        le_fileStreamServer_DownloadStatus(LE_FILESTREAMCLIENT_DOWNLOAD_PENDING,
+                                           totalNumBytes,
+                                           dloadProgress);
+    }
+#endif /* LE_CONFIG_AVC_FEATURE_FILETRANSFER */
 
     if ((!isUserAgreementEnabled) && (-1 != totalNumBytes))
     {
         LE_INFO("Automatically accepting download");
         result = AcceptDownloadPackage();
+        return result;
     }
-    else if (NumStatusHandlers > 0)
+
+
+
+    if (((NumStatusHandlers > 0) && (LE_AVC_FILE_TRANSFER != updateType))
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+     || ((LE_AVC_FILE_TRANSFER == updateType)))
+#else
+    )
+#endif
     {
         // Start default defer timer
         StartDeferTimer(LE_AVC_USER_AGREEMENT_DOWNLOAD, DEFAULT_DEFER_TIMER_VALUE);
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
         // Notify registered control app.
-        SendUpdateStatusEvent(LE_AVC_DOWNLOAD_PENDING,
-                              totalNumBytes,
-                              dloadProgress,
-                              StatusHandlerContextPtr);
+        if(LE_AVC_FILE_TRANSFER == updateType)
+        {
+            char fileName[LWM2MCORE_FILE_TRANSFER_NAME_MAX_CHAR+1];
+            size_t len = LWM2MCORE_FILE_TRANSFER_NAME_MAX_CHAR;
+            if (LE_OK == avFileTransfer_GetTransferName(fileName, &len))
+            {
+                avFileTransfer_SendStatusEvent(LE_AVTRANSFER_PENDING,
+                                               fileName,
+                                               totalNumBytes,
+                                               dloadProgress,
+                                               StatusHandlerContextPtr);
+            }
+            else
+            {
+                LE_ERROR("Failed to get file name");
+            }
+        }
+        else
+#endif
+        {
+            SendUpdateStatusEvent(LE_AVC_DOWNLOAD_PENDING,
+                                  totalNumBytes,
+                                  dloadProgress,
+                                  StatusHandlerContextPtr);
+        }
         result = LE_OK;
     }
     else
@@ -1634,6 +1712,7 @@ static void ResendPendingNotification
 static le_result_t ProcessUserAgreement
 (
     le_avc_Status_t            updateStatus,     ///< [IN] Update status
+    le_avc_UpdateType_t        updateType,       ///< [IN] Update type
     int32_t                    totalNumBytes,    ///< [IN] Remaining number of bytes to download
     int32_t                    dloadProgress     ///< [IN] Download progress
 )
@@ -1649,7 +1728,7 @@ static le_result_t ProcessUserAgreement
             break;
 
         case LE_AVC_DOWNLOAD_PENDING:
-            result = RespondToDownloadPending(totalNumBytes, dloadProgress);
+            result = RespondToDownloadPending(updateType, totalNumBytes, dloadProgress);
             break;
 
         case LE_AVC_INSTALL_PENDING:
@@ -1684,6 +1763,43 @@ static le_result_t ProcessUserAgreement
             break;
 
         default:
+
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            // TODO: is it really called ?
+            if (LE_AVC_FILE_TRANSFER == updateType)
+            {
+                if ((LE_AVC_DOWNLOAD_PENDING == updateStatus)
+                 || (LE_AVC_DOWNLOAD_IN_PROGRESS == updateStatus)
+                 || (LE_AVC_DOWNLOAD_COMPLETE == updateStatus)
+                 || (LE_AVC_DOWNLOAD_FAILED == updateStatus))
+                {
+                    char fileName[LWM2MCORE_FILE_TRANSFER_NAME_MAX_CHAR+1];
+                    size_t len = LWM2MCORE_FILE_TRANSFER_NAME_MAX_CHAR;
+                    if (LE_OK == avFileTransfer_GetTransferName(fileName, &len))
+                    {
+                        // Forward notifications unrelated to user agreement to interested
+                        // applications.
+                        avFileTransfer_SendStatusEvent(avFileTransfer_ConvertAvcState(updateStatus),
+                                                       fileName,
+                                                       totalNumBytes,
+                                                       dloadProgress,
+                                                       StatusHandlerContextPtr);
+                        if (LE_AVC_DOWNLOAD_PENDING == updateStatus)
+                        {
+                            le_fileStreamServer_DownloadStatus(LE_FILESTREAMCLIENT_DOWNLOAD_PENDING,
+                                                               totalNumBytes,
+                                                               dloadProgress);
+                        }
+                    }
+                    else
+                    {
+                        LE_ERROR("Failed to get file name");
+                    }
+                    break;
+                }
+            }
+#endif
+
             // Forward notifications unrelated to user agreement to interested applications.
             SendUpdateStatusEvent(updateStatus,
                                   totalNumBytes,
@@ -1943,6 +2059,7 @@ static void ProcessUpdateStatus
         case LE_AVC_DOWNLOAD_PENDING:
             LE_DEBUG("Update type for DOWNLOAD is %d", data->updateType);
             LE_DEBUG("totalNumBytes %d", data->totalNumBytes);
+
             if (-1 != data->totalNumBytes)
             {
                 UpdateCurrentAvcState(AVC_DOWNLOAD_PENDING);
@@ -1968,6 +2085,16 @@ static void ProcessUpdateStatus
                 // Set the bytes downloaded to workspace for resume operation
                 avcApp_SetSwUpdateBytesDownloaded();
             }
+
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            if ((LE_AVC_FILE_TRANSFER == data->updateType) && (data->totalNumBytes >= 0))
+            {
+                avFileTransfer_TreatProgress(true, data->progress);
+                le_fileStreamServer_DownloadStatus(LE_FILESTREAMCLIENT_DOWNLOAD_IN_PROGRESS,
+                                                   data->totalNumBytes,
+                                                   data->progress);
+            }
+#endif
             break;
 
         case LE_AVC_DOWNLOAD_TIMEOUT:
@@ -2009,7 +2136,11 @@ static void ProcessUpdateStatus
             }
             else
             {
-                packageDownloader_SetConnectionNotificationState(true);
+                if ((LE_AVC_FIRMWARE_UPDATE == data->updateType)
+                 || (LE_AVC_APPLICATION_UPDATE == data->updateType))
+                {
+                    packageDownloader_SetConnectionNotificationState(true);
+                }
             }
 
             if (LE_AVC_APPLICATION_UPDATE == data->updateType)
@@ -2020,6 +2151,17 @@ static void ProcessUpdateStatus
                 // End download and start unpack
                 avcApp_EndDownload();
             }
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            else if (LE_AVC_FILE_TRANSFER == data->updateType)
+            {
+                avFileTransfer_TreatProgress(false, 0);
+                le_fileStreamServer_DownloadStatus(LE_FILESTREAMCLIENT_DOWNLOAD_COMPLETED,
+                                                   data->totalNumBytes,
+                                                   data->progress);
+                // Update the supported object instances list
+                avFileTransfer_InitFileInstanceList();
+            }
+#endif
             break;
 
         case LE_AVC_INSTALL_PENDING:
@@ -2070,6 +2212,15 @@ static void ProcessUpdateStatus
             {
                 avcApp_DeletePackage();
             }
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            else if (LE_AVC_FILE_TRANSFER == data->updateType)
+            {
+                avFileTransfer_TreatProgress(false, 0);
+                le_fileStreamServer_DownloadStatus(LE_FILESTREAMCLIENT_DOWNLOAD_FAILED,
+                                                   data->totalNumBytes,
+                                                   data->progress);
+            }
+#endif
             AvcErrorCode = data->errorCode;
             break;
 
@@ -2210,6 +2361,14 @@ static void ProcessUpdateStatus
                 // Query connection to server if module reboot
                 packageDownloader_SetConnectionNotificationState(true);
             }
+
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            if (LE_AVC_FILE_TRANSFER == data->updateType)
+            {
+                LE_ERROR("No certification check for file transfer");
+            }
+#endif
+
             break;
 
         case LE_AVC_CERTIFICATION_KO:
@@ -2224,6 +2383,14 @@ static void ProcessUpdateStatus
                 // Query connection to server if module reboot
                 packageDownloader_SetConnectionNotificationState(true);
             }
+
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+            if (LE_AVC_FILE_TRANSFER == data->updateType)
+            {
+                LE_ERROR("No certification check for file transfer");
+            }
+#endif
+
             LE_DEBUG("Package not certified");
             break;
 
@@ -2233,7 +2400,7 @@ static void ProcessUpdateStatus
     }
 
     // Process user agreement or forward to control app if applicable.
-    ProcessUserAgreement(data->updateStatus, data->totalNumBytes, data->progress);
+    ProcessUserAgreement(data->updateStatus, data->updateType, data->totalNumBytes, data->progress);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2871,6 +3038,18 @@ void avcServer_QueryConnection
                                    LE_AVC_ERR_NONE
                                   );
             break;
+
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+        case LE_AVC_FILE_TRANSFER:
+            LE_DEBUG("Reporting status LE_AVC_CONNECTION_PENDING for file transfer");
+            avcServer_UpdateStatus(LE_AVC_CONNECTION_PENDING,
+                                   updateType,
+                                   -1,
+                                   -1,
+                                   LE_AVC_ERR_NONE
+                                  );
+            break;
+#endif
 
         default:
             LE_ERROR("Unsupported updateType: %s", UpdateTypeToStr(updateType));
@@ -4999,6 +5178,9 @@ COMPONENT_INIT
 #if !MK_CONFIG_AVC_DISABLE_COAP
     coap_Init();
 #endif /* end MK_CONFIG_AVC_DISABLE_COAP */
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+    avFileTransfer_Init();
+#endif /* LE_CONFIG_AVC_FEATURE_FILETRANSFER */
     avcClient_Init();
     tpfServer_Init();
     downloader_Init();

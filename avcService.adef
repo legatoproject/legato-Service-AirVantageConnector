@@ -75,6 +75,9 @@ extern:
     avcDaemon.avcDaemon.le_certStore
 #endif
     avcDaemon.watchdogChain.le_wdog
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+    avcDaemon.avcDaemon.le_avtransfer
+#endif
 }
 
 requires:
@@ -138,6 +141,15 @@ bindings:
 #if ${LE_CONFIG_LINUX} = y
 #if ${LE_CONFIG_AVC_FEATURE_EDM} = y
     avcDaemon.le_pa_avc.le_atClient -> atService.le_atClient
+#endif
+#endif
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+#if ${LE_CONFIG_LINUX} = y
+    avcDaemon.avcDaemon.le_fileStreamServer -> <root>.le_fileStreamServer
+    avcDaemon.avcDaemon.le_fileStreamClient -> <root>.le_fileStreamClient
+#else
+    avcDaemon.avcDaemon.le_fileStreamServer -> fileStreamService.le_fileStreamServer
+    avcDaemon.avcDaemon.le_fileStreamClient -> fileStreamService.le_fileStreamClient
 #endif
 #endif
 }

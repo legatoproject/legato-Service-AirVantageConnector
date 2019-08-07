@@ -100,6 +100,12 @@ static void LaunchUpdate
             avcApp_StartInstall(instanceId);
             break;
 
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+        case LWM2MCORE_FILE_TRANSFER_TYPE:
+            LE_DEBUG("Update on file stream is not allowed");
+            break;
+#endif
+
         default:
             LE_ERROR("Unknown update type %u", updateType);
             break;
@@ -541,6 +547,16 @@ void lwm2mcore_CleanStaleData
             packageDownloader_DeleteFwUpdateInfo();
             break;
 
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+        case LWM2MCORE_FILE_TRANSFER_TYPE:
+            // Delete stale FOTA job info only. No need to delete stale SOTA job info. Because for
+            // SOTA, delete command is explicitly sent from server.
+            packageDownloader_DeleteFwUpdateInfo();
+
+            // ToDo: Delete file stream related data
+            break;
+#endif
+
         default:
             LE_ERROR("Unknown download type");
             break;
@@ -917,6 +933,25 @@ lwm2mcore_Sid_t lwm2mcore_GetPackageOffsetStorage
             *offsetPtr = (uint64_t)offset;
         }
         break;
+
+#ifdef LE_CONFIG_AVC_FEATURE_FILETRANSFER
+        case LWM2MCORE_FILE_TRANSFER_TYPE:
+        {
+            size_t offset = 0;
+            if (LE_OK != le_fileStreamServer_GetResumePosition(&offset))
+            {
+                LE_CRIT("Failed to get file stream resume position");
+                *offsetPtr = 0;
+            }
+            else
+            {
+                *offsetPtr = (uint64_t) offset;
+            }
+
+            LE_DEBUG("File stream storage offset: %"PRIu64"", *offsetPtr);
+        }
+        break;
+#endif
 
         default:
             LE_ERROR("unknown download type");

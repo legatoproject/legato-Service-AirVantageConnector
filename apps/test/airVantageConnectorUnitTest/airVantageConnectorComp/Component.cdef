@@ -10,8 +10,13 @@ requires:
         le_cfg.api                                          [types-only]
         le_data.api                                         [types-only]
         modemServices/le_mrc.api                            [types-only]
+
 #if ${LE_CONFIG_AVC_FEATURE_EDM} = y
         atServices/le_atClient.api                          [types-only]
+#endif
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+        fileStream/le_fileStreamClient.api                  [types-only]
+        fileStream/le_fileStreamServer.api                  [types-only]
 #endif
     }
 
@@ -38,5 +43,8 @@ cflags:
     -fvisibility=default
     -Dle_msg_AddServiceCloseHandler=MyAddServiceCloseHandler
     -DIFGEN_PROVIDE_PROTOTYPES
+#if ${LE_CONFIG_AVC_FEATURE_FILETRANSFER} = y
+    -DLWM2M_OBJECT_33406
+#endif
 }
 

@@ -66,7 +66,8 @@ time_t lwm2m_gettime
 //--------------------------------------------------------------------------------------------------
 void lwm2mcore_UpdateSystemClock
 (
-    void* connP
+    void*               connP,              ///< [IN] Connection on which the update is triggered
+    bool                isCommandSucceded   ///< [IN] Is command succeeded ?
 )
 {
     dtls_Connection_t* connPtr = (dtls_Connection_t*)connP;
