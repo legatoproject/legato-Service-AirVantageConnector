@@ -1,7 +1,7 @@
 /**
  * @file avcFs.c
  *
- * Impelementation of filesystem management
+ * Implementation of filesystem management
  * New file system management implementation should go here
  *
  * <HR>
@@ -90,7 +90,8 @@ le_result_t WriteFs
     LE_FATAL_IF(!pathPtr, "Invalid parameter");
     LE_FATAL_IF(!bufPtr, "Invalid parameter");
 
-    result = le_fs_Open(pathPtr, LE_FS_WRONLY | LE_FS_CREAT | LE_FS_TRUNC, &fileRef);
+    // Don't use LE_FS_TRUNC as it will remove the old data of the file.
+    result = le_fs_Open(pathPtr, LE_FS_WRONLY | LE_FS_CREAT | LE_FS_SYNC, &fileRef);
     if (LE_OK != result)
     {
         LE_ERROR("failed to open %s: %s", pathPtr, LE_RESULT_TXT(result));
