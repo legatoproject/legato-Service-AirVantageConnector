@@ -31,6 +31,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Backup copy of a specific credential.
+ */
+//--------------------------------------------------------------------------------------------------
+#define CREDENTIAL_BACKUP      "_BACKUP"
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Array to describe the location of a specific credential type in the secure storage.
  */
 //--------------------------------------------------------------------------------------------------
@@ -182,6 +189,53 @@ bool lwm2mcore_CheckCredential
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Function to check if one credential is present in platform storage and matches with our
+ * credentials.
+ *
+ * @return
+ *      - true if the credential and matches with our credentials
+ *      - false else
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+bool lwm2mcore_CredentialMatch
+(
+    lwm2mcore_Credentials_t credId,     ///< [IN] Credential identifier
+    uint16_t                serverId,   ///< [IN] server Id
+    const char*             credential  ///< [IN] Credential
+)
+{
+    char buffer[LWM2MCORE_PUBLICKEY_LEN] = {0};
+    size_t bufferSz = sizeof(buffer);
+    bool ret = false;
+    const char* retTxt = "Not Present";
+    lwm2mcore_Sid_t result;
+
+    (void)serverId;
+
+    result = lwm2mcore_GetCredential(credId, serverId, buffer, &bufferSz);
+    if ((LWM2MCORE_ERR_COMPLETED_OK == result) && bufferSz)
+    {
+        ret = true;
+        retTxt = "Present";
+    }
+
+    if ((credential != NULL) && ret)
+    {
+        LE_DEBUG("Checking credentials against input credential.");
+        if (strncmp(buffer, credential, bufferSz) != 0)
+        {
+            ret = false;
+        }
+    }
+
+    LE_DEBUG("credId %d result %s [%d]", credId, retTxt, ret);
+    return ret;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * This function erases one credential from platform storage
  *
  * @return
@@ -222,4 +276,143 @@ bool lwm2mcore_DeleteCredential
     LE_DEBUG("credId %d deleted", credId);
 
     return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Backup a credential.
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid argument
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_BackupCredential
+(
+    lwm2mcore_Credentials_t credId,     ///< [IN] credential Id of credential to be retrieved
+    uint16_t                serverId    ///< [IN] server Id
+)
+{
+    (void)serverId;
+
+    if (credId >= LWM2MCORE_CREDENTIAL_MAX)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    char credsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+
+    LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                        credsPathStr,
+                                        sizeof(credsPathStr),
+                                        CredentialLocations[credId],
+                                        NULL), "Buffer is not long enough");
+
+    char buffer[LE_SECSTORE_MAX_NAME_BYTES];
+    size_t bufferSize = sizeof(buffer);
+    le_result_t result = le_secStore_Read(credsPathStr, (uint8_t*)buffer, &bufferSize);
+    if (LE_OK != result)
+    {
+        LE_ERROR("Unable to retrieve credentials for %d: %s: %d %s",
+                 credId, credsPathStr, result, LE_RESULT_TXT(result));
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    LE_DEBUG("credId %d, bufferSize %zu", credId, bufferSize);
+
+    char backupCredsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = {0};
+    snprintf(backupCredsPathStr, sizeof(backupCredsPathStr), "%s%s", credsPathStr, CREDENTIAL_BACKUP);
+
+    result = le_secStore_Write(backupCredsPathStr, (uint8_t*)buffer, bufferSize);
+
+    if (LE_OK != result)
+    {
+        LE_ERROR("Unable to backup credentials for %d: %s: %d %s",
+                 credId, backupCredsPathStr, result, LE_RESULT_TXT(result));
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Restore credential to the previous credential.
+ * Used for bs credential where we restore the credential back to the previous bs credential if
+ * they exist. If not, we also remove the current bs credential and allow the device to retrieve
+ * the bs credential from the modem.
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_RestoreCredential
+(
+    lwm2mcore_Credentials_t credId,     ///< [IN] credential Id of credential to be retrieved
+    uint16_t                serverId    ///< [IN] server Id
+)
+{
+    (void)serverId;
+
+    if (credId >= LWM2MCORE_CREDENTIAL_MAX)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    char backupCredsId[LE_SECSTORE_MAX_NAME_BYTES] = {0};
+    snprintf(backupCredsId, sizeof(backupCredsId), "%s%s", CredentialLocations[credId], CREDENTIAL_BACKUP);
+
+    char backupCredsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+
+    LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                        backupCredsPathStr,
+                                        sizeof(backupCredsPathStr),
+                                        backupCredsId,
+                                        NULL), "Buffer is not long enough");
+
+    char buffer[LE_SECSTORE_MAX_NAME_BYTES];
+    size_t bufferSize = sizeof(buffer);
+
+    le_result_t result = le_secStore_Read(backupCredsPathStr, (uint8_t*)buffer, &bufferSize);
+
+    char credsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+
+    LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                        credsPathStr,
+                                        sizeof(credsPathStr),
+                                        CredentialLocations[credId],
+                                        NULL), "Buffer is not long enough");
+
+    // If doesn't exist, then it's OK. No backup is not an indication of an error, just implies that
+    // key rotation never occured or we have just restore the backup.
+    if (LE_OK != result)
+    {
+        // Remove the current bs credential.
+        le_secStore_Delete(credsPathStr);
+        return LWM2MCORE_ERR_COMPLETED_OK;
+    }
+
+    // Restore current bootstrap with backup copy
+    result = le_secStore_Write(credsPathStr, (uint8_t*)buffer, bufferSize);
+
+    if (LE_OK != result)
+    {
+        LE_ERROR("Unable to restore credentials for: %s: %d %s",
+                 credsPathStr, result, LE_RESULT_TXT(result));
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    // Delete backup
+    result = le_secStore_Delete(backupCredsPathStr);
+
+    if (LE_OK != result)
+    {
+        LE_ERROR("Unable to delete credentials for: %s: %d %s",
+                 credsPathStr, result, LE_RESULT_TXT(result));
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
 }
