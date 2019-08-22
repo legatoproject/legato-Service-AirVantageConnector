@@ -1817,7 +1817,15 @@ static void InitPollingTimer
         le_clk_Time_t interval = {.sec = remainingPollingTimer};
 
         LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
-        LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
+        result = le_timer_Start(PollingTimerRef);
+        if (result == LE_BUSY)
+        {
+            LE_WARN("Polling timer is already running.");
+        }
+        else if (result != LE_OK)
+        {
+            LE_FATAL("Setting polling timer failed with result %d %s", result, LE_RESULT_TXT(result));
+        }
     }
 }
 
@@ -2393,7 +2401,15 @@ static void PollingTimerExpiryHandler
         LE_INFO("A connection to server will be made in %" PRIu32" minutes", pollingTimerInterval);
         le_clk_Time_t interval = {.sec = pollingTimerInterval * SECONDS_IN_A_MIN};
         LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
-        LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
+        le_result_t result = le_timer_Start(PollingTimerRef);
+        if (result == LE_BUSY)
+        {
+            LE_WARN("Polling timer is already running.");
+        }
+        else if (result != LE_OK)
+        {
+            LE_FATAL("Setting polling timer failed with result %d %s", result, LE_RESULT_TXT(result));
+        }
     }
     else
     {
@@ -4160,7 +4176,15 @@ le_result_t le_avc_SetPollingTimer
         le_clk_Time_t interval = {.sec = lifetime};
 
         LE_ASSERT(LE_OK == le_timer_SetInterval(PollingTimerRef, interval));
-        LE_ASSERT(LE_OK == le_timer_Start(PollingTimerRef));
+        le_result_t startResult = le_timer_Start(PollingTimerRef);
+        if (startResult == LE_BUSY)
+        {
+            LE_WARN("Polling timer is already running.");
+        }
+        else if (startResult != LE_OK)
+        {
+            LE_FATAL("Setting polling timer failed with result %d %s", startResult, LE_RESULT_TXT(startResult));
+        }
     }
     else
     {
