@@ -795,19 +795,27 @@ static lwm2mcore_Sid_t GetCellularSignalBars
                 return LWM2MCORE_ERR_GENERAL_ERROR;
             }
 
-            // RSRP value is given with a decimal by the le_mrc API
-            rsrp = rsrp / 10;
-
-            while ((signalBars < SIGNAL_BARS_RANGE) && (sID != LWM2MCORE_ERR_COMPLETED_OK))
+            if (INT32_MAX == rsrp)
             {
-                if ((-rsrp) >= SignalBarsTable[SIGNAL_BARS_WITH_RSRP][signalBars])
+                LE_ERROR("Incorrect RSRP value indicating not supported");
+                sID = LWM2MCORE_ERR_INVALID_STATE;
+            }
+            else
+            {
+                // RSRP value is given with a decimal by the le_mrc API
+                rsrp = rsrp / 10;
+
+                while ((signalBars < SIGNAL_BARS_RANGE) && (sID != LWM2MCORE_ERR_COMPLETED_OK))
                 {
-                    *valuePtr = signalBars;
-                    sID = LWM2MCORE_ERR_COMPLETED_OK;
-                }
-                else
-                {
-                    signalBars++;
+                    if ((-rsrp) >= SignalBarsTable[SIGNAL_BARS_WITH_RSRP][signalBars])
+                    {
+                        *valuePtr = signalBars;
+                        sID = LWM2MCORE_ERR_COMPLETED_OK;
+                    }
+                    else
+                    {
+                        signalBars++;
+                    }
                 }
             }
             break;
@@ -1137,8 +1145,17 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetSignalStrength
                     {
                         return LWM2MCORE_ERR_GENERAL_ERROR;
                     }
-                    *valuePtr = rxLevel;
-                    sID = LWM2MCORE_ERR_COMPLETED_OK;
+
+                    if (INT32_MAX == rxLevel)
+                    {
+                        LE_ERROR("Incorrect Rx Level value indicating not supported");
+                        sID = LWM2MCORE_ERR_INVALID_STATE;
+                    }
+                    else
+                    {
+                        *valuePtr = rxLevel;
+                        sID = LWM2MCORE_ERR_COMPLETED_OK;
+                    }
                     break;
 
                 case LE_MRC_RAT_CDMA:
@@ -1262,8 +1279,17 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetLinkQuality
                     {
                         return LWM2MCORE_ERR_GENERAL_ERROR;
                     }
-                    *valuePtr = (int)rsrq/10;
-                    sID = LWM2MCORE_ERR_COMPLETED_OK;
+
+                    if (INT32_MAX == rsrq)
+                    {
+                        LE_ERROR("Incorrect RSRQ value indicating not supported");
+                        sID = LWM2MCORE_ERR_INVALID_STATE;
+                    }
+                    else
+                    {
+                        *valuePtr = (int)rsrq/10;
+                        sID = LWM2MCORE_ERR_COMPLETED_OK;
+                    }
                     break;
 
                 case LE_MRC_RAT_CDMA:
@@ -1997,9 +2023,18 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRsrp
                     {
                         return LWM2MCORE_ERR_GENERAL_ERROR;
                     }
-                    // RSRP value is given with a decimal by the le_mrc API
-                    *valuePtr = rsrp / 10;
-                    sID = LWM2MCORE_ERR_COMPLETED_OK;
+
+                    if (INT32_MAX == rsrp)
+                    {
+                        LE_ERROR("Incorrect RSRP value indicating not supported");
+                        sID = LWM2MCORE_ERR_INVALID_STATE;
+                    }
+                    else
+                    {
+                        // RSRP value is given with a decimal by the le_mrc API
+                        *valuePtr = rsrp / 10;
+                        sID = LWM2MCORE_ERR_COMPLETED_OK;
+                    }
                     break;
 
                 default:
@@ -2090,9 +2125,18 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRsrq
                     {
                         return LWM2MCORE_ERR_GENERAL_ERROR;
                     }
-                    // RSRQ value is given with a decimal by the le_mrc API
-                    *valuePtr = rsrq / 10;
-                    sID = LWM2MCORE_ERR_COMPLETED_OK;
+
+                    if (INT32_MAX == rsrq)
+                    {
+                        LE_ERROR("Incorrect RSRQ value indicating not supported");
+                        sID = LWM2MCORE_ERR_INVALID_STATE;
+                    }
+                    else
+                    {
+                        // RSRQ value is given with a decimal by the le_mrc API
+                        *valuePtr = rsrq / 10;
+                        sID = LWM2MCORE_ERR_COMPLETED_OK;
+                    }
                     break;
 
                 default:
@@ -2185,6 +2229,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRscp
                     if (INT32_MAX == rscp)
                     {
                         // This value means that the value is not available
+                        LE_ERROR("Incorrect RSCP value indicating not supported");
                         sID = LWM2MCORE_ERR_INVALID_STATE;
                     }
                     else
