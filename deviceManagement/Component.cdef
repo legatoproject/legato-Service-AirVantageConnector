@@ -35,6 +35,9 @@ requires:
         positioning/le_gnss.api
         positioning/le_pos.api
         le_fwupdate.api
+#if ${MK_CONFIG_MODEMSERVICE_NO_LPT} = ""
+        modemServices/le_lpt.api
+#endif
     }
 
     component:

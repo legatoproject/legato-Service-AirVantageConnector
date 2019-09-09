@@ -8,6 +8,7 @@
  */
 
 #include <lwm2mcore/connectivity.h>
+#include <lwm2mcore/cellular.h>
 #include "legato.h"
 // Definitions made above which conflict with interfaces.h
 #undef LE_MDC_IPV6_ADDR_MAX_BYTES
@@ -335,6 +336,41 @@ static lwm2mcore_Sid_t ConvertBearerTechnologyToString
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
+#if !MK_CONFIG_MODEMSERVICE_NO_LPT
+//--------------------------------------------------------------------------------------------------
+/**
+ * Convert lwm2m eDRX rat to lpt eDRX rat.
+ *
+ * @return
+ *  - @c Rat value in case of success
+ *  - @c NULL value in case of failure
+ */
+//--------------------------------------------------------------------------------------------------
+static le_lpt_EDrxRat_t ConvertLwm2mEdrxRatToLpt
+(
+    lwm2mcore_CelleDrxRat_t rat
+)
+{
+    switch (rat)
+    {
+        case LWM2MCORE_CELL_EDRX_IU_MODE:
+            return LE_LPT_EDRX_RAT_UTRAN;
+        case LWM2MCORE_CELL_EDRX_WB_S1_MODE:
+            return LE_LPT_EDRX_RAT_LTE_M1;
+        case LWM2MCORE_CELL_EDRX_NB_S1_MODE:
+            return LE_LPT_EDRX_RAT_LTE_NB1;
+        case LWM2MCORE_CELL_EDRX_A_GB_MODE:
+#if MK_CONFIG_LPWA_SUPPORT
+            return LE_LPT_EDRX_RAT_GSM;
+#else
+            return LE_LPT_EDRX_RAT_EC_GSM_IOT;
+#endif
+        default:
+            return LE_LPT_EDRX_RAT_UNKNOWN;
+    }
+}
+#endif
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve the IP addresses of the connected profiles when using a cellular technology
@@ -558,6 +594,7 @@ static lwm2mcore_Sid_t GetCellularApn
             switch (result)
             {
                 case LE_OK:
+                case LE_NOT_FOUND:
                     LE_DEBUG("APN name %s collected for profile index: %"PRIu32,
                              apnList[*apnNbPtr], i);
                     (*apnNbPtr)++;
@@ -570,10 +607,6 @@ static lwm2mcore_Sid_t GetCellularApn
 
                 case LE_BAD_PARAMETER:
                     sID = LWM2MCORE_ERR_INVALID_ARG;
-                    break;
-
-                case LE_NOT_FOUND:
-                    // No cellular profile found at this index, skip it
                     break;
 
                 default:
@@ -2540,3 +2573,193 @@ COMPONENT_INIT
 
     le_data_AddConnectionStateHandler(DataConnectionStateHandler, NULL);
 }
+
+#if !MK_CONFIG_MODEMSERVICE_NO_LPT
+//--------------------------------------------------------------------------------------------------
+/**
+ * @brief Retrieve the eDRX parameters
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GeteDrxParameters
+(
+    lwm2mcore_CelleDrxRat_t rat,        ///< [IN] RAT
+    uint8_t*                valuePtr    ///< [INOUT] value
+)
+{
+    le_result_t result;
+    uint8_t edrx = 0;
+    uint8_t paging = 0;
+    lwm2mcore_Sid_t sID;
+    le_lpt_EDrxRat_t lptRat = ConvertLwm2mEdrxRatToLpt(rat);
+    bool nwEDrxValueFound = false;
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    if (lptRat == LE_LPT_EDRX_RAT_UNKNOWN)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    result = le_lpt_GetNetworkProvidedEDrxValue(lptRat, &edrx);
+    if (LE_OK == result)
+    {
+        nwEDrxValueFound = true;
+        result = le_lpt_GetNetworkProvidedPagingTimeWindow(lptRat, &paging);
+
+        // PTW is an optional value that might not be returned.
+        if (result == LE_UNAVAILABLE)
+        {
+            LE_DEBUG("No paging timer provided.");
+            result = LE_OK;
+        }
+    }
+
+    // If no network edrx value is provided, we will return the users eDRX setting.
+    if (!nwEDrxValueFound)
+    {
+        LE_DEBUG("No network eDRX value provided.");
+        result = le_lpt_GetRequestedEDrxValue(lptRat, &edrx);
+    }
+
+    switch (result)
+    {
+        case LE_BAD_PARAMETER:
+            sID = LWM2MCORE_ERR_INVALID_ARG;
+            break;
+
+        case LE_OK:
+        {
+            if (nwEDrxValueFound)
+            {
+                *valuePtr = edrx + (paging << 4);
+            }
+            else
+            {
+                *valuePtr = edrx;
+            }
+            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
+        }
+
+        case LE_UNSUPPORTED:
+        case LE_UNAVAILABLE:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
+        case LE_FAULT:
+        default:
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
+    }
+
+    return sID;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * @brief Set the eDRX parameters
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_SeteDrxParameters
+(
+    lwm2mcore_CelleDrxRat_t rat,        ///< [IN] RAT
+    uint8_t                 value       ///< [INOUT] value
+)
+{
+    le_result_t result;
+    lwm2mcore_Sid_t sID;
+    le_lpt_EDrxRat_t lptRat = ConvertLwm2mEdrxRatToLpt(rat);
+
+    if (lptRat == LE_LPT_EDRX_RAT_UNKNOWN)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    // If a read occurs on a given RAT, enable the activation state.
+    result = le_lpt_SetEDrxState(lptRat, LE_ON);
+    if (result != LE_OK)
+    {
+        LE_ERROR("Unable to enable the activation state for eDRX rat [%d].", lptRat);
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    // Value includes eDRX and PTW
+    result = le_lpt_SetRequestedEDrxValue(lptRat, value&0xF);
+
+    switch (result)
+    {
+        case LE_BAD_PARAMETER:
+            sID = LWM2MCORE_ERR_INVALID_ARG;
+            break;
+
+        case LE_OK:
+            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
+
+        case LE_UNAVAILABLE:
+            sID = LWM2MCORE_ERR_INVALID_STATE;
+            break;
+
+        default:
+            sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            break;
+    }
+
+    return sID;
+}
+#else
+//--------------------------------------------------------------------------------------------------
+/**
+ * @brief Retrieve the eDRX parameters
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GeteDrxParameters
+(
+    lwm2mcore_CelleDrxRat_t rat,        ///< [IN] RAT
+    uint8_t*                valuePtr    ///< [INOUT] value
+)
+{
+    LE_UNUSED(rat);
+    LE_UNUSED(valuePtr);
+    return LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * @brief Set the eDRX parameters
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
+ */
+//--------------------------------------------------------------------------------------------------
+LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_SeteDrxParameters
+(
+    lwm2mcore_CelleDrxRat_t rat,        ///< [IN] RAT
+    uint8_t                 value       ///< [INOUT] value
+)
+{
+    LE_UNUSED(rat);
+    LE_UNUSED(value);
+    return LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+}
+#endif

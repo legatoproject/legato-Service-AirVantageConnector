@@ -83,6 +83,12 @@
           <command default-label="Deactivate application" path="11"></command>-->
           <variable default-label="Application activation result" path="12" type="boolean"></variable>
         </node>
+        <node default-label="Cellular connectivity" path="10">
+          <setting default-label="eDRX parameters for Iu mode" path="7" type="binary"></setting>
+          <setting default-label="eDRX parameters for WB-S1 mode" path="8" type="binary"></setting>
+          <setting default-label="eDRX parameters for NB-S1 mode" path="9" type="binary"></setting>
+          <setting default-label="eDRX parameters for A/Gb mode" path="10" type="binary"></setting>
+        </node>
       </asset>
     </encoding>
   </data>

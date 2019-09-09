@@ -116,4 +116,7 @@ bindings:
     avcDaemon.deviceManagement.le_temp -> modemService.le_temp
     avcDaemon.deviceManagement.le_pos -> positioningService.le_pos
     avcDaemon.deviceManagement.le_gnss -> positioningService.le_gnss
+#if ${MK_CONFIG_MODEMSERVICE_NO_LPT} = ""
+    avcDaemon.deviceManagement.le_lpt -> modemService.le_lpt
+#endif
 }
