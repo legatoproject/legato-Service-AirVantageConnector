@@ -322,7 +322,11 @@ lwm2mcore_Sid_t lwm2mcore_BackupCredential
     LE_DEBUG("credId %d, bufferSize %zu", credId, bufferSize);
 
     char backupCredsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = {0};
-    snprintf(backupCredsPathStr, sizeof(backupCredsPathStr), "%s%s", credsPathStr, CREDENTIAL_BACKUP);
+    LE_ASSERT(snprintf(backupCredsPathStr,
+                       sizeof(backupCredsPathStr),
+                       "%s%s",
+                       credsPathStr,
+                       CREDENTIAL_BACKUP) < sizeof(backupCredsPathStr));
 
     result = le_secStore_Write(backupCredsPathStr, (uint8_t*)buffer, bufferSize);
 
@@ -362,7 +366,11 @@ lwm2mcore_Sid_t lwm2mcore_RestoreCredential
     }
 
     char backupCredsId[LE_SECSTORE_MAX_NAME_BYTES] = {0};
-    snprintf(backupCredsId, sizeof(backupCredsId), "%s%s", CredentialLocations[credId], CREDENTIAL_BACKUP);
+    LE_ASSERT(snprintf(backupCredsId,
+                       sizeof(backupCredsId),
+                       "%s%s",
+                       CredentialLocations[credId],
+                       CREDENTIAL_BACKUP) < sizeof(backupCredsId));
 
     char backupCredsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
 
