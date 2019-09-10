@@ -97,7 +97,7 @@ static void Lwm2mClientReceive
             if (AF_INET == addr.ss_family)
             {
                 struct sockaddr_in *saddr = (struct sockaddr_in *)&addr;
-                inet_ntop(saddr->sin_family, &saddr->sin_addr, s, INET6_ADDRSTRLEN);
+                inet_ntop(saddr->sin_family, &saddr->sin_addr, s, INET_ADDRSTRLEN);
                 port = saddr->sin_port;
             }
             else if (AF_INET6 == addr.ss_family)
@@ -145,6 +145,7 @@ static int CreateSocket
     hints.ai_socktype = config.proto;
     hints.ai_flags = AI_PASSIVE;
 
+    LE_DEBUG("Attempt to DNS-resolve service on port %s", portStr);
     if (0 != getaddrinfo(NULL, portStr, &hints, &res))
     {
         return -1;
@@ -190,9 +191,10 @@ static le_result_t ResolveIpAddress
     struct sockaddr_in *serverPtr;
 
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = AF_INET;          // Resolve for IP addr only as AV servers support only IPv4
     hints.ai_socktype = SOCK_STREAM;
 
+    LE_DEBUG("Attempt to DNS-resolve url %s", urlStrPtr);
     rc = getaddrinfo(urlStrPtr, NULL, &hints, &resultPtr);
     if (rc)
     {
@@ -302,6 +304,10 @@ bool lwm2mcore_UdpOpen
     if (le_mdc_IsIPv6(profileRef) && !le_mdc_IsIPv4(profileRef))
     {
         SocketConfig.af = AF_INET6;
+    }
+    else if (le_mdc_IsIPv4(profileRef) && !le_mdc_IsIPv6(profileRef))
+    {
+        SocketConfig.af = AF_INET;
     }
     else
     {
@@ -450,6 +456,8 @@ bool lwm2mcore_UdpConnect
         hints.ai_family = addressFamily;
         hints.ai_socktype = SOCK_DGRAM;
 
+        LE_DEBUG("Attempt to DNS-resolve host & service with name %s on port %s",
+                 hostPtr, portPtr);
         if ((0 != getaddrinfo(hostPtr, portPtr, &hints, &servinfoPtr)) || (servinfoPtr == NULL))
         {
             return false;
