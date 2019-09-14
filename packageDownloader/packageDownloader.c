@@ -956,7 +956,7 @@ void packageDownloader_FinalizeDownload
     packageDownloader_DownloadCtx_t* dwlCtxPtr = pkgDwlPtr->ctxPtr;
     le_result_t ret = downloadStatus;
 
-    LE_INFO("End downloader (status: %d): Stop FD", ret);
+    LE_INFO("End downloader (status: %d): Stop FD", downloadStatus);
 
     // Close the file descriptior as the downloaded data has been written to FIFO
     if (le_fd_Close(dwlCtxPtr->downloadFd) == -1)
@@ -995,8 +995,6 @@ void packageDownloader_FinalizeDownload
         // Check the download result
         if (LE_OK != ret)
         {
-            bool regUpdate = false;
-
             // Download failure
             if(LE_OK != *storeThreadReturnPtr)
             {
@@ -1017,7 +1015,10 @@ void packageDownloader_FinalizeDownload
                                            -1,
                                            LE_AVC_ERR_INTERNAL);
                     lwm2mcore_SetDownloadError(LWM2MCORE_UPDATE_ERROR_UNSUPPORTED_PACKAGE);
-                    regUpdate = true;
+
+                    // Trigger a connection to the server: the update state and result will be read
+                    // to determine if the download was successful
+                    le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
                 }
             }
             else
@@ -1060,19 +1061,13 @@ void packageDownloader_FinalizeDownload
                                            errorCode);
                 }
             }
-            // Trigger a connection to the server: the update state and result will be read
-            // to determine if the download was successful
-            if (regUpdate)
-            {
-                le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
-            }
         }
         else
         {
             uint16_t errorCode = 0;
             lwm2mcore_GetLastHttpErrorCode(&errorCode);
 
-            if (HTTP_404 == errorCode)
+            if ((HTTP_404 == errorCode) && !(pkgDwlPtr->data.updateOffset))
             {
                 // In this case, no data were sent to FW update
                 // Trigger a connection to the server: the update state and result will be read
@@ -1155,6 +1150,9 @@ void packageDownloader_FinalizeDownload
                             }
                         }
                         ErrorCode = errorCode;
+
+                        LE_DEBUG("FW update ErrorCode: %d", ErrorCode);
+
                         le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
                                                        ResumeDownloadRequest,
                                                        NULL,
@@ -1257,6 +1255,9 @@ void packageDownloader_FinalizeDownload
                 }
             }
             ErrorCode = errorCode;
+
+            LE_DEBUG("SW Update ErrorCode: %d", ErrorCode);
+
             le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
                                            ResumeDownloadRequest,
                                            NULL,
