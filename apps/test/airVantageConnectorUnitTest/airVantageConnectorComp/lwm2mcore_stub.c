@@ -495,6 +495,31 @@ lwm2mcore_Sid_t lwm2mcore_SetUpdateResult
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Function to suspend a download
+ *
+ * @note
+ * This function could be called by the client in order to abort a download if any issue happens
+ * on client side.
+ *
+ * @warning
+ * This function is called in a dedicated thread/task.
+ *
+ * @return
+ *  - LWM2MCORE_ERR_COMPLETED_OK on success
+ *  - LWM2MCORE_ERR_INVALID_STATE if no package download is on-going
+ *  - LWM2MCORE_ERR_GENERAL_ERROR on failure
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_SuspendDownload
+(
+    void
+)
+{
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * @brief Function to get download information
  *
  * @remark Public function which can be called by the client.

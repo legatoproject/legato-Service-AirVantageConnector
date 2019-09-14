@@ -2063,6 +2063,12 @@ static void ProcessUpdateStatus
 #if LE_CONFIG_ENABLE_AV_DATA
             avData_ReportSessionState(LE_AVDATA_SESSION_STOPPED);
 #endif
+            // If any download ongoing, suspend it.
+            if (avcServer_IsDownloadInProgress())
+            {
+                LE_INFO("Suspending on-going download");
+                lwm2mcore_SuspendDownload();
+            }
 
             // If a package is waiting to be installed, trigger the install.
             if (IsPkgReadyToInstall)
@@ -2462,7 +2468,7 @@ static le_result_t CheckFwInstallResult
         // so send a new notification to accept the install pending
         if ((LE_OK == packageDownloader_GetFwUpdateInstallPending(&notify)) && (notify))
         {
-            LE_INFO("Firmware Package is availble , the install is in pending state");
+            LE_INFO("Firmware Package is available , the install is in pending state");
         }
         LE_DEBUG("Update status: %s (%d)", statusStr, fwUpdateStatus);
 
@@ -3328,6 +3334,10 @@ le_result_t le_avc_AcceptDownload
         LE_ERROR("Download thread is still running");
         return LE_FAULT;
     }
+
+    // Accept download indirectly open session if there is no session. In that it should be
+    // considered as user initiated session.
+    IsUserSession = true;
 
     return AcceptDownloadPackage();
 }
