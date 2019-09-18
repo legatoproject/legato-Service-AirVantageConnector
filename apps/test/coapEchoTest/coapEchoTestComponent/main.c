@@ -116,8 +116,10 @@ static void StatusHandler
 //--------------------------------------------------------------------------------------------------
 static void PushAckCallBack
 (
-    le_coap_PushStatus_t status,
-    void* contextPtr
+    le_coap_PushStatus_t status,                ///< [IN] Push status
+    const uint8_t* token,                       ///< [IN] token
+    size_t tokenLength,                         ///< [IN] token length
+    void* contextPtr                            ///< [IN] Push context
 )
 {
     LE_INFO("Push finished");
@@ -291,9 +293,7 @@ static void ExternalCoapHandler
                                       LWM2M_CONTENT_CBOR,
                                       streamStatus,
                                       dataPtr,
-                                      dataLength,
-                                      PushAckCallBack,
-                                      NULL);
+                                      dataLength);
             }
 
             if (status != LE_OK)
@@ -373,9 +373,7 @@ static void PushResources
                           LWM2M_CONTENT_CBOR,
                           streamStatus,
                           payloadPtr,
-                          payloadLength,
-                          PushAckCallBack,
-                          NULL);
+                          payloadLength);
 
     if (status != LE_OK)
     {
@@ -402,6 +400,7 @@ COMPONENT_INIT
     // Subscribe handlers
     le_avc_AddStatusEventHandler(StatusHandler, NULL);
     le_coap_AddMessageEventHandler(ExternalCoapHandler, NULL);
+    le_coap_AddPushEventHandler(PushAckCallBack, NULL);
 
     // Start an AVC session
     switch (le_avc_StartSession())

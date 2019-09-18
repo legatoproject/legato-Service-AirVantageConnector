@@ -86,6 +86,23 @@ static coapTransmitContext_t TransmitContext[2];
 //--------------------------------------------------------------------------------------------------
 static bool PushBusy = false;
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set of different test modes.
+ */
+//--------------------------------------------------------------------------------------------------
+#define COAP_TEST_SMALL_STRING          0
+#define COAP_TEST_LARGE_STRING          1
+#define COAP_TEST_LARGE_STRING_CANCEL   2
+#define COAP_TEST_MAX                   3
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Test mode that is currently running.
+ */
+//--------------------------------------------------------------------------------------------------
+static int TestMode = -1;
+
 //-------------------------------------------------------------------------------------------------
 /**
  * Write received data to a file.
@@ -300,6 +317,13 @@ static le_coap_Code_t CoapTxStreamHandler
             return LE_COAP_CODE_205_CONTENT;
 
         case LE_COAP_TX_STREAM_IN_PROGRESS:
+            if (TestMode == COAP_TEST_LARGE_STRING_CANCEL)
+            {
+                LE_INFO("Testing Stream Cancellation");
+                *txStreamStatusPtr = LE_COAP_TX_STREAM_CANCEL;
+                PushBusy = false;
+                return LE_COAP_CODE_205_CONTENT;
+            }
             LE_INFO("Stream in progress: Continue sending data from file");
             *lengthPtr = CopyToBuffer(respType, bufferPtr, LE_COAP_MAX_PAYLOAD, false);
 
@@ -345,6 +369,8 @@ static le_coap_Code_t CoapTxStreamHandler
 static void PushAckCallBack
 (
     le_coap_PushStatus_t status,                ///< [IN] Push status
+    const uint8_t* token,                       ///< [IN] token
+    size_t tokenLength,                         ///< [IN] token length
     void* contextPtr                            ///< [IN] Push context
 )
 {
@@ -518,9 +544,9 @@ static void ExternalCoapHandler
 
             if (PushBusy)
             {
-                LE_DEBUG("PUSH stream in progress: Continue streaming data from file");
-
+                LE_INFO("PUSH stream in progress: Continue streaming data from file");
                 txStreamStatus = LE_COAP_TX_STREAM_IN_PROGRESS;
+
                 coapResponseCode = CoapTxStreamHandler(UNSOLICITED_RESPONSE,
                                                        ResponsePayload,
                                                        &responsePayloadLength,
@@ -529,16 +555,15 @@ static void ExternalCoapHandler
                 if (coapResponseCode != LE_COAP_CODE_NO_RESPONSE)
                 {
                     // send actual CoAP response.
+                    LE_INFO("pushing: length %"PRIuS" streamStatus %d",
+                            responsePayloadLength, txStreamStatus);
                     result = le_coap_Push(PUSH_URI,
                                           token,
                                           0,
                                           LWM2M_CONTENT_CBOR,
                                           txStreamStatus,
                                           ResponsePayload,
-                                          responsePayloadLength,
-                                          PushAckCallBack,
-                                          NULL);
-
+                                          responsePayloadLength);
                     if (result != LE_OK)
                     {
                         LE_ERROR("Push failed");
@@ -557,7 +582,6 @@ static void ExternalCoapHandler
     }
 }
 
-
 //-------------------------------------------------------------------------------------------------
 /**
  * This function is called every 20 seconds to push data from device to cloud
@@ -574,23 +598,21 @@ static void PushResources
     le_coap_StreamStatus_t txStreamStatus;
     uint8_t token[LE_COAP_MAX_TOKEN_NUM_BYTES];
     le_result_t result;
-    static bool isLargeFile = false;
+
+    TestMode = (TestMode + 1) % COAP_TEST_MAX;
+    LE_INFO("Start pushing data: mode %d", TestMode);
 
     char* pushFilePtr = TransmitContext[UNSOLICITED_RESPONSE].filename;
 
     // Alternate between a small and large string
-    if (isLargeFile)
+    if (TestMode == COAP_TEST_SMALL_STRING)
     {
-        strncpy(pushFilePtr, TRANSMIT_LARGE_STRING, MAX_FILE_PATH_BYTES);
-        isLargeFile = false;
+        strncpy(pushFilePtr, TRANSMIT_SMALL_STRING, MAX_FILE_PATH_BYTES);
     }
     else
     {
-        strncpy(pushFilePtr, TRANSMIT_SMALL_STRING, MAX_FILE_PATH_BYTES);
-        isLargeFile = true;
+        strncpy(pushFilePtr, TRANSMIT_LARGE_STRING, MAX_FILE_PATH_BYTES);
     }
-
-    LE_INFO("Start pushing data");
 
     // if session is still open, push the values
     if (AvSessionState == LE_AVDATA_SESSION_STARTED)
@@ -620,18 +642,19 @@ static void PushResources
                                                ResponsePayload,
                                                &responsePayloadLength,
                                                &txStreamStatus);
+        LE_INFO("COAP response code %d", coapResponseCode);
 
         if (coapResponseCode != LE_COAP_CODE_NO_RESPONSE)
         {
+            LE_INFO("pushing: length %"PRIuS" streamStatus %d",
+                    responsePayloadLength, txStreamStatus);
             result = le_coap_Push(PUSH_URI,
                                   token,
                                   0,
                                   LWM2M_CONTENT_CBOR,
                                   txStreamStatus,
                                   ResponsePayload,
-                                  responsePayloadLength,
-                                  PushAckCallBack,
-                                  NULL);
+                                  responsePayloadLength);
 
             if (result != LE_OK)
             {
@@ -693,6 +716,7 @@ COMPONENT_INIT
     LE_INFO("Start CoapHandler Test");
     le_avdata_AddSessionStateHandler(SessionHandler, NULL);
     le_coap_AddMessageEventHandler(ExternalCoapHandler, NULL);
+    le_coap_AddPushEventHandler(PushAckCallBack, NULL);
 
     le_avdata_RequestSession();
 

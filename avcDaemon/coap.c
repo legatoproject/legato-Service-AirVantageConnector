@@ -65,7 +65,7 @@ static lwm2mcore_CoapResponse_t CoapResponse;
  * CoAP notification
  */
 //--------------------------------------------------------------------------------------------------
-static lwm2mcore_CoapNotification_t CoapNotification;
+static lwm2mcore_CoapNotification_t CoapNotification = {0};
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -214,8 +214,6 @@ static void CoapMessageHandler
         return;
     }
 
-    LE_INFO("Request: CoAP message received from server");
-
     memset(&coapMsgData, 0, sizeof(CoapMessageData_t));
 
     // Extract info from the server request.
@@ -230,6 +228,16 @@ static void CoapMessageHandler
     // Get payload
     uint8_t* payloadPtr = (uint8_t *)lwm2mcore_GetRequestPayload(requestRef);
     coapMsgData.payloadLength = lwm2mcore_GetRequestPayloadLength(requestRef);
+
+    LE_DEBUG("Rx Msg from server: code %u streamStatus %u contentType %u length %"PRIuS,
+             coapMsgData.code, coapMsgData.streamStatus,
+             coapMsgData.contentType, coapMsgData.payloadLength);
+
+    if (coapMsgData.streamStatus == LE_COAP_TX_STREAM_ERROR)
+    {
+        // Reset the busy flag, to prevent the stream from permanently remaining in busy state.
+        PushBusy = false;
+    }
 
     size_t payloadLength = coapMsgData.payloadLength;
     if (payloadLength >= LE_COAP_MAX_PAYLOAD_NUM_BYTES)
@@ -273,12 +281,18 @@ static void CoapAckHandler
 
     le_coap_PushStatus_t pushStatus = ConvertAckToPushStatus(ackResult);
 
+    if (pushStatus == LE_COAP_PUSH_FAILED)
+    {
+        // Reset the busy flag, to prevent the stream from permanently remaining in busy state.
+        PushBusy = false;
+    }
+
     if (handlerPtr != NULL)
     {
-        handlerPtr(pushStatus, coapNotificationPtr->callbackContextPtr);
-
-        // Handler cannot be called twice, so clear it.
-        coapNotificationPtr->callbackRef = NULL;
+        handlerPtr(pushStatus,
+                   (const uint8_t*)&coapNotificationPtr->tokenPtr,
+                   coapNotificationPtr->tokenLength,
+                   coapNotificationPtr->callbackContextPtr);
     }
     else
     {
@@ -339,13 +353,6 @@ le_coap_MessageEventHandlerRef_t le_coap_AddMessageEventHandler
     // Set the CoAP message handler.
     // This is the default message handler for CoAP content types not handled by LwM2M.
     lwm2mcore_SetCoapExternalHandler(CoapMessageHandler);
-
-    // Reset push busy status
-    PushBusy = false;
-
-    // Not all ack responses received on CoAP is sent to the external CoAP Handler.
-    // This is the default message handler for push ack received / timeout.
-    lwm2mcore_SetCoapAckHandler(CoapAckHandler);
 
     // Register the user app handler
     handlerRef = le_event_AddLayeredHandler("CoapExternalHandler",
@@ -447,6 +454,49 @@ le_result_t le_coap_SendResponse
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Add push event handler
+ */
+//--------------------------------------------------------------------------------------------------
+le_coap_PushEventHandlerRef_t le_coap_AddPushEventHandler
+(
+    le_coap_PushHandlerFunc_t handlerPtr, ///< [IN] Push result callback
+    void* contextPtr                      ///< [IN] Context pointer
+)
+{
+    if (CoapNotification.callbackRef != NULL)
+    {
+        LE_ERROR("Can't add new handler: old one has to be removed first");
+        return NULL;
+    }
+    // Not all ack responses received on CoAP is sent to the external CoAP Handler.
+    // This is the default message handler for push ack received / timeout.
+    lwm2mcore_SetCoapAckHandler(CoapAckHandler);
+
+    CoapNotification.callbackRef = handlerPtr;
+    CoapNotification.callbackContextPtr = contextPtr;
+
+    return (le_coap_PushEventHandlerRef_t) handlerPtr;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Remove push event handler
+ */
+//--------------------------------------------------------------------------------------------------
+void le_coap_RemovePushEventHandler
+(
+    le_coap_PushEventHandlerRef_t handlerRef ///< [IN] Push result callback reference
+)
+{
+    if (CoapNotification.callbackRef == handlerRef)
+    {
+        CoapNotification.callbackRef = NULL;
+        CoapNotification.callbackContextPtr = NULL;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * This function sends unsolicited CoAP push messages to the server. Responses to push will be
  * received by push handler function.
  *
@@ -467,9 +517,7 @@ le_result_t le_coap_Push
     uint16_t contentType,                 ///< [IN] Content type
     le_coap_StreamStatus_t streamStatus,  ///< [IN] Status of transmit stream
     const uint8_t* payloadPtr,            ///< [IN] Payload pointer
-    size_t payloadLength,                 ///< [IN] Payload Length
-    le_coap_PushHandlerFunc_t handlerPtr, ///< [IN] Push result callback
-    void* contextPtr                      ///< [IN] Context pointer
+    size_t payloadLength                  ///< [IN] Payload Length
 )
 {
     bool result;
@@ -526,6 +574,10 @@ le_result_t le_coap_Push
             }
             break;
 
+        case LE_COAP_TX_STREAM_CANCEL:
+            PushBusy = false;
+            return LE_OK;
+
         case LE_COAP_TX_STREAM_END:
         case LE_COAP_TX_STREAM_ERROR:
             PushBusy = false;
@@ -544,10 +596,6 @@ le_result_t le_coap_Push
     coapNotificationPtr->tokenPtr = (uint8_t*)tokenPtr;
     coapNotificationPtr->tokenLength = tokenLength;
 
-    // Callback handler
-    coapNotificationPtr->callbackRef = handlerPtr;
-    coapNotificationPtr->callbackContextPtr = contextPtr;
-
     result = lwm2mcore_SendNotification(&CoapNotification);
 
     if(result)
@@ -555,6 +603,8 @@ le_result_t le_coap_Push
         return LE_OK;
     }
 
+    // Reset the busy flag, to prevent the stream from permanently remaining in busy state.
+    PushBusy = false;
     return LE_FAULT;
 }
 
