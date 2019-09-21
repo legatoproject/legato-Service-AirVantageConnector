@@ -32,6 +32,7 @@ requires:
         le_secStore.api
         le_cellnet.api
         modemServices/le_sms.api
+        le_clkSync.api
 #endif
     }
 

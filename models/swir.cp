@@ -32,6 +32,13 @@
           <setting default-label="Certificate" path="0" type="binary"></setting>
         </node>
 
+        <node default-label="Clock Time Configuration" path="33405">
+          <variable default-label="Time server source" path="0" type="int"></variable>
+          <variable default-label="Time server addresses" path="1" type="string"></variable>
+          <command default-label="Time update operation" path="2"></command>
+          <variable default-label="Time update status" path="3" type="int"></variable>
+        </node>
+
       </asset>
     </encoding>
   </data>
