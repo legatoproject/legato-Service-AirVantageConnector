@@ -801,6 +801,48 @@ static int EventHandler
                 avcServer_UpdateStatus(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
                                        -1, -1, LE_AVC_ERR_NONE);
 
+                if (false == SessionStarted)
+                {
+                    // In this case, check if a package download is not pending
+                    lwm2mcore_UpdateType_t type;
+                    uint64_t packageSize = 0;
+                    lwm2mcore_Sid_t sID = lwm2mcore_GetDownloadInfo(&type, &packageSize);
+                    if ((LWM2MCORE_ERR_COMPLETED_OK == sID) && packageSize)
+                    {
+                        // A package download pending notification needs to be sent
+                        le_avc_UpdateType_t updateType = LE_AVC_UNKNOWN_UPDATE;
+                        switch (type)
+                        {
+                            case LWM2MCORE_FW_UPDATE_TYPE:
+                                updateType = LE_AVC_FIRMWARE_UPDATE;
+                                break;
+
+                            case LWM2MCORE_SW_UPDATE_TYPE:
+                                updateType = LE_AVC_APPLICATION_UPDATE;
+                                break;
+
+                            default:
+                                LE_ERROR("Incorrect update type %d", type);
+                                break;
+                        }
+
+                        if (LE_AVC_UNKNOWN_UPDATE != updateType)
+                        {
+                            uint64_t numBytesToDownload = 0;
+                            if (LE_OK != packageDownloader_BytesLeftToDownload(&numBytesToDownload))
+                            {
+                                LE_ERROR("Issue to get remaining bytes to be downloaded");
+                                numBytesToDownload = packageSize;
+                            }
+                            avcServer_UpdateStatus(LE_AVC_DOWNLOAD_PENDING,
+                                                   updateType,
+                                                   numBytesToDownload,
+                                                   -1,
+                                                   LE_AVC_ERR_INTERNAL);
+                        }
+                    }
+                }
+
                 if (Lwm2mInstanceRef)
                 {
                     lwm2mcore_Free(Lwm2mInstanceRef);
