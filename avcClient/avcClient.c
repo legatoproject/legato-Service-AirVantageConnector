@@ -537,25 +537,16 @@ static int PackageEventHandler
             break;
 
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FINISHED:
-            if (LWM2MCORE_FW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
-            {
-                // The download thread finished the file download without any error, but the FOTA
-                // update package still might be rejected by the store thread, e.g. if the received
-                // file is incomplete or contains any error.
-                // The download complete event is therefore not sent now and will be sent only when
-                // the store thread also exits without error.
-            }
-            else if (LWM2MCORE_SW_UPDATE_TYPE == status.u.pkgStatus.pkgType)
-            {
-                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_COMPLETE, LE_AVC_APPLICATION_UPDATE,
-                                       status.u.pkgStatus.numBytes, status.u.pkgStatus.progress,
-                                       ConvertFumoErrorCode(status.u.pkgStatus.errorCode));
-            }
-            else
-            {
-                LE_ERROR("Not yet supported package download type %d",
-                         status.u.pkgStatus.pkgType);
-            }
+            // The download thread finished the file download without any error, but the FOTA
+            // update package still might be rejected by the store thread, e.g. if the received
+            // file is incomplete or contains any error.
+            // The download complete event is therefore not sent now and will be sent only when
+            // the store thread also exits without error.
+
+            // For SOTA there is no store thread, but status will be sent by the same function
+            // that deals with finalizing the download.
+            LE_INFO("PackageDownloader finished. PackageType: %d", status.u.pkgStatus.pkgType);
+
             break;
 
         case LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FAILED:
