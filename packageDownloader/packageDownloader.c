@@ -153,6 +153,113 @@ static void AbortDownload
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Print error message and convert package downloader error to avc error
+ */
+//--------------------------------------------------------------------------------------------------
+static le_avc_ErrorCode_t ConvertResult
+(
+    le_result_t downloadResult
+)
+{
+    le_avc_ErrorCode_t errorCode = LE_AVC_ERR_NONE;
+
+    switch (downloadResult)
+    {
+        case LE_OK:
+        case LE_DUPLICATE:
+            LE_INFO("Download OK");
+            break;
+
+        case LE_SUSPENDED:
+            LE_INFO("Download suspended");
+            break;
+
+        case LE_COMM_ERROR:
+        case LE_TERMINATED:
+        case LE_TIMEOUT:
+        case LE_CLOSED:
+            LE_ERROR("Network/Communication error. Error code received: %s",
+                     LE_RESULT_TXT(downloadResult));
+            errorCode = LE_AVC_ERR_NETWORK;
+            break;
+
+        case LE_NO_MEMORY:
+            LE_ERROR("Not enough memory available");
+            errorCode = LE_AVC_ERR_RAM;
+            break;
+
+        case LE_OUT_OF_RANGE:
+            LE_ERROR("Package size too big");
+            errorCode = LE_AVC_ERR_PKG_TOO_BIG;
+            break;
+
+        case LE_FORMAT_ERROR:
+            LE_ERROR("Bad package/secuity check failure");
+            errorCode = LE_AVC_ERR_SECURITY_FAILURE;
+            break;
+
+        default:
+            LE_ERROR("Internal error. Error code received: %s", LE_RESULT_TXT(downloadResult));
+            errorCode = LE_AVC_ERR_INTERNAL;
+            break;
+
+    }
+    return errorCode;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Print error message and change update state machine based on error.
+ */
+//--------------------------------------------------------------------------------------------------
+static void SetDownloadError
+(
+    le_result_t downloadResult
+)
+{
+    switch (downloadResult)
+    {
+        case LE_OK:
+        case LE_DUPLICATE:
+        case LE_SUSPENDED:
+            LE_INFO("Download OK/Suspended. Download result: %s", LE_RESULT_TXT(downloadResult));
+            break;
+
+        case LE_COMM_ERROR:
+        case LE_TERMINATED:
+        case LE_TIMEOUT:
+        case LE_NO_MEMORY:
+            LE_ERROR("Network/Communication/RAM error. Retry possible. Error code received: %s",
+                     LE_RESULT_TXT(downloadResult));
+            break;
+
+        case LE_CLOSED:
+            LE_ERROR("Bad package/communication error. Error code received: %s",
+                     LE_RESULT_TXT(downloadResult));
+            lwm2mcore_SetDownloadError(LWM2MCORE_UPDATE_ERROR_UNSUPPORTED_PACKAGE);
+            break;
+
+        case LE_OUT_OF_RANGE:
+            LE_ERROR("Package size too big");
+            lwm2mcore_SetDownloadError(LWM2MCORE_UPDATE_ERROR_NO_STORAGE_SPACE);
+            break;
+
+        case LE_FORMAT_ERROR:
+            LE_ERROR("Bad package/secuity check failure");
+            lwm2mcore_SetDownloadError(LWM2MCORE_UPDATE_ERROR_UNSUPPORTED_PACKAGE);
+            break;
+
+        default:
+            LE_ERROR("Internal error. Error code received: %s", LE_RESULT_TXT(downloadResult));
+            lwm2mcore_SetDownloadError(LWM2MCORE_UPDATE_ERROR_DEVICE_SPECIFIC);
+            break;
+
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Function to send a download pending request
  */
 //--------------------------------------------------------------------------------------------------
@@ -898,6 +1005,7 @@ static le_result_t RequestDownload
     if (LWM2MCORE_ERR_COMPLETED_OK != downloaderResult)
     {
         LE_ERROR("Package download failed downloaderResult %d", downloaderResult);
+
         if ((LWM2MCORE_ERR_NET_ERROR != downloaderResult)
          && (LWM2MCORE_ERR_MEMORY != downloaderResult))
         {
@@ -926,7 +1034,7 @@ static le_result_t RequestDownload
             if (LE_OK != result)
             {
                 // Finalize the download:
-                // - Close the file descriptior as the downloaded data has been written to FIFO
+                // - Close the file descriptor as the downloaded data has been written to FIFO
                 // - Send notifications
                 packageDownloader_FinalizeDownload(result);
             }
@@ -954,9 +1062,14 @@ void packageDownloader_FinalizeDownload
 {
     lwm2mcore_PackageDownloader_t* pkgDwlPtr = &PkgDwl;
     packageDownloader_DownloadCtx_t* dwlCtxPtr = pkgDwlPtr->ctxPtr;
-    le_result_t ret = downloadStatus;
 
-    LE_INFO("End downloader (status: %d): Stop FD", downloadStatus);
+    if (dwlCtxPtr->downloadFd < 0)
+    {
+        LE_ERROR("Download already finished");
+        return;
+    }
+
+    LE_INFO("End downloader (downloadStatus: %s): Stop FD", LE_RESULT_TXT(downloadStatus));
 
     // Close the file descriptior as the downloaded data has been written to FIFO
     if (le_fd_Close(dwlCtxPtr->downloadFd) == -1)
@@ -965,234 +1078,83 @@ void packageDownloader_FinalizeDownload
     }
     dwlCtxPtr->downloadFd = -1;
 
-    // At this point, download has ended. Wait for the end of store thread used for FOTA
+    le_result_t* storeThreadReturnPtr = 0;
+
     if (LWM2MCORE_FW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
     {
-        le_result_t* storeThreadReturnPtr = 0;
 
         if (StoreFwRef)
         {
             le_thread_Join(StoreFwRef, (void**) &storeThreadReturnPtr);
             StoreFwRef = NULL;
-            LE_DEBUG("Store thread joined with return value = %d", *storeThreadReturnPtr);
+            LE_DEBUG("Store thread joined with return value = %s",
+                                         LE_RESULT_TXT(*storeThreadReturnPtr));
         }
         else
         {
             storeThreadReturnPtr = &FwUpdateResult;
-            LE_DEBUG("Store thread with return value = %d", *storeThreadReturnPtr);
+            LE_DEBUG("Store thread with return value = %s", LE_RESULT_TXT(*storeThreadReturnPtr));
         }
+    }
 
-        // Check if the downloaded is suspended
-        LE_DEBUG("Check if the downloaded is suspended, ret %d, suspended ? %d",
-                 ret, downloader_CheckDownloadToSuspend());
-        if ((LE_OK != ret)
-         && (downloader_CheckDownloadToSuspend()))
+    // Need to handle download suspend/abort cases. Value of downloadStatus may be LE_OK in case of
+    // session stop or poor network. So returning LE_OK shouldn't considered as download completed.
+
+    // Check if the downloaded is suspended
+    if (downloader_CheckDownloadToSuspend())
+    {
+        switch (pkgDwlPtr->data.updateType)
         {
-            ret = LE_OK;
-            LE_DEBUG("Download is suspended: consider download as OK");
-        }
-
-        // Check the download result
-        if (LE_OK != ret)
-        {
-            // Download failure
-            if(LE_OK != *storeThreadReturnPtr)
-            {
-
-                if (LE_NO_MEMORY == *storeThreadReturnPtr)
+            case LWM2MCORE_SW_UPDATE_TYPE:
+                // No package validation is done during download for SOTA, it is done after
+                // download finishes, hence we can safely assume that download is suspended not
+                // for package error.
+                LE_DEBUG("Download is suspended: consider download as OK");
+                downloadStatus = LE_SUSPENDED;
+                break;
+            case LWM2MCORE_FW_UPDATE_TYPE:
+                // Package validation goes in parallel in FOTA for some target, so suspend
+                // download may happen for real issue except network errors/session-stop. Check the
+                // store thread return value to decide about the download status.
+                switch (*storeThreadReturnPtr)
                 {
-                    ErrorCode = LE_AVC_ERR_RAM;
-                    le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
-                                                   ResumeDownloadRequest,
-                                                   NULL,
-                                                   NULL);
-                }
-                else
-                {
-                    avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
-                                           LE_AVC_FIRMWARE_UPDATE,
-                                           -1,
-                                           -1,
-                                           LE_AVC_ERR_INTERNAL);
-                    lwm2mcore_SetDownloadError(LWM2MCORE_UPDATE_ERROR_UNSUPPORTED_PACKAGE);
-
-                    // Trigger a connection to the server: the update state and result will be read
-                    // to determine if the download was successful
-                    le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
-                }
-            }
-            else
-            {
-                le_avc_ErrorCode_t errorCode = LE_AVC_ERR_INTERNAL;
-                switch (ret)
-                {
-                    case LE_COMM_ERROR:
-                    case LE_TERMINATED:
-                    case LE_FAULT:
-                        errorCode = LE_AVC_ERR_NETWORK;
-                        break;
-
-                    case LE_TIMEOUT:
-                        errorCode = LE_AVC_ERR_NETWORK;
-                        break;
-
-                    case LE_NO_MEMORY:
-                        errorCode = LE_AVC_ERR_RAM;
-                        break;
-
-                    case LE_FORMAT_ERROR:
-                        errorCode = LE_AVC_ERR_NONE;
+                    case LE_OK:
+                    case LE_CLOSED:
+                        // Download can be resumed in these cases, hence consider download status
+                        // as suspended.
+                        downloadStatus = LE_SUSPENDED;
                         break;
 
                     default:
-                        errorCode = LE_AVC_ERR_INTERNAL;
+                        // Store thread returns bad value. This should be considered as final
+                        // download status
+                        LE_ERROR("Download suspended. But store thread returns error (%s). This"
+                                " will be considered as final download status",
+                                LE_RESULT_TXT(*storeThreadReturnPtr));
+                        downloadStatus = *storeThreadReturnPtr;
                         break;
-                }
-                LE_ERROR("errorCode %d", errorCode);
 
-                // In case of LE_AVC_ERR_NONE, the notification is sent by LwM2MCore:
-                // LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_FAILED
-                if (LE_AVC_ERR_NONE != errorCode)
-                {
-                    avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
-                                           LE_AVC_FIRMWARE_UPDATE,
-                                           -1,
-                                           -1,
-                                           errorCode);
-                }
-            }
-        }
-        else
-        {
-            uint16_t errorCode = 0;
-            lwm2mcore_GetLastHttpErrorCode(&errorCode);
-
-            if ((HTTP_404 == errorCode) && !(pkgDwlPtr->data.updateOffset))
-            {
-                // In this case, no data were sent to FW update
-                // Trigger a connection to the server: the update state and result will be read
-                // to determine if the download was successful
-                le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
-                goto end;
-            }
-
-            switch (*storeThreadReturnPtr)
-            {
-                case LE_OUT_OF_RANGE:
-                    avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
-                                           LE_AVC_FIRMWARE_UPDATE,
-                                           -1,
-                                           -1,
-                                           LE_AVC_ERR_PKG_TOO_BIG);
-                    lwm2mcore_SetDownloadError(LWM2MCORE_UPDATE_ERROR_NO_STORAGE_SPACE);
-                    le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
-                    break;
-
-                case LE_NO_MEMORY:
-                case LE_CLOSED:
-                {
-                    uint64_t numBytesToDownload;
-                    LE_DEBUG("Download suspend, store return %d", *storeThreadReturnPtr);
-
-                    // Retrieve number of bytes left to download
-                    if (LE_OK != packageDownloader_BytesLeftToDownload(&numBytesToDownload))
-                    {
-                        LE_ERROR("Unable to retrieve bytes left to download");
-                        numBytesToDownload = 0;
-                        goto end;
-                    }
-
-                    if (!numBytesToDownload)
-                    {
-                        // The whole package was downloaded but FW update suspend
-                        // Indicate that the download fails
-                        // This is needed because for the downloader, the download succeeds
-                        // but the download on FW update side failed
-                        avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
-                                               LE_AVC_FIRMWARE_UPDATE,
-                                               -1,
-                                               -1,
-                                               LE_AVC_ERR_BAD_PACKAGE);
-                        lwm2mcore_SetDownloadError(LWM2MCORE_UPDATE_ERROR_UNSUPPORTED_PACKAGE);
-
-                        // Trigger a connection to the server: the update state and result will be
-                        // read to determine if the download was successful
-                        le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
-                                                       UpdateStatus,
-                                                       NULL,
-                                                       NULL);
-                    }
-                    else
-                    {
-                        le_avc_ErrorCode_t errorCode = LE_AVC_ERR_NONE;
-                        if (LE_NO_MEMORY == *storeThreadReturnPtr)
-                        {
-                            errorCode = LE_AVC_ERR_RAM;
-                        }
-
-                        if (LE_OK != downloadStatus)
-                        {
-                            switch (downloadStatus)
-                            {
-                                case LE_COMM_ERROR:
-                                case LE_TERMINATED:
-                                case LE_FAULT:
-                                case LE_TIMEOUT:
-                                    errorCode = LE_AVC_ERR_NETWORK;
-                                    break;
-
-                                case LE_NO_MEMORY:
-                                    errorCode = LE_AVC_ERR_RAM;
-                                    break;
-
-                                default:
-                                    break;
-                            }
-                        }
-                        ErrorCode = errorCode;
-
-                        LE_DEBUG("FW update ErrorCode: %d", ErrorCode);
-
-                        le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
-                                                       ResumeDownloadRequest,
-                                                       NULL,
-                                                       NULL);
-                    }
                 }
                 break;
+            default:
+                LE_ERROR("Bad package type");
+                break;
+        }
+    }
 
-                case LE_OK:
-                    LE_DEBUG("Download OK");
-                    // Check if the downloader returns network or memory issue
-                    if (LE_OK != downloadStatus)
-                    {
-                        //uint64_t numBytesToDownload = 0;
-                        le_avc_ErrorCode_t errorCode = LE_AVC_ERR_NONE;
+    switch (downloadStatus)
+    {
+        case LE_OK:
+            if (LWM2MCORE_FW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
+            {
+                // Note: Download status is OK here, i.e. download finished successfully without any
+                // issue. Now we need to check what is the return of store thread. As download
+                // thread finishes successfully, any error in store thread should be considered as
+                // error and no retry is required
+                switch (*storeThreadReturnPtr)
+                {
 
-                        switch (downloadStatus)
-                        {
-                            case LE_COMM_ERROR:
-                            case LE_TERMINATED:
-                            case LE_FAULT:
-                            case LE_TIMEOUT:
-                                errorCode = LE_AVC_ERR_NETWORK;
-                                break;
-
-                            case LE_NO_MEMORY:
-                                errorCode = LE_AVC_ERR_RAM;
-                                break;
-
-                            default:
-                                break;
-                        }
-                        ErrorCode = errorCode;
-                        le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
-                                                       ResumeDownloadRequest,
-                                                       NULL,
-                                                       NULL);
-                    }
-                    else
-                    {
+                    case LE_OK:
                         // Send download complete event.
                         // Not setting the downloaded number of bytes and percentage
                         // allows using the last stored values.
@@ -1208,66 +1170,76 @@ void packageDownloader_FinalizeDownload
                                                        UpdateStatus,
                                                        NULL,
                                                        NULL);
-                    }
-                    break;
-
-                default:
-                    LE_ERROR("Package download failure");
-                    lwm2mcore_SetDownloadError(LWM2MCORE_UPDATE_ERROR_UNSUPPORTED_PACKAGE);
-                    // Send download failed event and set the error to "bad package",
-                    // as it was rejected by the FW update process.
-                    avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
-                                           LE_AVC_FIRMWARE_UPDATE,
-                                           -1,
-                                           -1,
-                                           LE_AVC_ERR_BAD_PACKAGE);
-
-                    // Trigger a connection to the server: the update state and result will be read
-                    // to determine if the download was successful
-                    le_event_QueueFunctionToThread(dwlCtxPtr->mainRef, UpdateStatus, NULL, NULL);
-                    break;
-            }
-        }
-    }
-    else if (LWM2MCORE_SW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
-    {
-        if (downloader_CheckDownloadToSuspend())
-        {
-            le_avc_ErrorCode_t errorCode = LE_AVC_ERR_NONE;
-
-            if (LE_OK != downloadStatus)
-            {
-                switch (downloadStatus)
-                {
-                    case LE_COMM_ERROR:
-                    case LE_TERMINATED:
-                    case LE_FAULT:
-                    case LE_TIMEOUT:
-                        errorCode = LE_AVC_ERR_NETWORK;
                         break;
-
-                    case LE_NO_MEMORY:
-                        errorCode = LE_AVC_ERR_RAM;
-                        break;
-
+                    // As download part finished successfully, any error on the store side should
+                    // be consider as error
                     default:
+                        SetDownloadError(*storeThreadReturnPtr);
+                        avcServer_UpdateStatus(LE_AVC_DOWNLOAD_FAILED,
+                                               LE_AVC_FIRMWARE_UPDATE,
+                                               -1,
+                                               -1,
+                                               ConvertResult(*storeThreadReturnPtr));
+                        le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
+                                                       UpdateStatus,
+                                                       NULL,
+                                                       NULL);
                         break;
                 }
             }
-            ErrorCode = errorCode;
+            else
+            {
+                // SOTA usecase. As there is no store thread, if download returns LE_OK, that should
+                // be enough to send download complete status.
 
-            LE_DEBUG("SW Update ErrorCode: %d", ErrorCode);
+                // Send download complete event.
+                // Not setting the downloaded number of bytes and percentage
+                // allows using the last stored values.
+                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_COMPLETE,
+                                       LE_AVC_APPLICATION_UPDATE,
+                                       -1,
+                                       -1,
+                                       LE_AVC_ERR_NONE);
 
+                // Trigger a connection to the server: the update state and result will be
+                // read to determine if the download was successful
+                le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
+                                               UpdateStatus,
+                                               NULL,
+                                               NULL);
+
+            }
+            break;
+
+        // Note: This function will only send update status to notification handler for LE_OK case
+        // because of the dependency on store function (thread). For all other cases, notification
+        // will be sent by package downloader event handler (currently resides in avcClient.c).
+        case LE_SUSPENDED:
+        case LE_COMM_ERROR:
+        case LE_TIMEOUT:
+        case LE_TERMINATED:
+        case LE_NO_MEMORY:
+            ErrorCode = ConvertResult(downloadStatus);
             le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
                                            ResumeDownloadRequest,
                                            NULL,
                                            NULL);
-        }
+            break;
+
+        default:
+            // Some real error. Report download failure and cancel the SOTA/FOTA job
+            SetDownloadError(downloadStatus);
+            le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
+                                                  UpdateStatus,
+                                                  NULL,
+                                                  NULL);
+            break;
+
     }
 
-end:
     SetDownloadStatus(DOWNLOAD_STATUS_IDLE);
 }
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1355,7 +1327,7 @@ static void* StoreFwThread
     }
 
     result = le_fwupdate_Download(fd);
-    LE_DEBUG("le_fwupdate_Download returns %d", result);
+    LE_DEBUG("le_fwupdate_Download returns %s", LE_RESULT_TXT(result));
     ret = result;
 
     // fd has been passed to le_fwupdate_Download(), so do not close in this thread.
@@ -1703,6 +1675,9 @@ lwm2mcore_Sid_t lwm2mcore_WritePackageData
         LE_ERROR("Failed to write data: size %"PRIu32", count %zd", length, count);
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
+
+    // Update data offset written to download fifo
+    PkgDwl.data.updateOffset += count;
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
