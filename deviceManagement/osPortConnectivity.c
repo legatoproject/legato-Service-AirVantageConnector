@@ -73,7 +73,7 @@ SignalBarsTech_t;
  *  - Android source code (SignalStrength API) for CDMA
  */
 //--------------------------------------------------------------------------------------------------
-static uint16_t SignalBarsTable[SIGNAL_BARS_WITH_MAX][SIGNAL_BARS_RANGE] =
+static int16_t SignalBarsTable[SIGNAL_BARS_WITH_MAX][SIGNAL_BARS_RANGE] =
 {
     {  125, 104,  98,  89,  80, 0 },    ///< RSSI (GSM)
     {  125, 106, 100,  90,  80, 0 },    ///< RSCP (UMTS)
@@ -355,7 +355,7 @@ static lwm2mcore_Sid_t GetCellularIpAddresses
 {
     le_mdc_ProfileRef_t profileRef;
     le_mdc_ConState_t state = LE_MDC_DISCONNECTED;
-    uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile(LE_MDC_DEFAULT_PROFILE));
+    uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile((uint32_t)LE_MDC_DEFAULT_PROFILE));
     lwm2mcore_Sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
     le_result_t result;
 
@@ -448,7 +448,7 @@ static lwm2mcore_Sid_t GetCellularRouterIpAddresses
 {
     le_mdc_ProfileRef_t profileRef;
     le_mdc_ConState_t state = LE_MDC_DISCONNECTED;
-    uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile(LE_MDC_DEFAULT_PROFILE));
+    uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile((uint32_t)LE_MDC_DEFAULT_PROFILE));
     lwm2mcore_Sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
     le_result_t result;
 
@@ -539,7 +539,7 @@ static lwm2mcore_Sid_t GetCellularApn
 )
 {
     le_mdc_ProfileRef_t profileRef;
-    uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile(LE_MDC_DEFAULT_PROFILE));
+    uint32_t i = le_mdc_GetProfileIndex(le_mdc_GetProfile((uint32_t)LE_MDC_DEFAULT_PROFILE));
     lwm2mcore_Sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
     le_result_t result;
 
@@ -2511,7 +2511,6 @@ static void DataConnectionStateHandler
     DataConnected = connected;
 }
 
-
 COMPONENT_INIT
 {
     LE_INFO("start dm component");
@@ -2519,6 +2518,7 @@ COMPONENT_INIT
     // Initialize the bearer and register for data connection status.
     // We wont be requesting a data connection in this component, but we need to know
     // if data connection is established.
+
     le_data_ConnectService();
 
     le_data_AddConnectionStateHandler(DataConnectionStateHandler, NULL);

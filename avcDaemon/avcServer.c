@@ -889,7 +889,9 @@ static void ReadUserAgreementConfiguration
     bool UserAgreementStatus;
     le_avc_UserAgreement_t userAgreement;
 
-    for (userAgreement = 0; userAgreement <= LE_AVC_USER_AGREEMENT_REBOOT; userAgreement++)
+    for (userAgreement = LE_AVC_USER_AGREEMENT_CONNECTION;
+         userAgreement <= LE_AVC_USER_AGREEMENT_REBOOT;
+         userAgreement++)
     {
         // Read user agreement configuration
         le_result_t result = le_avc_GetUserAgreement(userAgreement, &UserAgreementStatus);
@@ -1772,7 +1774,7 @@ static void InitPollingTimer
         time_t currentTime = time(NULL);
 
         // Time elapsed since last poll
-        time_t timeElapsed = 0;
+        int32_t timeElapsed = 0;
 
         // Retrieve configuration from le_fs
         result = GetAvcConfig(&avcConfig);
@@ -2800,7 +2802,7 @@ void avcServer_QueryDownload
 
     avcServer_UpdateStatus( LE_AVC_DOWNLOAD_PENDING,
                             ConvertToAvcType(PkgDownloadCtx.type),
-                            (bytesToDownload == INT64_MAX) ? -1 :PkgDownloadCtx.bytesToDownload,
+                            (bytesToDownload == INT64_MAX) ? -1 : (int32_t)PkgDownloadCtx.bytesToDownload,
                             0,
                             errorCode
                            );
@@ -3061,7 +3063,7 @@ static void FirstLayerUpdateStatusHandler
 )
 {
     UpdateStatusData_t* eventDataPtr = reportPtr;
-    le_avc_StatusHandlerFunc_t clientHandlerFunc = secondLayerHandlerFunc;
+    le_avc_StatusHandlerFunc_t clientHandlerFunc = (le_avc_StatusHandlerFunc_t)secondLayerHandlerFunc;
 
     clientHandlerFunc(eventDataPtr->updateStatus,
                       eventDataPtr->totalNumBytes,
@@ -3962,11 +3964,10 @@ le_result_t le_avc_GetRetryTimers
         snprintf(timerName, RETRY_TIMER_NAME_BYTES, "%d", i);
         retryTimersCfg[i] = config.retryTimers[i];
 
-        if ((retryTimersCfg[i] < LE_AVC_RETRY_TIMER_MIN_VAL) ||
-            (retryTimersCfg[i] > LE_AVC_RETRY_TIMER_MAX_VAL))
+        if (retryTimersCfg[i] > LE_AVC_RETRY_TIMER_MAX_VAL)
         {
-            LE_ERROR("The stored Retry Timer value %d is out of range. Min %d, Max %d.",
-                     retryTimersCfg[i], LE_AVC_RETRY_TIMER_MIN_VAL, LE_AVC_RETRY_TIMER_MAX_VAL);
+            LE_ERROR("The stored Retry Timer value %d is out of range. Max %d.",
+                     retryTimersCfg[i], LE_AVC_RETRY_TIMER_MAX_VAL);
 
             return LE_OUT_OF_RANGE;
         }
@@ -4011,11 +4012,10 @@ le_result_t le_avc_SetRetryTimers
     int i;
     for (i = 0; i < LE_AVC_NUM_RETRY_TIMERS; i++)
     {
-        if ((timerValuePtr[i] < LE_AVC_RETRY_TIMER_MIN_VAL) ||
-            (timerValuePtr[i] > LE_AVC_RETRY_TIMER_MAX_VAL))
+        if (timerValuePtr[i] > LE_AVC_RETRY_TIMER_MAX_VAL)
         {
-            LE_ERROR("Attemping to set an out-of-range Retry Timer value of %d. Min %d, Max %d.",
-                     timerValuePtr[i], LE_AVC_RETRY_TIMER_MIN_VAL, LE_AVC_RETRY_TIMER_MAX_VAL);
+            LE_ERROR("Attemping to set an out-of-range Retry Timer value of %d. Max %d.",
+                     timerValuePtr[i], LE_AVC_RETRY_TIMER_MAX_VAL);
             return LE_OUT_OF_RANGE;
         }
     }
@@ -4091,11 +4091,10 @@ le_result_t le_avc_GetPollingTimer
     }
 
     // check if it this configuration is allowed
-    if ((pollingTimerCfg < LE_AVC_POLLING_TIMER_MIN_VAL) ||
-        (pollingTimerCfg > LE_AVC_POLLING_TIMER_MAX_VAL))
+    if (pollingTimerCfg > LE_AVC_POLLING_TIMER_MAX_VAL)
     {
-        LE_ERROR("The stored Polling Timer value %" PRIu32" is out of range. Min %d, Max %d.",
-                 pollingTimerCfg, LE_AVC_POLLING_TIMER_MIN_VAL, LE_AVC_POLLING_TIMER_MAX_VAL);
+        LE_ERROR("The stored Polling Timer value %" PRIu32" is out of range. Max %d.",
+                 pollingTimerCfg, LE_AVC_POLLING_TIMER_MAX_VAL);
         return LE_OUT_OF_RANGE;
     }
     else
@@ -4143,11 +4142,10 @@ le_result_t le_avc_SetPollingTimer
         // 0 is not a valid value for lifetime, a specific value (7300 days) has to be used
         lifetime = LWM2MCORE_LIFETIME_VALUE_DISABLED;
     }
-    else if ((pollingTimer < LE_AVC_POLLING_TIMER_MIN_VAL) ||
-             (pollingTimer > LE_AVC_POLLING_TIMER_MAX_VAL))
+    else if (pollingTimer > LE_AVC_POLLING_TIMER_MAX_VAL)
     {
-        LE_ERROR("Attemping to set an out-of-range Polling Timer value of %"PRIu32". Min %d, Max %d.",
-                 pollingTimer, LE_AVC_POLLING_TIMER_MIN_VAL, LE_AVC_POLLING_TIMER_MAX_VAL);
+        LE_ERROR("Attemping to set an out-of-range Polling Timer value of %"PRIu32". Max %d.",
+                 pollingTimer, LE_AVC_POLLING_TIMER_MAX_VAL);
         return LE_OUT_OF_RANGE;
     }
 
@@ -4639,7 +4637,9 @@ COMPONENT_INIT
 #endif /* end LE_CONFIG_SOTA */
     avData_Init();
 #endif /* end LE_CONFIG_ENABLE_AV_DATA */
+#if !MK_CONFIG_AVC_DISABLE_COAP
     coap_Init();
+#endif /* end MK_CONFIG_AVC_DISABLE_COAP */
     avcClient_Init();
 
     // Read the user defined timeout from config tree @ /apps/avcService/activityTimeout

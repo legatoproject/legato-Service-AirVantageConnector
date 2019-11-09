@@ -766,7 +766,8 @@ lwm2mcore_Sid_t lwm2mcore_LaunchSwUpdateUninstall
     }
 
     LE_DEBUG("Set the update state %d and result %d to workspace", updateState, updateResult);
-    avcApp_SaveSwUpdateStateResult(updateState, updateResult);
+    avcApp_SaveSwUpdateStateResult((lwm2mcore_SwUpdateState_t)updateState,
+                                   (lwm2mcore_SwUpdateResult_t)updateResult);
 
     avcApp_SetSwUpdateInternalState(INTERNAL_STATE_UNINSTALL_REQUESTED);
 

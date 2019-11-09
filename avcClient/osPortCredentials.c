@@ -89,7 +89,7 @@ lwm2mcore_Sid_t lwm2mcore_GetCredential
                                         credsPathStr,
                                         sizeof(credsPathStr),
                                         CredentialLocations[credId],
-                                        NULL), "Buffer is not long enough");
+                                        (char*)NULL), "Buffer is not long enough");
     le_result_t result = le_secStore_Read(credsPathStr, (uint8_t*)bufferPtr, lenPtr);
     if (LE_OK != result)
     {
@@ -135,7 +135,7 @@ lwm2mcore_Sid_t lwm2mcore_SetCredential
                                         credsPathStr,
                                         sizeof(credsPathStr),
                                         CredentialLocations[credId],
-                                        NULL), "Buffer is not long enough");
+                                        (char*)NULL), "Buffer is not long enough");
 
     le_result_t result = le_secStore_Write(credsPathStr, (uint8_t*)bufferPtr, len);
     if (LE_OK != result)
@@ -263,7 +263,7 @@ bool lwm2mcore_DeleteCredential
                                         credsPathStr,
                                         sizeof(credsPathStr),
                                         CredentialLocations[credId],
-                                        NULL), "Buffer is not long enough");
+                                        (char*)NULL), "Buffer is not long enough");
 
     le_result_t result = le_secStore_Delete(credsPathStr);
     if ((LE_OK != result) && (LE_NOT_FOUND != result))
@@ -307,7 +307,7 @@ lwm2mcore_Sid_t lwm2mcore_BackupCredential
                                         credsPathStr,
                                         sizeof(credsPathStr),
                                         CredentialLocations[credId],
-                                        NULL), "Buffer is not long enough");
+                                        (char*)NULL), "Buffer is not long enough");
 
     char buffer[LE_SECSTORE_MAX_NAME_BYTES];
     size_t bufferSize = sizeof(buffer);
@@ -378,7 +378,7 @@ lwm2mcore_Sid_t lwm2mcore_RestoreCredential
                                         backupCredsPathStr,
                                         sizeof(backupCredsPathStr),
                                         backupCredsId,
-                                        NULL), "Buffer is not long enough");
+                                        (char*)NULL), "Buffer is not long enough");
 
     char buffer[LE_SECSTORE_MAX_NAME_BYTES];
     size_t bufferSize = sizeof(buffer);
@@ -391,7 +391,7 @@ lwm2mcore_Sid_t lwm2mcore_RestoreCredential
                                         credsPathStr,
                                         sizeof(credsPathStr),
                                         CredentialLocations[credId],
-                                        NULL), "Buffer is not long enough");
+                                        (char*)NULL), "Buffer is not long enough");
 
     // If doesn't exist, then it's OK. No backup is not an indication of an error, just implies that
     // key rotation never occured or we have just restore the backup.

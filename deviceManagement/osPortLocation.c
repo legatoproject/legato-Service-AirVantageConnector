@@ -10,9 +10,6 @@
 #include <lwm2mcore/location.h>
 #include "legato.h"
 #include "interfaces.h"
-#include "le_pos_interface.h"
-#include "le_gnss_interface.h"
-
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -48,7 +45,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetLatitude
     switch (result)
     {
         case LE_OK:
-            latitudeLen = snprintf(bufferPtr, *lenPtr, "%.6f", (float)latitude/1e6);
+            latitudeLen = snprintf(bufferPtr, *lenPtr, "%.6f", latitude/1e6);
             if (*lenPtr < latitudeLen)
             {
                 sID = LWM2MCORE_ERR_OVERFLOW;
@@ -107,7 +104,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetLongitude
     switch (result)
     {
         case LE_OK:
-            longitudeLen = snprintf(bufferPtr, *lenPtr, "%.6f", (float)longitude/1e6);
+            longitudeLen = snprintf(bufferPtr, *lenPtr, "%.6f", longitude/1e6);
             if (*lenPtr < longitudeLen)
             {
                 sID = LWM2MCORE_ERR_OVERFLOW;

@@ -8,14 +8,16 @@
  */
 
 #include <lwm2mcore/device.h>
-#include <sys/reboot.h>
+
 #include "legato.h"
 #include "interfaces.h"
 #include "assetData.h"
-#include <sys/utsname.h>
 #include "avcAppUpdate.h"
 #include "avcServer.h"
-
+#ifdef LE_CONFIG_LINUX
+#include <sys/reboot.h>
+#include <sys/utsname.h>
+#endif
 //--------------------------------------------------------------------------------------------------
 /**
  * Default timer value for reboot request

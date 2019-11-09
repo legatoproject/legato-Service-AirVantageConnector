@@ -15,6 +15,8 @@
 #include <legato.h>
 #include <interfaces.h>
 
+typedef void (*storePackageCb)(void *ctxPtr);
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Download context data structure
@@ -29,7 +31,7 @@ typedef struct
     le_thread_Ref_t  mainRef;               ///< Main thread reference
     const char*      certPtr;               ///< PEM certificate path
     void (*downloadPackage)(void *ctxPtr);  ///< Download package callback
-    void (*storePackage)(void *ctxPtr);     ///< Store package callback
+    storePackageCb storePackage;            ///< Store package callback
     bool             resume;                ///< Indicates if it is a download resume
 }
 packageDownloader_DownloadCtx_t;

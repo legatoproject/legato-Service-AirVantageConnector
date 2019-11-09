@@ -204,7 +204,7 @@ static void CommInfoHandler
 )
 {
     CommInfo_t* infoPtr = reportPtr;
-    le_avc_CommInfoHandlerFunc_t clientFunc = func;
+    le_avc_CommInfoHandlerFunc_t clientFunc = (le_avc_CommInfoHandlerFunc_t)func;
 
     clientFunc(infoPtr->code, infoPtr->str, le_event_GetContextPtr());
 }

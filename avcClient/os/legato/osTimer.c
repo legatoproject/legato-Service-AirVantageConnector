@@ -66,7 +66,7 @@ static void TimerHandler
     le_timer_Ref_t timerRef
 )
 {
-    lwm2mcore_TimerCallback_t timerCallbackPtr = le_timer_GetContextPtr(timerRef);
+    lwm2mcore_TimerCallback_t timerCallbackPtr = (lwm2mcore_TimerCallback_t)le_timer_GetContextPtr(timerRef);
     if (timerCallbackPtr)
     {
         timerCallbackPtr();

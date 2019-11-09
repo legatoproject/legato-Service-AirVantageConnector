@@ -98,7 +98,7 @@ le_result_t tpfServer_GetTpfState
  *  - LE_FAULT  The function failed
  */
 //--------------------------------------------------------------------------------------------------
-static le_result_t SetPackageUri
+static le_result_t SetPkgUri
 (
     const char* url                     ///< [IN] is TPF mode enable
 )
@@ -212,7 +212,7 @@ le_result_t le_tpf_SetPackageUri
 const char* packageUri             ///< [IN] The adresse of the package
 )
 {
-    if( LE_OK != SetPackageUri(packageUri))
+    if( LE_OK != SetPkgUri(packageUri))
     {
         LE_ERROR("Error on saving workspace");
         return LE_FAULT;

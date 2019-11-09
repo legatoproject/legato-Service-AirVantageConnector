@@ -71,7 +71,7 @@ static uint8_t DownloadStatus = DOWNLOAD_STATUS_IDLE;
  * Static value for error code in case of package download suspend due to netowrk, memory issue.
  */
 //--------------------------------------------------------------------------------------------------
-static le_avc_ErrorCode_t ErrorCode = 0;
+static le_avc_ErrorCode_t ErrorCode = LE_AVC_ERR_NONE;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -391,7 +391,7 @@ le_result_t packageDownloader_Init
 
     if (-1 == stat(PKGDWL_TMP_PATH, &sb))
     {
-        if (-1 == mkdir(PKGDWL_TMP_PATH, S_IRWXU))
+        if (LE_FAULT == le_dir_MakePath(PKGDWL_TMP_PATH, S_IRWXU))
         {
             LE_ERROR("failed to create pkgdwl directory %d", errno);
             return LE_FAULT;
@@ -1424,7 +1424,7 @@ void packageDownloader_StartDownload
                     resume = false;
                 }
             }
-            dwlCtx.storePackage = (void*)StoreFwThread;
+            dwlCtx.storePackage = (storePackageCb)StoreFwThread;
             dwlCtx.fifoPtr = FIFO_PATH;
             break;
 
@@ -1460,7 +1460,7 @@ void packageDownloader_StartDownload
     if (LWM2MCORE_FW_UPDATE_TYPE == type)
     {
         // Start the Store thread for a FOTA update
-        StoreFwRef = le_thread_Create("Store", (void*)dwlCtx.storePackage, (void*)&PkgDwl);
+        StoreFwRef = le_thread_Create("Store", (le_thread_MainFunc_t)dwlCtx.storePackage, (void*)&PkgDwl);
         le_thread_SetJoinable(StoreFwRef);
         LE_THREAD_SET_STATIC_STACK(StoreFwRef, ThreadStrStack);
         le_thread_Start(StoreFwRef);

@@ -98,7 +98,7 @@ static le_httpClient_Ref_t HttpClientRef;
  * Current download status.
  */
 //--------------------------------------------------------------------------------------------------
-static uint8_t DownloadStatus = DWL_OK;
+static lwm2mcore_DwlResult_t DownloadStatus = DWL_OK;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -532,7 +532,8 @@ static void SendRequestRspCb
         LE_ERROR("Failure during HTTP reception. Result: %d", result);
         // Failure during HTTP reception occurred. In this case, notify package downloader that no
         // data has been received and check its returned status
-        return RequestDownloadRetry(NULL, NULL);
+        RequestDownloadRetry(NULL, NULL);
+        return;
     }
 
     if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_HandlePackageDownloader())

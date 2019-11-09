@@ -12,7 +12,6 @@
 #include <liblwm2m.h>
 #include "legato.h"
 #include "interfaces.h"
-#include "le_cfg_interface.h"
 #include <lwm2mcore/lwm2mcore.h>
 #include "dtlsConnection.h"
 

@@ -21,11 +21,6 @@
 #include "avcServer.h"
 #include "avcSim.h"
 
-#ifdef LE_CONFIG_CUSTOM_OS
-#include "version.h"
-#include "custom_os/sync.h"
-#endif
-
 #include "avcClient.h"
 
 //--------------------------------------------------------------------------------------------------

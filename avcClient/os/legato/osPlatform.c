@@ -16,9 +16,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
+#ifdef LE_CONFIG_LINUX
 #include <sys/time.h>
-
-
+#endif
 //--------------------------------------------------------------------------------------------------
 /**
  * Largest block of memory that can be allocated by LWM2M

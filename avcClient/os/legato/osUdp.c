@@ -21,9 +21,6 @@
 #   include <netdb.h>
 #   include <resolv.h>
 #endif
-#ifdef LE_CONFIG_CUSTOM_OS
-#   include "custom_os/gai_stubs.h"
-#endif
 
 #include <lwm2mcore/lwm2mcore.h>
 #include <lwm2mcore/udp.h>
@@ -103,6 +100,7 @@ static void Lwm2mClientReceive
             else if (AF_INET6 == addr.ss_family)
             {
                 struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)&addr;
+
                 inet_ntop(saddr->sin6_family, &saddr->sin6_addr, s, INET6_ADDRSTRLEN);
                 port = saddr->sin6_port;
             }
@@ -303,15 +301,15 @@ bool lwm2mcore_UdpOpen
 
     if (le_mdc_IsIPv6(profileRef) && !le_mdc_IsIPv4(profileRef))
     {
-        SocketConfig.af = AF_INET6;
+        SocketConfig.af = (lwm2mcore_SocketAf_t)AF_INET6;
     }
     else if (le_mdc_IsIPv4(profileRef) && !le_mdc_IsIPv6(profileRef))
     {
-        SocketConfig.af = AF_INET;
+        SocketConfig.af = (lwm2mcore_SocketAf_t)AF_INET;
     }
     else
     {
-        SocketConfig.af = AF_UNSPEC;
+        SocketConfig.af = (lwm2mcore_SocketAf_t)AF_UNSPEC;
     }
 
     SocketConfig.instanceRef = instanceRef;
@@ -405,7 +403,7 @@ ssize_t lwm2mcore_UdpSend
     socklen_t addrlen
 )
 {
-    return sendto(sockfd, bufferPtr, length, flags, dest_addrPtr, addrlen);
+    return sendto(sockfd, (void*)bufferPtr, length, flags, (struct sockaddr *)dest_addrPtr, addrlen);
 }
 
 //--------------------------------------------------------------------------------------------------

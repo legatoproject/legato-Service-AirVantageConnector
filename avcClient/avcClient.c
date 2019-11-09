@@ -1104,7 +1104,7 @@ le_result_t avcClient_Connect
         // Disconnect LwM2M session
         if (true == lwm2mcore_TimerIsRunning(LWM2MCORE_TIMER_STEP))
         {
-            le_result_t result = LE_OK;
+            bool result = 0;
 
             RetryPending = true;
             result = lwm2mcore_DisconnectWithDeregister(Lwm2mInstanceRef);
@@ -1516,7 +1516,9 @@ void avcClient_Init
                                                     sizeof(bool));
 
     avcClient_UpdateInit();
+    #ifndef __THREADX__
     avcClient_DeviceInit();
+    #endif
 
     lwm2mcore_InitMem();
 

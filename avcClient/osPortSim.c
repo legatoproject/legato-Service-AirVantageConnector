@@ -8,12 +8,17 @@
  */
 
 #include <lwm2mcore/device.h>
-#include <sys/reboot.h>
+
 #include "legato.h"
 #include "interfaces.h"
 #include "assetData.h"
+#ifdef LE_CONFIG_LINUX
+#include <sys/reboot.h>
 #include <sys/utsname.h>
+#endif
+#ifndef LE_CONFIG_SOTA
 #include "avcAppUpdate.h"
+#endif
 #include "avcServer.h"
 #include "avcSim.h"
 
@@ -77,7 +82,7 @@ lwm2mcore_Sid_t lwm2mcore_SetSimMode
         token = strtok_r(NULL, "'", &savePtr);
         if (token)
         {
-            mode = atoi(token);
+            mode = (SimMode_t)atoi(token);
         }
     }
 
