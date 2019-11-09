@@ -38,6 +38,9 @@ requires:
 #if ${MK_CONFIG_MODEMSERVICE_NO_LPT} = ""
         modemServices/le_lpt.api
 #endif
+#if ${LE_CONFIG_ENABLE_WIFI} = y
+        wifi/le_wifiClient.api
+#endif
     }
 
     component:

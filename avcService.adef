@@ -119,4 +119,7 @@ bindings:
 #if ${MK_CONFIG_MODEMSERVICE_NO_LPT} = ""
     avcDaemon.deviceManagement.le_lpt -> modemService.le_lpt
 #endif
+#if ${LE_CONFIG_ENABLE_WIFI} = y
+    avcDaemon.deviceManagement.le_wifiClient -> wifiService.le_wifiClient
+#endif
 }

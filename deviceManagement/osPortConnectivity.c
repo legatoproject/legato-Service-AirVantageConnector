@@ -47,6 +47,28 @@
 //--------------------------------------------------------------------------------------------------
 #define SIGNAL_BARS_RANGE   6
 
+#ifdef LE_CONFIG_ENABLE_WIFI
+//--------------------------------------------------------------------------------------------------
+/**
+ * Define for minimum RSSI of the access point
+ * Anything worse than or equal to this will show 0 bars
+ * Based on:
+ *  - Android source code (WifiManager API) for WIFI
+ */
+//--------------------------------------------------------------------------------------------------
+#define MIN_RSSI        -100
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Define for maximum RSSI of the access point
+ * Anything worse than or equal to this will show max bars
+ * Based on:
+ *  - Android source code (WifiManager API) for WIFI
+ */
+//--------------------------------------------------------------------------------------------------
+#define MAX_RSSI        -55
+#endif
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Measures used for signal bars computation depending on the cellular technology
@@ -625,6 +647,55 @@ static lwm2mcore_Sid_t GetCellularApn
     LE_DEBUG("Number of APN names collected %d", *apnNbPtr);
     return sID;
 }
+
+#ifdef LE_CONFIG_ENABLE_WIFI
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve the number of signal bars when using WIFI
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid
+ */
+//--------------------------------------------------------------------------------------------------
+static lwm2mcore_Sid_t GetWifiSignalBars
+(
+    uint8_t* valuePtr    ///< [INOUT] The signal bars
+)
+{
+    lwm2mcore_Sid_t sID = LWM2MCORE_ERR_GENERAL_ERROR;
+    int16_t sigStrength = 0;
+    float inputRange = (MAX_RSSI - MIN_RSSI);
+    float outputRange = (SIGNAL_BARS_RANGE -1);
+
+    if (!valuePtr)
+    {
+        return LWM2MCORE_ERR_INVALID_ARG;
+    }
+
+    if (LE_OK != le_wifiClient_GetCurrentSignalStrength(&sigStrength))
+    {
+        return sID;
+    }
+
+    if (sigStrength <= MIN_RSSI)
+    {
+        *valuePtr = 0;
+    }
+    else if (sigStrength >= MAX_RSSI)
+    {
+        *valuePtr = SIGNAL_BARS_RANGE - 1;
+    }
+    else
+    {
+        *valuePtr = (int)((float)(sigStrength - MIN_RSSI) * outputRange / inputRange);
+    }
+    sID = LWM2MCORE_ERR_COMPLETED_OK;
+
+    return  sID;
+}
+#endif //LE_CONFIG_ENABLE_WIFI
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1594,11 +1665,11 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetSignalBars
         case LE_DATA_CELLULAR:
             sID = GetCellularSignalBars(valuePtr);
             break;
-
+#ifdef LE_CONFIG_ENABLE_WIFI
         case LE_DATA_WIFI:
-            sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            sID = GetWifiSignalBars(valuePtr);
             break;
-
+#endif
         case LE_DATA_MAX:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
@@ -2395,11 +2466,25 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetTxData
             }
         }
         break;
-
+#ifdef LE_CONFIG_ENABLE_WIFI
         case LE_DATA_WIFI:
-            sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
-            break;
+        {
+            uint64_t txBytes;
 
+            if (LE_OK == le_wifiClient_GetTxData(&txBytes))
+            {
+                // Amount of data is converted from bytes to kilobytes
+                *valuePtr = txBytes / KILOBYTE;
+                LE_DEBUG("txBytes: %"PRIu64" -> Tx Data = %"PRIu64" kB", txBytes, *valuePtr);
+                sID = LWM2MCORE_ERR_COMPLETED_OK;
+            }
+            else
+            {
+                sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            break;
+        }
+#endif
         case LE_DATA_MAX:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
@@ -2459,11 +2544,25 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRxData
             }
         }
         break;
-
+#ifdef LE_CONFIG_ENABLE_WIFI
         case LE_DATA_WIFI:
-            sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
-            break;
+        {
+            uint64_t rxBytes;
 
+            if (LE_OK == le_wifiClient_GetRxData(&rxBytes))
+            {
+                 // Amount of data is converted from bytes to kilobytes
+                *valuePtr = rxBytes / KILOBYTE;
+                LE_DEBUG("rxBytes: %"PRIu64" -> Rx Data = %"PRIu64" kB", rxBytes, *valuePtr);
+                sID = LWM2MCORE_ERR_COMPLETED_OK;
+            }
+            else
+            {
+                sID = LWM2MCORE_ERR_GENERAL_ERROR;
+            }
+            break;
+        }
+#endif
         case LE_DATA_MAX:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
