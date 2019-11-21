@@ -419,4 +419,14 @@ le_result_t packageDownloader_IsDownloadInProgress
     bool*    isDownloadPtr   ///< [INOUT] Download thread state (true = running, false = stopped)
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Request a download retry
+ */
+//--------------------------------------------------------------------------------------------------
+void downloader_RequestDownloadRetry
+(
+    void* param1Ptr,     ///< [IN] Not used, should be NULL
+    void* param2Ptr      ///< [IN] Not used, should be NULL
+);
 #endif /*_PACKAGEDOWNLOADER_H */

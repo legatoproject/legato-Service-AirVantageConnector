@@ -116,7 +116,7 @@ static uint16_t HttpErrorCode = 0;
  * Global value for HTTP client result
  */
 //--------------------------------------------------------------------------------------------------
-static le_result_t HttpClientResult = LE_OK;
+static le_result_t HttpClientResult = LE_UNAVAILABLE;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -126,17 +126,6 @@ static le_result_t HttpClientResult = LE_OK;
 static void FinalizeDownload
 (
     le_result_t status      ///< [IN] Package download final status
-);
-
-//--------------------------------------------------------------------------------------------------
-/**
- *  Request a download retry
- */
-//--------------------------------------------------------------------------------------------------
-static void RequestDownloadRetry
-(
-    void* param1Ptr,     ///< [IN] Not used, should be NULL
-    void* param2Ptr      ///< [IN] Not used, should be NULL
 );
 
 //--------------------------------------------------------------------------------------------------
@@ -442,6 +431,8 @@ static void BodyResponseCb
 {
     PackageUriDetails.downloadedBytes += (uint32_t)size;
 
+    LE_DEBUG("Chunk: %d, downloaded: %"PRIu32, size, PackageUriDetails.downloadedBytes);
+
     if (DWL_OK != lwm2mcore_PackageDownloaderReceiveData((uint8_t*)dataPtr,
                                                          (size_t)size,
                                                          PackageUriDetails.opaquePtr))
@@ -511,7 +502,7 @@ static void StatusCodeCb
 
     if ((HTTP_200 !=code) && (HTTP_206 !=code) && HttpClientRef)
     {
-        // Remove the body callback: the body can be filled by a HTML page which explain the HTTP
+        // Remove the body callback: the body can be filled by a HTML page which explains the HTTP
         // error code
         le_httpClient_SetBodyResponseCallback(HttpClientRef, NULL);
     }
@@ -536,8 +527,8 @@ static void SendRequestRspCb
         LE_ERROR("Failure during HTTP reception. Result: %d", result);
         // Failure during HTTP reception occurred. In this case, notify package downloader that no
         // data has been received and check its returned status
-        RequestDownloadRetry(NULL, NULL);
-        return;
+        return downloader_RequestDownloadRetry(NULL, NULL);
+
     }
 
     if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_HandlePackageDownloader())
@@ -583,7 +574,7 @@ static void FinalizeDownloadHandler
  *  Request a download retry
  */
 //--------------------------------------------------------------------------------------------------
-static void RequestDownloadRetry
+void downloader_RequestDownloadRetry
 (
     void* param1Ptr,     ///< [IN] Download final status
     void* param2Ptr      ///< [IN] Not used, should be NULL
@@ -606,12 +597,12 @@ static void RequestDownloadRetry
             break;
 
         case LWM2MCORE_ERR_RETRY_FAILED:
-            LE_INFO("Last retry failed, request a new retry");
-            le_event_QueueFunction(RequestDownloadRetry, NULL, NULL);
+            LE_INFO("Previous retry failed, request a new retry");
+            le_event_QueueFunction(downloader_RequestDownloadRetry, NULL, NULL);
             break;
 
         default:
-            LE_ERROR("Unable to request a download retry");
+            LE_ERROR("Unable to request a download retry: %d", status);
             FinalizeDownload(HttpClientResult);
             break;
     }
@@ -871,6 +862,7 @@ downloaderResult_t downloader_StartDownload
 
     // Reset the last HTTP error code
     HttpErrorCode = 0;
+    HttpClientResult = LE_UNAVAILABLE;
 
     status = StartHttpClient(packageUriPtr);
     if (LE_OK != status)

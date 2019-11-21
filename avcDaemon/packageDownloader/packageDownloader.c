@@ -1042,6 +1042,12 @@ static le_result_t RequestDownload
     {
         LE_ERROR("Package download failed downloaderResult %d", downloaderResult);
 
+        if (LWM2MCORE_ERR_RETRY_FAILED == downloaderResult)
+        {
+            downloader_RequestDownloadRetry(NULL, NULL);
+            return LE_OK;
+        }
+
         if ((LWM2MCORE_ERR_NET_ERROR != downloaderResult)
          && (LWM2MCORE_ERR_MEMORY != downloaderResult))
         {
@@ -1124,7 +1130,23 @@ void packageDownloader_FinalizeDownload
             le_thread_Join(StoreFwRef, (void**) &storeThreadReturnPtr);
             StoreFwRef = NULL;
 
-            if (NULL == storeThreadReturnPtr)
+        // Check is an issue happened on download start
+        // In this case, LwM2MCore already sends a notification to AVC
+        if (LE_UNAVAILABLE == ret)
+        {
+            le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
+                                           UpdateStatus,
+                                           &(pkgDwlPtr->data.updateType),
+                                           NULL);
+           goto end;
+        }
+
+        // Check the download result
+        if (LE_OK != ret)
+        {
+            bool isRegUpdateToBeSent = false;
+            // Download failure
+            if(LE_OK != *storeThreadReturnPtr)
             {
                 LE_CRIT("Store thread returns NULL pointer");
                 return;
