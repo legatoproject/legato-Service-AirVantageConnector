@@ -4106,7 +4106,7 @@ le_result_t le_avc_GetPollingTimer
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Function to set the polling timer.
+ * Function to set the polling timer to a value in minutes
  *
  * @return
  *      - LE_OK on success.
@@ -4118,9 +4118,31 @@ le_result_t le_avc_SetPollingTimer
     uint32_t pollingTimer ///< [IN] Polling timer interval, minutes
 )
 {
+    return avcServer_SetPollingTimerInSeconds(pollingTimer * SECONDS_IN_A_MIN);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to set the polling timer to a value in seconds
+ *
+ * @return
+ *      - LE_OK on success.
+ *      - LE_OUT_OF_RANGE if the polling timer value is out of range (0 to 525600).
+ *      - LE_FAULT upon failure to set it.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcServer_SetPollingTimerInSeconds
+(
+    uint32_t pollingTimeSecs ///< [IN] Polling timer interval, seconds
+)
+{
     le_result_t result = LE_OK;
     lwm2mcore_Sid_t sid;
     bool disabled = false;
+    uint32_t pollingTimeMins = pollingTimeSecs / SECONDS_IN_A_MIN;
+
+    // lifetime in the server object is in seconds and polling timer is in minutes
+    uint32_t lifetime = pollingTimeSecs;
 
     // Stop polling timer if running
     if (PollingTimerRef != NULL)
@@ -4131,21 +4153,20 @@ le_result_t le_avc_SetPollingTimer
         }
     }
 
-    // lifetime in the server object is in seconds and polling timer is in minutes
-    uint32_t lifetime = pollingTimer * SECONDS_IN_A_MIN;
-
     // Disabled state is represented by either of 2 constants: 0 or 7300 days (20 years).
-    if ((POLLING_TIMER_DISABLED == pollingTimer) ||
+    if ((POLLING_TIMER_DISABLED == lifetime) ||
         (LWM2MCORE_LIFETIME_VALUE_DISABLED == lifetime))
     {
         disabled = true;
         // 0 is not a valid value for lifetime, a specific value (7300 days) has to be used
         lifetime = LWM2MCORE_LIFETIME_VALUE_DISABLED;
     }
-    else if (pollingTimer > LE_AVC_POLLING_TIMER_MAX_VAL)
+    else if (pollingTimeMins > LE_AVC_POLLING_TIMER_MAX_VAL)
     {
-        LE_ERROR("Attemping to set an out-of-range Polling Timer value of %"PRIu32". Max %d.",
-                 pollingTimer, LE_AVC_POLLING_TIMER_MAX_VAL);
+        LE_ERROR("Attemping to set an out-of-range Polling Timer value of %"PRIu32" in seconds. "
+                 "Min %"PRIu32", Max %"PRIu32, pollingTimeSecs,
+                 LE_AVC_POLLING_TIMER_MIN_VAL * SECONDS_IN_A_MIN,
+                 LE_AVC_POLLING_TIMER_MAX_VAL * SECONDS_IN_A_MIN);
         return LE_OUT_OF_RANGE;
     }
 
@@ -4154,15 +4175,15 @@ le_result_t le_avc_SetPollingTimer
 
     if (LWM2MCORE_ERR_COMPLETED_OK != sid)
     {
-        LE_ERROR("Failed to set lifetime");
-        result = LE_FAULT;
+        LE_ERROR("Failed to set polling time to %"PRIu32" seconds; status ID %d", lifetime, sid);
+        return LE_FAULT;
     }
 
     // Store the current time to avc config
     result = avcServer_SaveCurrentEpochTime();
     if (result != LE_OK)
     {
-       LE_ERROR("Failed to set polling timer");
+       LE_ERROR("Failed to set lifetime to %"PRIu32" seconds", lifetime);
        return LE_FAULT;
     }
 
@@ -4175,10 +4196,8 @@ le_result_t le_avc_SetPollingTimer
             LE_DEBUG("Connected to server: do not launch polling timer");
             return LE_OK;
         }
-        uint32_t pollingTimeSeconds = pollingTimer * SECONDS_IN_A_MIN;
 
-        LE_INFO("Polling Timer is set to start AVC session every %"PRIu32" minutes.", pollingTimer);
-        LE_INFO("A connection to server will be made in %"PRIu32" seconds.", pollingTimeSeconds);
+        LE_INFO("Polling Timer is set to start AVC session every %"PRIu32" seconds.", lifetime);
 
         // Set a timer to start the next session.
         le_clk_Time_t interval = {.sec = lifetime};
@@ -4191,7 +4210,8 @@ le_result_t le_avc_SetPollingTimer
         }
         else if (startResult != LE_OK)
         {
-            LE_FATAL("Setting polling timer failed with result %d %s", startResult, LE_RESULT_TXT(startResult));
+            LE_FATAL("Setting polling timer failed with result %d %s", startResult,
+                     LE_RESULT_TXT(startResult));
         }
     }
     else

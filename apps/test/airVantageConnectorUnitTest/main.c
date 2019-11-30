@@ -322,22 +322,27 @@ static void Testle_avc_Polling
     void* param2Ptr  /// Value to be passed as param2Ptr to the function
 )
 {
-    uint32_t pollingValue = 0;
+    uint32_t pollingValue = LE_AVC_POLLING_TIMER_MIN_VAL;
     AppContext_t* appCtxPtr = (AppContext_t*) param1Ptr;
 
     LE_INFO("======== Test polling ========");
     LE_ASSERT_OK(le_avc_GetPollingTimer(&pollingValue));
     LE_ASSERT(0 == pollingValue);
 
-    pollingValue = 15;
+    pollingValue = LE_AVC_POLLING_TIMER_MIN_VAL;
     LE_ASSERT_OK(le_avc_SetPollingTimer(pollingValue));
     LE_ASSERT_OK(le_avc_GetPollingTimer(&pollingValue));
-    LE_ASSERT(15 == pollingValue);
+    LE_ASSERT(LE_AVC_POLLING_TIMER_MIN_VAL == pollingValue);
 
-    pollingValue = 0;
+    pollingValue = LE_AVC_POLLING_TIMER_MAX_VAL;
     LE_ASSERT_OK(le_avc_SetPollingTimer(pollingValue));
     LE_ASSERT_OK(le_avc_GetPollingTimer(&pollingValue));
-    LE_ASSERT(0 == pollingValue);
+    LE_ASSERT(LE_AVC_POLLING_TIMER_MAX_VAL == pollingValue);
+
+    pollingValue = LE_AVC_POLLING_TIMER_MAX_VAL + 1;
+    LE_ASSERT(LE_OUT_OF_RANGE == le_avc_SetPollingTimer(pollingValue));
+    LE_ASSERT_OK(le_avc_GetPollingTimer(&pollingValue));
+    LE_ASSERT(LE_AVC_POLLING_TIMER_MAX_VAL == pollingValue);
 
     le_sem_Post(appCtxPtr->appSemaphore);
 }

@@ -397,4 +397,18 @@ bool IsDownloadAccepted
     void
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to set the polling timer to a value in seconds
+ *
+ * @return
+ *      - LE_OK on success.
+ *      - LE_OUT_OF_RANGE if the polling timer value is out of range (0 to 525600).
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcServer_SetPollingTimerInSeconds
+(
+    uint32_t pollingTimeSecs ///< [IN] Polling timer interval, seconds
+);
+
 #endif // LEGATO_AVC_SERVER_INCLUDE_GUARD

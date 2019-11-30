@@ -11,6 +11,7 @@
 #include "interfaces.h"
 #include <lwm2mcore/lwm2mcore.h>
 #include <lwm2mcore/server.h>
+#include "avcServer.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -90,7 +91,7 @@ lwm2mcore_Sid_t lwm2mcore_SetPollingTimer
         value = 0;
     }
 
-    if (LE_OK != le_avc_SetPollingTimer(value / SECONDS_IN_A_MIN))
+    if (LE_OK != avcServer_SetPollingTimerInSeconds(value))
     {
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
