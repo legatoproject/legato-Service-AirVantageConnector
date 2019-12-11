@@ -3585,7 +3585,7 @@ le_result_t le_avc_GetUpdateType
 
     if ( CurrentState == AVC_IDLE )
     {
-        LE_ERROR("In AVC_IDLE state; no update pending or in progress");
+        LE_DEBUG("In AVC_IDLE state; no update pending or in progress");
         return LE_FAULT;
     }
 
