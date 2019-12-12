@@ -95,7 +95,11 @@ lwm2mcore_Sid_t lwm2mcore_StartSha1
     mbedtls_sha1_init(&shaCtx);
 
     // And start the SHA1 computation
-    mbedtls_sha1_starts(&shaCtx);
+    if (mbedtls_sha1_starts_ret(&shaCtx) != 0)
+    {
+        LE_ERROR("Start SHA1 computation");
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
 
     *sha1CtxPtr = (void*)&shaCtx;
     return LWM2MCORE_ERR_COMPLETED_OK;
@@ -126,7 +130,11 @@ lwm2mcore_Sid_t lwm2mcore_ProcessSha1
     }
 
     // Update SHA1 digest
-    mbedtls_sha1_update(sha1CtxPtr, bufPtr, len);
+    if (mbedtls_sha1_update_ret(sha1CtxPtr, bufPtr, len) != 0)
+    {
+        LE_ERROR("Update SHA1 digest.");
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
@@ -170,7 +178,12 @@ lwm2mcore_Sid_t lwm2mcore_EndSha1
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    mbedtls_sha1_finish(sha1CtxPtr, sha1Digest);
+    if (mbedtls_sha1_finish_ret(sha1CtxPtr, sha1Digest) != 0)
+    {
+        LE_ERROR("Finish SHA1 operation");
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
     // The package type indicates the public key to use
     switch (packageType)
     {
@@ -185,7 +198,6 @@ lwm2mcore_Sid_t lwm2mcore_EndSha1
         default:
             LE_ERROR("Unknown or unsupported package type %d", packageType);
             return LWM2MCORE_ERR_GENERAL_ERROR;
-            break;
     }
 
     publicKeyPtr = publicKey + publicKeyPrefixLen;
