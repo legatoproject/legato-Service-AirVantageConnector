@@ -9,15 +9,13 @@
 
 #include <lwm2mcore/device.h>
 #include "legato.h"
-#ifndef LE_CONFIG_CUSTOM_OS
+#ifdef LE_CONFIG_LINUX
 #include <sys/reboot.h>
+#include <sys/utsname.h>
 #endif
 #include "interfaces.h"
 #include "assetData.h"
-#ifndef LE_CONFIG_CUSTOM_OS
 #include "avcAppUpdate.h"
-#include <sys/utsname.h>
-#endif
 #include "avcServer.h"
 #include "avcSim.h"
 
@@ -387,7 +385,6 @@ static size_t GetUfsVersion
 }
 #endif
 
-#ifndef LE_CONFIG_CUSTOM_OS
 //--------------------------------------------------------------------------------------------------
 /**
  * Attempt to read the Legato version string from the file system.
@@ -406,6 +403,7 @@ static size_t ReadLegatoVersion
     size_t returnedLen = 0;
     if ((NULL != versionBufferPtr) && (NULL != fileName))
     {
+#if LE_CONFIG_LINUX
         FILE* versionFilePtr = fopen(fileName, "r");
         if (NULL == versionFilePtr)
         {
@@ -434,13 +432,28 @@ static size_t ReadLegatoVersion
             returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
         fclose(versionFilePtr);
+#else
+        char tmpLegatoVersionBuffer[MAX_VERSION_STR_BYTES];
+        snprintf(tmpLegatoVersionBuffer, MAX_VERSION_STR_BYTES, "%s", LE_VERSION);
+
+        char* savePtr;
+        char* tmpBufferPtr = strtok_r(tmpLegatoVersionBuffer, "-_", &savePtr);
+        if (NULL != tmpBufferPtr)
+        {
+            returnedLen = snprintf(versionBufferPtr, len, "%s", tmpBufferPtr);
+        }
+        else
+        {
+            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
+        }
+
+#endif
         LE_INFO("Legato version = %s, len %zd", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
-#endif
 
-#ifndef LE_CONFIG_CUSTOM_OS
+#ifndef MK_CONFIG_AVC_DISABLE_LEGATO_VERSION
 //--------------------------------------------------------------------------------------------------
 /**
  * Get the Legato baseline version string from the file system.
@@ -457,7 +470,9 @@ static size_t GetLegatoBaselineVersion
 {
     return ReadLegatoVersion(LEGATO_BASELINE_VERSION_FILE, versionBufferPtr, len);
 }
+#endif
 
+#ifndef LE_CONFIG_CUSTOM_OS
 //--------------------------------------------------------------------------------------------------
 /**
  * Get the Legato override version string from the file system.
@@ -774,12 +789,14 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
     ComponentVersion_t versionInfo[] =
     {
       { MODEM_TAG,              GetModemVersion             },
+#ifndef MK_CONFIG_AVC_DISABLE_LEGATO_VERSION
+      { LEGATO_TAG,             GetLegatoBaselineVersion    },
+#endif
 #ifndef LE_CONFIG_CUSTOM_OS
       { LK_TAG,                 GetLkVersion                },
       { LINUX_TAG,              GetOsVersion                },
       { ROOT_FS_TAG,            GetRfsVersion               },
       { USER_FS_TAG,            GetUfsVersion               },
-      { LEGATO_TAG,             GetLegatoBaselineVersion    },
       { LEGATO_OVERRIDE_TAG,    GetLegatoOverrideVersion    },
       { CUSTOMER_PRI_TAG,       GetCustomerPriVersion       },
       { CARRIER_PRI_TAG,        GetCarrierPriVersion        },
