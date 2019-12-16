@@ -79,6 +79,7 @@ bindings:
     avcDaemon.avcDaemon.le_mdc  -> modemService.le_mdc
     avcDaemon.avcDaemon.le_cellnet -> cellNetService.le_cellnet
     avcDaemon.watchdogChain.le_wdog -> <root>.le_wdog
+    avcDaemon.httpClientLibrary.le_mdc  -> modemService.le_mdc
 
     // Device management bindings
     avcDaemon.deviceManagement.le_ulpm -> powerMgr.le_ulpm
