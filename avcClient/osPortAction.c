@@ -86,6 +86,21 @@ lwm2mcore_Sid_t lwm2mcore_RebootDevice
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Wrapper around reboot function
+ */
+//--------------------------------------------------------------------------------------------------
+static void LaunchReboot
+(
+    void
+)
+{
+    if (LE_OK != le_ulpm_Reboot())
+    {
+        LE_ERROR("Failed to reboot!");
+    }
+}
+//--------------------------------------------------------------------------------------------------
+/**
  * Called when the timer for platform reboot expires
  */
 //--------------------------------------------------------------------------------------------------
@@ -94,7 +109,8 @@ static void TreatRebootExpiryHandler
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    lwm2mcore_RebootDevice();
+    // Provide reboot function for avcServer to call
+    avcServer_QueryReboot(LaunchReboot);
 }
 
 //--------------------------------------------------------------------------------------------------

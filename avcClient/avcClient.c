@@ -1507,9 +1507,7 @@ void avcClient_Init
                                                     sizeof(bool));
 
     avcClient_UpdateInit();
-    #ifndef __THREADX__
     avcClient_DeviceInit();
-    #endif
 
     lwm2mcore_InitMem();
 
