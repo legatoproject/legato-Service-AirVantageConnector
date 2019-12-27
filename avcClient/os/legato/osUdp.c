@@ -82,7 +82,7 @@ static void Lwm2mClientReceive
 
         if (0 > numBytes)
         {
-            LE_ERROR("Error in receiving lwm2m data: %d %s.", errno, strerror(errno));
+            LE_ERROR("Error in receiving lwm2m data: %d %s.", errno, LE_ERRNO_TXT(errno));
         }
         else if (0 < numBytes)
         {
@@ -321,7 +321,7 @@ bool lwm2mcore_UdpOpen
 
     if (SocketConfig.sock < 0)
     {
-        LE_FATAL ("Failed to open socket: %d %s.", errno, strerror(errno));
+        LE_FATAL ("Failed to open socket: %d %s.", errno, LE_ERRNO_TXT(errno));
     }
     else
     {
