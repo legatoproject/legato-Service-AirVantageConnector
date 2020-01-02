@@ -29,5 +29,6 @@ cflags:
     -DWITH_SHA256
     -fvisibility=default
     -Dle_msg_AddServiceCloseHandler=MyAddServiceCloseHandler
+    -DIFGEN_PROVIDE_PROTOTYPES
 }
 
