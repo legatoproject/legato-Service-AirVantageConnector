@@ -1078,7 +1078,7 @@ void packageDownloader_FinalizeDownload
     }
     dwlCtxPtr->downloadFd = -1;
 
-    le_result_t* storeThreadReturnPtr = 0;
+    le_result_t* storeThreadReturnPtr = &FwUpdateResult;
 
     if (LWM2MCORE_FW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
     {
@@ -1087,14 +1087,19 @@ void packageDownloader_FinalizeDownload
         {
             le_thread_Join(StoreFwRef, (void**) &storeThreadReturnPtr);
             StoreFwRef = NULL;
-            LE_DEBUG("Store thread joined with return value = %s",
-                                         LE_RESULT_TXT(*storeThreadReturnPtr));
+
+            if (NULL == storeThreadReturnPtr)
+            {
+                LE_CRIT("Store thread returns NULL pointer");
+                return;
+            }
+            LE_DEBUG("Store thread joined with main thread");
         }
-        else
-        {
-            storeThreadReturnPtr = &FwUpdateResult;
-            LE_DEBUG("Store thread with return value = %s", LE_RESULT_TXT(*storeThreadReturnPtr));
-        }
+
+        // If store thread terminated earlier, then FwUpdateResult already has the right value.
+        // Hence no need to reassign it again.
+        LE_DEBUG("Store thread finished with return value = %s",
+                                                LE_RESULT_TXT(*storeThreadReturnPtr));
     }
 
     // Need to handle download suspend/abort cases. Value of downloadStatus may be LE_OK in case of
