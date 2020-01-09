@@ -155,6 +155,7 @@ static void ExternalCoapHandler
     size_t tokenLength,                             ///< [IN] token length
     const uint8_t* payloadPtr,                      ///< [IN] CoAP payload pointer
     size_t payloadLength,                           ///< [IN] CoAP payload length
+    uint16_t blockSize,                             ///< [IN] Block size
     void* contextPtr                                ///< [IN] User context pointer
 )
 {
@@ -205,7 +206,7 @@ static void ExternalCoapHandler
             {
                 case LE_COAP_RX_STREAM_START:
                 case LE_COAP_RX_STREAM_IN_PROGRESS:
-                    responseCode = LE_COAP_CODE_NO_RESPONSE;
+                    responseCode = LE_COAP_CODE_231_CONTINUE;
                     break;
 
                 case LE_COAP_STREAM_NONE:
@@ -228,9 +229,10 @@ static void ExternalCoapHandler
                                               tokenLength,
                                               LWM2M_CONTENT_CBOR,
                                               responseCode,
-                                              LE_COAP_STREAM_NONE,
+                                              streamStatus,
                                               (const uint8_t*)"",
-                                              0);
+                                              0,
+                                              blockSize);
                 if(status != LE_OK)
                 {
                     LE_ERROR("Unable to send response. Status: %d", status);
@@ -283,7 +285,8 @@ static void ExternalCoapHandler
                                               responseCode,
                                               streamStatus,
                                               dataPtr,
-                                              dataLength);
+                                              dataLength,
+                                              blockSize);
             }
             else
             {
