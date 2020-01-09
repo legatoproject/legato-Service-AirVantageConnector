@@ -34,15 +34,16 @@ static bool PushBusy = false;
 //--------------------------------------------------------------------------------------------------
 typedef struct
 {
-    le_coap_Code_t code;                              ///< [IN] CoAP method code / response code
-    le_coap_StreamStatus_t streamStatus;              ///< [IN] Stream status
-    uint16_t messageId;                               ///< [IN] CoAP message id
-    uint16_t contentType;                             ///< [IN] Payload content type
-    uint8_t uri[LE_COAP_MAX_URI_NUM_BYTES];           ///< [IN] URI
-    uint8_t token[LE_COAP_MAX_TOKEN_NUM_BYTES];       ///< [IN] Token
-    uint8_t tokenLength;                              ///< [IN] Token length
-    uint8_t payload[LE_COAP_MAX_PAYLOAD_NUM_BYTES];   ///< [IN] Payload of CoAP request
-    size_t payloadLength;                             ///< [IN] length of input buffer
+    le_coap_Code_t code;                              ///< CoAP method code / response code
+    le_coap_StreamStatus_t streamStatus;              ///< Stream status
+    uint16_t messageId;                               ///< CoAP message id
+    uint16_t contentType;                             ///< Payload content type
+    uint8_t uri[LE_COAP_MAX_URI_NUM_BYTES];           ///< URI
+    uint8_t token[LE_COAP_MAX_TOKEN_NUM_BYTES];       ///< Token
+    uint8_t tokenLength;                              ///< Token length
+    uint8_t payload[LE_COAP_MAX_PAYLOAD_NUM_BYTES];   ///< Payload of CoAP request
+    size_t payloadLength;                             ///< length of input buffer
+    uint16_t blockSize;                               ///< Block size
 }
 CoapMessageData_t;
 
@@ -66,13 +67,6 @@ static lwm2mcore_CoapResponse_t CoapResponse;
  */
 //--------------------------------------------------------------------------------------------------
 static lwm2mcore_CoapNotification_t CoapNotification = {0};
-
-//--------------------------------------------------------------------------------------------------
-/**
- * CoAP request reference
- */
-//--------------------------------------------------------------------------------------------------
-static lwm2mcore_CoapRequest_t* CoapRequestRef;
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -202,7 +196,6 @@ static void CoapMessageHandler
 {
     const char* uriPtr;
     CoapMessageData_t coapMsgData;
-    CoapRequestRef = requestRef;
 
     // Save the session context and server request ref, so when reply function such as
     // le_avdata_ReplyExecResult is called at the end of the command execution,
@@ -260,6 +253,8 @@ static void CoapMessageHandler
     }
 
     memcpy(coapMsgData.token, tokenPtr, tokenLength);
+
+    coapMsgData.blockSize = lwm2mcore_GetBlock1Size(requestRef);
 
     // Send the event to external CoAP handler
     le_event_Report(CoapMessageEvent, &coapMsgData, sizeof(coapMsgData));
@@ -323,6 +318,7 @@ static void FirstLayerCoapMessageHandler
                       coapMsgDataPtr->tokenLength,
                       (const uint8_t*)&coapMsgDataPtr->payload,
                       coapMsgDataPtr->payloadLength,
+                      coapMsgDataPtr->blockSize,
                       le_event_GetContextPtr());
 }
 
@@ -392,6 +388,11 @@ void le_coap_RemoveMessageEventHandler
  * Note: This API will return success if it successful in sending the message down the stack.
  * Retransmission will be handled at CoAP layer and errors reports from server will be sent as
  * new incoming messages.
+ *
+ * Note: blockSize parameter needs to be a value equal to 16, 32, 64, 128, 256, 512 or 1024.
+ * It allows the application to indicate to the server that the device wants to negociate another
+ * block size value. The blockSize value should be equal or smaller than blockSize provided
+ * in le_coap_MessageHandlerFunc_t handler.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_coap_SendResponse
@@ -403,7 +404,8 @@ le_result_t le_coap_SendResponse
     le_coap_Code_t responseCode,         ///< [IN] Result of CoAP operation
     le_coap_StreamStatus_t streamStatus, ///< [IN] Status of the transmit stream
     const uint8_t* payloadPtr,           ///< [IN] Payload pointer
-    size_t payloadLength                 ///< [IN] Payload Length
+    size_t payloadLength,                ///< [IN] Payload Length
+    uint16_t blockSize                   ///< [IN] Block size
 )
 {
     bool result;
@@ -436,6 +438,7 @@ le_result_t le_coap_SendResponse
     coapResponsePtr->payloadLength = payloadLength;
     coapResponsePtr->messageId = messageId;
     coapResponsePtr->payloadPtr = (uint8_t*)payloadPtr;
+    coapResponsePtr->blockSize = blockSize;
 
     // Allow app to send token as well.
     // Might be useful to respond with just tokens for unsolicited responses.
