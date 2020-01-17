@@ -446,7 +446,7 @@ static void* AirVantageUnitTestThread
     le_event_QueueFunctionToThread(AppCtx.appThreadRef,
                                    Testle_avc_StartSession, &AppCtx, NULL);
     SynchronizeTest();
-    sleep(1);
+    le_thread_Sleep(1);
 
     le_avcTest_SimulateLwm2mEvent(LWM2MCORE_EVENT_PACKAGE_DOWNLOAD_DETAILS,
                                   LWM2MCORE_SW_UPDATE_TYPE,
