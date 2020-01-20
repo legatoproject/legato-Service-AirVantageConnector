@@ -484,8 +484,8 @@ static void ExternalCoapHandler
             {
                 LE_ERROR("URI %s not found", uri);
                 le_coap_SendResponse(messageId,
-                                     (const uint8_t*)"",
-                                     0,
+                                     token,
+                                     tokenLength,
                                      LWM2M_CONTENT_CBOR,
                                      LE_COAP_CODE_404_NOT_FOUND,
                                      LE_COAP_STREAM_NONE,
