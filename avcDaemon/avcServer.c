@@ -964,6 +964,29 @@ static le_result_t QueryDownload
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Check if TPF mode is currently enabled
+ *
+ * @return
+ *      - TRUE if TPF mode is enabled, FALSE otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static bool IsTpfOngoing
+(
+    void
+)
+{
+    bool state = false;
+
+    if (LE_OK != tpfServer_GetTpfState(&state))
+    {
+        return false;
+    }
+
+    return state;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Accept the currently pending download.
  *
  * @return
@@ -976,9 +999,9 @@ static le_result_t AcceptDownloadPackage
     void
 )
 {
-    bool state = false;
     StopDeferTimer(LE_AVC_USER_AGREEMENT_DOWNLOAD);
-    if ((LE_OK == tpfServer_GetTpfState(&state)) && (state))
+
+    if (IsTpfOngoing())
     {
         if(LE_OK != QueryDownload())
         {
@@ -1057,7 +1080,6 @@ static le_result_t AcceptInstallPackage
         return LE_OK;
     }
 
-    bool state = 0;
     if ( (LE_AVC_FIRMWARE_UPDATE == CurrentUpdateType)
       && (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_SetUpdateAccepted()))
     {
@@ -1075,17 +1097,16 @@ static le_result_t AcceptInstallPackage
             avcServer_UpdateStatus(LE_AVC_INSTALL_IN_PROGRESS, LE_AVC_FIRMWARE_UPDATE, -1, 0,
                                    LE_AVC_ERR_NONE);
 
-            LE_INFO("Ready to install in TPF mode");
-            if ((LE_OK == tpfServer_GetTpfState(&state)) && (state))
+            IsPkgReadyToInstall = true;
+
+            if (IsTpfOngoing())
             {
-                LE_DEBUG("Accept a package install in TPF mode");
+                LE_INFO("Accept a package install in TPF mode");
                 le_avc_StopSession();
-                IsPkgReadyToInstall = true;
                 StartInstall();
             }
             else
             {
-                IsPkgReadyToInstall = true;
                 sessionType = le_avc_GetSessionType();
                 if (sessionType == LE_AVC_BOOTSTRAP_SESSION || sessionType == LE_AVC_DM_SESSION)
                 {
@@ -1872,7 +1893,6 @@ static void ProcessUpdateStatus
     AvcUpdateStatusData_t* data = (AvcUpdateStatusData_t*)contextPtr;
 
     LE_INFO("Current session state: %s", AvcSessionStateToStr(data->updateStatus));
-    bool state = false;
     // Keep track of the state of any pending downloads or installs.
     switch (data->updateStatus)
     {
@@ -1939,9 +1959,10 @@ static void ProcessUpdateStatus
             UpdateCurrentAvcState(AVC_DOWNLOAD_COMPLETE);
             avcClient_StartActivityTimer();
             DownloadAgreement = false;
-            if(LE_OK == tpfServer_GetTpfState(&state) && (state))
+
+            if (IsTpfOngoing())
             {
-                LE_INFO("Download complete, launch FW install !");
+                LE_INFO("Download complete in TPF mode, launch FW install");
                 // Call the TPF callback.
                 avcClient_LaunchFwUpdate();
             }
@@ -1949,7 +1970,7 @@ static void ProcessUpdateStatus
             {
                 packageDownloader_SetConnectionNotificationState(true);
             }
-            LE_DEBUG("Download state is COMPLETE and the TPF state is %d", state);
+
             if (LE_AVC_APPLICATION_UPDATE == data->updateType)
             {
                 // Set the bytes downloaded to workspace for resume operation
@@ -1992,9 +2013,10 @@ static void ProcessUpdateStatus
             DownloadAgreement = false;
             // There is no longer any current update, so go back to idle
             UpdateCurrentAvcState(AVC_IDLE);
-            if ((LE_OK == tpfServer_GetTpfState(&state)) && (state))
+
+            if (IsTpfOngoing())
             {
-                // If a download or install is failed, stop the session to not block AVC connection
+                // If a download or install fails, stop the session to not block AVC connection
                 le_avc_StopSession();
                 tpfServer_SetTpfState(false);
             }
@@ -2002,6 +2024,7 @@ static void ProcessUpdateStatus
             {
                 avcClient_StartActivityTimer();
             }
+
             if (LE_AVC_APPLICATION_UPDATE == data->updateType)
             {
                 avcApp_DeletePackage();
@@ -2012,12 +2035,14 @@ static void ProcessUpdateStatus
         case LE_AVC_INSTALL_FAILED:
             // There is no longer any current update, so go back to idle
             UpdateCurrentAvcState(AVC_IDLE);
-            if ((LE_OK == tpfServer_GetTpfState(&state)) && (state))
+
+            if (IsTpfOngoing())
             {
                 // If a download or install is failed, stop the session to not block AVC connection
                 le_avc_StopSession();
                 tpfServer_SetTpfState(false);
             }
+
             if (LE_AVC_APPLICATION_UPDATE == data->updateType)
             {
                 avcApp_DeletePackage();
@@ -2030,11 +2055,13 @@ static void ProcessUpdateStatus
         case LE_AVC_UNINSTALL_FAILED:
             // There is no longer any current update, so go back to idle
             UpdateCurrentAvcState(AVC_IDLE);
-            if ((LE_OK == tpfServer_GetTpfState(&state)) && (state))
+
+            if (IsTpfOngoing())
             {
                 // If a uninstall is failed, stop the session to not block AVC connection
                 tpfServer_SetTpfState(false);
             }
+
             avcClient_StartActivityTimer();
             AvcErrorCode = data->errorCode;
             // Forward notifications unrelated to user agreement to interested applications
@@ -2054,8 +2081,9 @@ static void ProcessUpdateStatus
         case LE_AVC_UNINSTALL_COMPLETE:
             // There is no longer any current update, so go back to idle
             UpdateCurrentAvcState(AVC_IDLE);
+
             // If a download or install is complete, stop the session to not block AVC connection
-            if ((LE_OK == tpfServer_GetTpfState(&state)) && (state))
+            if (IsTpfOngoing())
             {
                 tpfServer_SetTpfState(false);
             }
@@ -2102,7 +2130,6 @@ static void ProcessUpdateStatus
                 LE_INFO("Suspending on-going download");
                 lwm2mcore_SuspendDownload();
             }
-
             // If a package is waiting to be installed, trigger the install.
             if (IsPkgReadyToInstall)
             {
@@ -2113,7 +2140,7 @@ static void ProcessUpdateStatus
 
         case LE_AVC_SESSION_FAILED:
             // In case of session faild , stop the TPF session to not bloc AVC connection
-            if ((LE_OK == tpfServer_GetTpfState(&state)) && (state))
+            if (IsTpfOngoing())
             {
                 le_avc_StopSession();
                 tpfServer_SetTpfState(false);
@@ -2135,11 +2162,8 @@ static void ProcessUpdateStatus
 
         case LE_AVC_CERTIFICATION_OK:
             LE_DEBUG("Package certified");
-            if(LE_OK != tpfServer_GetTpfState(&state))
-            {
-                LE_ERROR("fail to get sate of third party fota");
-            }
-            if(!state)
+
+            if (!IsTpfOngoing())
             {
                 // Query connection to server if module reboot
                 packageDownloader_SetConnectionNotificationState(true);
@@ -2147,8 +2171,8 @@ static void ProcessUpdateStatus
             break;
 
         case LE_AVC_CERTIFICATION_KO:
-            // In case of certification failed, stop the TPF session to not bloc AVC connection
-            if ((LE_OK == tpfServer_GetTpfState(&state)) && (state))
+            // In case of certification failed, stop the TPF session to not block AVC connection
+            if (IsTpfOngoing())
             {
                 le_avc_StopSession();
                 tpfServer_SetTpfState(false);
@@ -2568,12 +2592,13 @@ static le_result_t CheckFwInstallResult
         *isFwUpdateToNotifyPtr = true;
         avcServer_UpdateStatus(updateStatus, LE_AVC_FIRMWARE_UPDATE, -1, -1, errorCode);
         packageDownloader_SetFwUpdateNotification(true, updateStatus, errorCode);
-        bool isTtpMode = false;
-        if ((LE_OK == tpfServer_GetTpfState(&isTtpMode)) && (isTtpMode))
+
+        if (IsTpfOngoing())
         {
             LE_INFO("Ignoring query connection in TPF mode");
             return LE_OK;
         }
+
         avcServer_QueryConnection(LE_AVC_FIRMWARE_UPDATE, statusHandlerPtr, contextPtr);
     }
 
@@ -2598,7 +2623,6 @@ static void CheckNotificationToSend
     uint64_t numBytesToDownload = 0;
     le_avc_Status_t avcStatus;
     le_avc_ErrorCode_t errorCode;
-    bool tpfState = false;
 
     if (AVC_IDLE != CurrentState)
     {
@@ -2685,7 +2709,7 @@ static void CheckNotificationToSend
             return;
         }
 
-        if ((LE_OK == tpfServer_GetTpfState(&tpfState)) && tpfState)
+        if (IsTpfOngoing())
         {
              LE_INFO("tpfState to resume");
              le_tpf_Start();

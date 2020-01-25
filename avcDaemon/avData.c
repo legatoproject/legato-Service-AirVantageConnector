@@ -1224,20 +1224,19 @@ static void RecursiveRestore
     le_msg_SessionRef_t sessionRef      ///< [IN] Session reference
 )
 {
-    char strBuffer[LE_CFG_STR_LEN_BYTES] = "";
+    char strBuffer[LE_CFG_STR_LEN_BYTES] = {0};
     IsRestored = false;
 
     do
     {
-        char nodeName[LE_CFG_STR_LEN_BYTES] = "";
-        le_cfg_GetNodeName(iterRef, "", nodeName, LE_CFG_STR_LEN_BYTES);
-        le_cfg_nodeType_t type = le_cfg_GetNodeType(iterRef, "");
-
-        if (snprintf(strBuffer, sizeof(strBuffer), "%s/%s", path, nodeName) >= sizeof(strBuffer))
+        int length = snprintf(strBuffer, sizeof(strBuffer), "%s/", path);
+        if ((length < 0) || (length >= sizeof(strBuffer)))
         {
-            LE_ERROR("Unable to restore %s/%s (buffer truncated)", path, nodeName);
-            continue;
+            LE_FATAL("Error constructing path");
         }
+
+        le_cfg_GetNodeName(iterRef, "", strBuffer + length, LE_CFG_STR_LEN_BYTES - length);
+        le_cfg_nodeType_t type = le_cfg_GetNodeType(iterRef, "");
 
         // keep iterating
         if (type == LE_CFG_TYPE_STEM)
@@ -1413,8 +1412,7 @@ static void ClientOpenSessionHandler
     void*               contextPtr
 )
 {
-    char appName[LE_LIMIT_APP_NAME_LEN+1] = "";
-    char appSettingPath[LE_AVDATA_PATH_NAME_BYTES] = "";
+    char appSettingPath[LE_AVDATA_PATH_NAME_BYTES] = {0};
     le_cfg_IteratorRef_t iterRef;
     pid_t pid;
 
@@ -1424,14 +1422,17 @@ static void ClientOpenSessionHandler
         LE_FATAL("Error getting client pid.");
     }
 
+    int length = snprintf(appSettingPath, sizeof(appSettingPath), "%s/", CFG_ASSET_SETTING_PATH);
+    if ((length < 0) || (length >= sizeof(appSettingPath)))
+    {
+        LE_FATAL("Error constructing client setting path");
+    }
+
     // Get app name
-    if (LE_OK != le_appInfo_GetName(pid, appName, sizeof(appName)))
+    if (LE_OK != le_appInfo_GetName(pid, appSettingPath + length, sizeof(appSettingPath) - length))
     {
         LE_FATAL("Error getting client app name.");
     }
-
-    // Get the path where the settings for this client app is stored
-    snprintf(appSettingPath, sizeof(appSettingPath),"%s/%s", CFG_ASSET_SETTING_PATH, appName);
 
     // exit if there no setting found in config tree
     iterRef = le_cfg_CreateReadTxn(appSettingPath);
