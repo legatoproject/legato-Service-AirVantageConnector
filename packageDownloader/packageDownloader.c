@@ -106,7 +106,26 @@ static void UpdateStatus
     void* param2
 )
 {
-    avcClient_Update();
+    // Check if the device is connected
+    if (LE_UNAVAILABLE == avcClient_Update())
+    {
+        lwm2mcore_PackageDownloader_t* pkgDwlPtr = &PkgDwl;
+        LE_WARN("Not possible to check the route -> make a connection, updateType %d",
+                pkgDwlPtr->data.updateType);
+        if (LWM2MCORE_FW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
+        {
+            avcServer_QueryConnection(LE_AVC_FIRMWARE_UPDATE, NULL, NULL);
+        }
+        else if ((LWM2MCORE_SW_UPDATE_TYPE == pkgDwlPtr->data.updateType))
+        {
+            avcServer_QueryConnection(LE_AVC_APPLICATION_UPDATE, NULL, NULL);
+        }
+        else
+        {
+            LE_ERROR("Incorrect update type %d", pkgDwlPtr->data.updateType);
+        }
+
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
