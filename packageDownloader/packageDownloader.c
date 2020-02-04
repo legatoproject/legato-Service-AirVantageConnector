@@ -1335,6 +1335,25 @@ static void* StoreFwThread
     LE_DEBUG("le_fwupdate_Download returns %s", LE_RESULT_TXT(result));
     ret = result;
 
+    // If fd is closed and full image gets downloaded then it is a case of downloading a type of
+    // an invalid image. In such case set result to format error, close fd and end thread.
+    if (LE_CLOSED == result)
+    {
+        uint64_t numBytesToDownload = 0;
+
+        if (LE_OK != packageDownloader_BytesLeftToDownload(&numBytesToDownload))
+        {
+            LE_ERROR("Unable to retrieve bytes left to download.");
+        }
+
+        if (0 == numBytesToDownload)
+        {
+            result = LE_FORMAT_ERROR;
+            ret = result;
+            goto thread_end_close_fd;
+        }
+    }
+
     // fd has been passed to le_fwupdate_Download(), so do not close in this thread.
     fd = -1;
 
