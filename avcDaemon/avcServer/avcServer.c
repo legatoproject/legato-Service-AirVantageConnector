@@ -10,27 +10,26 @@
  */
 
 #include <lwm2mcore/lwm2mcore.h>
-#include <avcClient.h>
 #include <lwm2mcore/security.h>
 #include <lwm2mcore/lwm2mcorePackageDownloader.h>
 #include "legato.h"
 #include "interfaces.h"
 #include "pa_avc.h"
 #include "avcServer.h"
-#include "tpfServer.h"
+#include "tpf/tpfServer.h"
 #if LE_CONFIG_ENABLE_AV_DATA
-#   include "avData.h"
-#   include "push.h"
-#   include "timeseriesData.h"
+#   include "avData/avData.h"
+#   include "push/push.h"
+#   include "timeSeries/timeseriesData.h"
 #endif
 #include "updateInfo.h"
 #include "le_print.h"
-#include "avcAppUpdate.h"
-#include "packageDownloader.h"
-#include "avcFsConfig.h"
+#include "avcAppUpdate/avcAppUpdate.h"
+#include "packageDownloader/packageDownloader.h"
+#include "avcFs/avcFsConfig.h"
 #include "watchdogChain.h"
-#include "avcClient.h"
-#include "coap.h"
+#include "avcClient/avcClient.h"
+#include "coap/coap.h"
 
 //--------------------------------------------------------------------------------------------------
 // Definitions

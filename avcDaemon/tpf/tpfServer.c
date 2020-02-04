@@ -12,8 +12,8 @@
 #include "tpfServer.h"
 #include "updateInfo.h"
 #include "le_print.h"
-#include "avcFsConfig.h"
-#include "avcClient.h"
+#include "avcFs/avcFsConfig.h"
+#include "avcClient/avcClient.h"
 #include "workspace.h"
 
 

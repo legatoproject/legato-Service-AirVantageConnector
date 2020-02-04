@@ -10,10 +10,10 @@
 #include <lwm2mcore/security.h>
 #include <legato.h>
 #include <interfaces.h>
-#include <avcClient.h>
-#include <avcFsConfig.h>
-#include <avcFs.h>
-#include <sslUtilities.h>
+#include "avcClient.h"
+#include "avcFs/avcFsConfig.h"
+#include "avcFs/avcFs.h"
+#include "packageDownloader/sslUtilities.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -186,53 +186,6 @@ bool lwm2mcore_CheckCredential
     LE_DEBUG("credId %d result %s [%d]", credId, retTxt, ret);
     return ret;
 }
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Function to check if one credential is present in platform storage and matches with our
- * credentials.
- *
- * @return
- *      - true if the credential and matches with our credentials
- *      - false else
- *
- */
-//--------------------------------------------------------------------------------------------------
-bool lwm2mcore_CredentialMatch
-(
-    lwm2mcore_Credentials_t credId,     ///< [IN] Credential identifier
-    uint16_t                serverId,   ///< [IN] server Id
-    const char*             credential  ///< [IN] Credential
-)
-{
-    char buffer[LWM2MCORE_PUBLICKEY_LEN] = {0};
-    size_t bufferSz = sizeof(buffer);
-    bool ret = false;
-    const char* retTxt = "Not Present";
-    lwm2mcore_Sid_t result;
-
-    (void)serverId;
-
-    result = lwm2mcore_GetCredential(credId, serverId, buffer, &bufferSz);
-    if ((LWM2MCORE_ERR_COMPLETED_OK == result) && bufferSz)
-    {
-        ret = true;
-        retTxt = "Present";
-    }
-
-    if ((credential != NULL) && ret)
-    {
-        LE_DEBUG("Checking credentials against input credential.");
-        if (strncmp(buffer, credential, bufferSz) != 0)
-        {
-            ret = false;
-        }
-    }
-
-    LE_DEBUG("credId %d result %s [%d]", credId, retTxt, ret);
-    return ret;
-}
-
 
 //--------------------------------------------------------------------------------------------------
 /**

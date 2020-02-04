@@ -11,7 +11,7 @@
 #include "interfaces.h"
 #include <lwm2mcore/lwm2mcore.h>
 #include <lwm2mcore/server.h>
-#include "avcServer.h"
+#include "avcServer/avcServer.h"
 
 //--------------------------------------------------------------------------------------------------
 /**

@@ -14,12 +14,11 @@
 #include <lwm2mcore/update.h>
 #include <lwm2mcore/security.h>
 #include "packageDownloader.h"
-#include "avcAppUpdate.h"
-#include "avcFs.h"
-#include "avcFsConfig.h"
-#include "sslUtilities.h"
-#include "avcClient.h"
-#include "avcServer.h"
+#include "avcAppUpdate/avcAppUpdate.h"
+#include "avcFs/avcFs.h"
+#include "avcFs/avcFsConfig.h"
+#include "avcClient/avcClient.h"
+#include "avcServer/avcServer.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -528,11 +527,6 @@ le_result_t packageDownloader_Init
     if ( (-1 == le_fd_MkFifo(FIFO_PATH, S_IRUSR | S_IWUSR)) && (EEXIST != errno) )
     {
         LE_ERROR("failed to create fifo: %d", errno);
-        return LE_FAULT;
-    }
-
-    if (LE_OK != ssl_CheckCertificate())
-    {
         return LE_FAULT;
     }
 

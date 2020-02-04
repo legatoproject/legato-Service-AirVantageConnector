@@ -11,9 +11,9 @@
 
 #include "legato.h"
 #include "interfaces.h"
-#include "assetData.h"
-#include "avcAppUpdate.h"
-#include "avcServer.h"
+#include "assetData/assetData.h"
+#include "avcAppUpdate/avcAppUpdate.h"
+#include "avcServer/avcServer.h"
 #ifdef LE_CONFIG_LINUX
 #include <sys/reboot.h>
 #include <sys/utsname.h>

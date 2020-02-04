@@ -15,10 +15,10 @@ requires:
 
 sources:
 {
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcServer.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcFs.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcServer/avcServer.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcFs/avcFs.c
     // AVC
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/avcClient.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient/avcClient.c
 
     airVantageConnector_stub.c
     lwm2mcore_stub.c

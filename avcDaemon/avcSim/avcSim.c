@@ -63,7 +63,9 @@ static le_timer_Ref_t ModeRollbackTimer;
  * Reference to the Cellular Network state event handler
  */
 //--------------------------------------------------------------------------------------------------
+#ifdef LE_CONFIG_LINUX
 static le_cellnet_StateEventHandlerRef_t CellNetStateEventRef;
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -160,6 +162,7 @@ static void AvcStatusHandler
  *  Event callback for Cellular Network Service state changes
  */
 //--------------------------------------------------------------------------------------------------
+#ifdef LE_CONFIG_LINUX
 static void CellNetStateHandler
 (
     le_cellnet_State_t state,       ///< [IN] Cellular network state
@@ -215,6 +218,7 @@ static void CellNetStateHandler
             break;
     }
 }
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -479,9 +483,10 @@ le_result_t SimModeInit
     le_timer_SetRepeat(ModeRollbackTimer, 1);
     le_timer_SetHandler(ModeRollbackTimer, SimModeRollbackHandler);
 
+#ifdef LE_CONFIG_LINUX
     // Register a handler for Cellular Network Service state changes.
     CellNetStateEventRef = le_cellnet_AddStateEventHandler(CellNetStateHandler, NULL);
-
+#endif
     // Register a handler for AVC events
     AvcStatusEventRef = le_avc_AddStatusEventHandler(AvcStatusHandler, NULL);
 
@@ -517,7 +522,9 @@ void SimModeDeinit
     le_timer_Delete(ModeRollbackTimer);
 
     // Remove event handlers
+#ifdef LE_CONFIG_LINUX
     le_cellnet_RemoveStateEventHandler(CellNetStateEventRef);
+#endif
     le_avc_RemoveStatusEventHandler(AvcStatusEventRef);
     le_sim_RemoveNewStateHandler(SimStateEventRef);
 

@@ -9,7 +9,7 @@
  */
 
 #include <lwm2mcore/lwm2mcore.h>
-#include "avcClient.h"
+#include "avcClient/avcClient.h"
 #include <lwm2mcore/coapHandlers.h>
 #include "interfaces.h"
 

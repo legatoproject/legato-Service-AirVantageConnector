@@ -11,16 +11,16 @@
 
 #include "legato.h"
 #include "interfaces.h"
-#include "assetData.h"
+#include "assetData/assetData.h"
 #ifdef LE_CONFIG_LINUX
 #include <sys/reboot.h>
 #include <sys/utsname.h>
 #endif
 #ifndef LE_CONFIG_SOTA
-#include "avcAppUpdate.h"
+#include "avcAppUpdate/avcAppUpdate.h"
 #endif
-#include "avcServer.h"
-#include "avcSim.h"
+#include "avcServer/avcServer.h"
+#include "avcSim/avcSim.h"
 
 
 

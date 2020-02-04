@@ -11,8 +11,8 @@
 #include "interfaces.h"
 #include <lwm2mcore/lwm2mcore.h>
 #include <lwm2mcore/paramStorage.h>
-#include "avcFsConfig.h"
-#include "avcFs.h"
+#include "avcFs/avcFsConfig.h"
+#include "avcFs/avcFs.h"
 
 //--------------------------------------------------------------------------------------------------
 /**

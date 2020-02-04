@@ -11,7 +11,7 @@
 #include "update.h"
 #include "liblwm2m.h"
 #include "lwm2mcore/timer.h"
-#include "avcAppUpdate.h"
+#include "avcAppUpdate/avcAppUpdate.h"
 
 
 //--------------------------------------------------------------------------------------------------

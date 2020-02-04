@@ -12,13 +12,13 @@
 #include "interfaces.h"
 #include "le_print.h"
 #include "appCfg.h"
-#include "assetData.h"
-#include "avcServer.h"
-#include "packageDownloader.h"
+#include "assetData/assetData.h"
+#include "avcServer/avcServer.h"
+#include "packageDownloader/packageDownloader.h"
 #include "avcAppUpdate.h"
-#include "avcFsConfig.h"
-#include "avcFs.h"
-#include "avcClient.h"
+#include "avcFs/avcFsConfig.h"
+#include "avcFs/avcFs.h"
+#include "avcClient/avcClient.h"
 
 //--------------------------------------------------------------------------------------------------
 /**

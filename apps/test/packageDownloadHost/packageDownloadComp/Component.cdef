@@ -17,14 +17,13 @@ requires:
 sources:
 {
     // Package downloader: AVC side
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/downloader.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/packageDownloader.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/sslLayOutPEM.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/sslCheckCertificate.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader/defaultDerKey.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortParamStorage.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient/osPortUpdate.c
-    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcFs.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/packageDownloader/downloader.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/packageDownloader/packageDownloader.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/packageDownloader/sslLayOutPEM.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/packageDownloader/defaultDerKey.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient/osPortParamStorage.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient/osPortUpdate.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcFs/avcFs.c
 
     // Stubbed files in the AVC
     avcAppUpdate_stub.c
@@ -43,10 +42,10 @@ cflags:
     -I${LEGATO_ROOT}/framework/liblegato/linux
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/apps/test/packageDownloadHost/packageDownloadComp
     -I${LEGATO_ROOT}/components/httpClientLibrary
-    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/packageDownloader
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon
-    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcAppUpdate
-    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcClient
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcAppUpdate
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/lwm2mcore/
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/platform-specific/linux

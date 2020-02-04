@@ -35,14 +35,4 @@ int ssl_LayOutPEM
     int     strLen
 );
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Check if SSL certificate exists and load it
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t ssl_CheckCertificate
-(
-    void
-);
-
 #endif /* _SSLUTILITIES_H */

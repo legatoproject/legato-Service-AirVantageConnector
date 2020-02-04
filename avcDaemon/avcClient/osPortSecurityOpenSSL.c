@@ -21,10 +21,10 @@
 #include <lwm2mcore/security.h>
 #include <legato.h>
 #include <interfaces.h>
-#include <avcClient.h>
-#include <avcFsConfig.h>
-#include <avcFs.h>
-#include <sslUtilities.h>
+#include "avcClient.h"
+#include "avcFs/avcFsConfig.h"
+#include "avcFs/avcFs.h"
+#include "packageDownloader/sslUtilities.h"
 
 //--------------------------------------------------------------------------------------------------
 /**

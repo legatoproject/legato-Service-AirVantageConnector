@@ -13,10 +13,10 @@
 #define LEGATO_RPD_SERVER_INCLUDE_GUARD
 
 #include "legato.h"
-#include "assetData.h"
+#include "assetData/assetData.h"
 #include "lwm2mcore/update.h"
 #include "lwm2mcore/lwm2mcorePackageDownloader.h"
-#include "avcFs.h"
+#include "avcFs/avcFs.h"
 
 //--------------------------------------------------------------------------------------------------
 /**

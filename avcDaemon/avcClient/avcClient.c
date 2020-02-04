@@ -18,9 +18,9 @@
 #include "legato.h"
 #include "interfaces.h"
 #include "avcClient.h"
-#include "tpfServer.h"
-#include "avcServer.h"
-#include "packageDownloader.h"
+#include "tpf/tpfServer.h"
+#include "avcServer/avcServer.h"
+#include "packageDownloader/packageDownloader.h"
 #include "workspace.h"
 //--------------------------------------------------------------------------------------------------
 /**

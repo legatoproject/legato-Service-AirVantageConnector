@@ -9,7 +9,7 @@
 
 #include "legato.h"
 #include "interfaces.h"
-#include "avcServer.h"
+#include "avcServer/avcServer.h"
 #include "main.h"
 
 //--------------------------------------------------------------------------------------------------

@@ -8,14 +8,14 @@
  */
 
 #include <lwm2mcore/update.h>
-#include <packageDownloader.h>
+#include "packageDownloader/packageDownloader.h"
 #include "legato.h"
 #include "interfaces.h"
-#include "avcAppUpdate.h"
-#include "avcServer.h"
-#include "tpfServer.h"
+#include "avcAppUpdate/avcAppUpdate.h"
+#include "avcServer/avcServer.h"
+#include "tpf/tpfServer.h"
 #include "avcClient.h"
-#include "avcFsConfig.h"
+#include "avcFs/avcFsConfig.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
