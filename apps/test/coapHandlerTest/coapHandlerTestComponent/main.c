@@ -240,12 +240,12 @@ static le_coap_Code_t CoapRxStreamHandler
         case LE_COAP_RX_STREAM_START:
             LE_INFO("Stream start: Create file and write received data");
             CopyToFile(RECEIVED_STREAM_FILE, bufferPtr, length, true);
-            return LE_COAP_CODE_NO_RESPONSE;
+            return LE_COAP_CODE_231_CONTINUE;
 
         case LE_COAP_RX_STREAM_IN_PROGRESS:
             LE_INFO("Stream in progress: Copy received data to file");
             CopyToFile(RECEIVED_STREAM_FILE, bufferPtr, length, false);
-            return LE_COAP_CODE_NO_RESPONSE;
+            return LE_COAP_CODE_231_CONTINUE;
 
         case LE_COAP_RX_STREAM_END:
             LE_INFO("Stream completed: Start processing received data");
@@ -409,6 +409,7 @@ static void ExternalCoapHandler
     size_t tokenLength,                             ///< [IN] token length
     const uint8_t* payload,                         ///< [IN] CoAP payload
     size_t payloadLength,                           ///< [IN] CoAP payload length
+    uint16_t blockSize,                             ///< [IN] Block size
     void* contextPtr                                ///< [IN] Context
 )
 {
@@ -440,7 +441,8 @@ static void ExternalCoapHandler
                                      LE_COAP_CODE_204_CHANGED,
                                      LE_COAP_STREAM_NONE,
                                      ResponsePayload,
-                                     0);
+                                     0,
+                                     blockSize);
             }
             else
             {
@@ -456,7 +458,8 @@ static void ExternalCoapHandler
                                          coapResponseCode,
                                          LE_COAP_STREAM_NONE,
                                          ResponsePayload,
-                                         0);
+                                         0,
+                                         blockSize);
                 }
             }
             break;
@@ -484,13 +487,14 @@ static void ExternalCoapHandler
             {
                 LE_ERROR("URI %s not found", uri);
                 le_coap_SendResponse(messageId,
-                                     (const uint8_t*)"",
-                                     0,
+                                     token,
+                                     tokenLength,
                                      LWM2M_CONTENT_CBOR,
                                      LE_COAP_CODE_404_NOT_FOUND,
                                      LE_COAP_STREAM_NONE,
                                      (const uint8_t*)"",
-                                     0);
+                                     0,
+                                     blockSize);
                 return;
             }
 
@@ -531,7 +535,8 @@ static void ExternalCoapHandler
                                       coapResponseCode,
                                       txStreamStatus,
                                       ResponsePayload,
-                                      responsePayloadLength);
+                                      responsePayloadLength,
+                                      blockSize);
              }
              break;
 
