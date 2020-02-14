@@ -532,7 +532,7 @@ static size_t GetCustomerPriVersion
 }
 #endif
 
-#ifndef LE_CONFIG_CUSTOM_OS
+#ifndef MK_CONFIG_NO_CARRIER_PRI
 //--------------------------------------------------------------------------------------------------
 /**
  * Attempt to read the Carrier PRI version string from the file system.
@@ -799,7 +799,11 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
       { USER_FS_TAG,            GetUfsVersion               },
       { LEGATO_OVERRIDE_TAG,    GetLegatoOverrideVersion    },
       { CUSTOMER_PRI_TAG,       GetCustomerPriVersion       },
+#endif
+#ifndef MK_CONFIG_NO_CARRIER_PRI
       { CARRIER_PRI_TAG,        GetCarrierPriVersion        },
+#endif
+#ifndef LE_CONFIG_CUSTOM_OS
       { MCU_TAG,                GetMcuVersion               }
 #endif
     };
