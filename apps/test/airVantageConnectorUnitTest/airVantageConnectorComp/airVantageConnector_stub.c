@@ -1189,3 +1189,27 @@ le_result_t le_fwupdate_GetResumePosition
     *positionPtr = 0;
     return LE_OK;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the Packet Switched state.
+ *
+ * @return
+ *  - LE_FAULT  Function failed.
+ *  - LE_OK     Function succeeded.
+ *
+ * @note <b>multi-app safe</b>
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_mrc_GetPacketSwitchedState
+(
+    le_mrc_NetRegState_t* statePtr ///< [OUT] The current Packet switched state.
+)
+{
+    if(!statePtr)
+    {
+        return LE_BAD_PARAMETER;
+    }
+    *statePtr = LE_MRC_REG_HOME;
+    return LE_OK;
+}

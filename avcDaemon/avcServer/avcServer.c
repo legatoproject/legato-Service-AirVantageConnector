@@ -1372,8 +1372,17 @@ static le_result_t RespondToDownloadPending
 
     if ((!isUserAgreementEnabled) && (-1 != totalNumBytes))
     {
-        LE_INFO("Automatically accepting download");
-        result = AcceptDownloadPackage();
+        // Check if the device is attached yet
+        le_mrc_NetRegState_t serviceState = LE_MRC_REG_UNKNOWN;
+        le_result_t res = le_mrc_GetPacketSwitchedState(&serviceState);
+        LE_DEBUG("le_mrc_GetPacketSwitchedState: res %d, serviceState %d", res, serviceState);
+
+        if ((res == LE_OK)
+         && ((LE_MRC_REG_HOME == serviceState) || (LE_MRC_REG_ROAMING == serviceState)))
+        {
+            LE_INFO("Automatically accepting download");
+            result = AcceptDownloadPackage();
+        }
     }
     else if (NumStatusHandlers > 0)
     {

@@ -524,19 +524,43 @@ static void SendRequestRspCb
 
     if (result != LE_OK)
     {
-        LE_ERROR("Failure during HTTP reception. Result: %d", result);
-        // Failure during HTTP reception occurred. In this case, notify package downloader that no
-        // data has been received and check its returned status
-        return downloader_RequestDownloadRetry(NULL, NULL);
+#ifdef LE_CONFIG_RTOS
+        // Check the data link in case of timeout
+        if ((LE_TIMEOUT == result) || (LE_UNAVAILABLE == result))
+        {
+            // Check if the device is still registered
+            le_mrc_NetRegState_t serviceState = LE_MRC_REG_UNKNOWN;
+            le_result_t res = le_mrc_GetPacketSwitchedState(&serviceState);
+            if ((res == LE_OK) && (LE_MRC_REG_UNKNOWN == serviceState))
+            {
+                LE_DEBUG("Suspend the download, MRC service state %d", serviceState);
+                downloader_SuspendDownload();
+                goto end;
+            }
+        }
+#endif /* LE_CONFIG_RTOS */
 
+        LE_ERROR("Failure during HTTP reception. Result: %d", result);
+        // Failure during HTTP reception occurred. In this case, notify package downloader that
+        // no data has been received and check its returned status
+        downloader_RequestDownloadRetry(NULL, NULL);
+        return;
     }
 
-    if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_HandlePackageDownloader())
+    if ((HTTP_404 == PackageUriDetails.httpCode) || (HTTP_414 == PackageUriDetails.httpCode))
+    {
+        result = LE_BAD_PARAMETER;
+        lwm2mcore_SetDownloadError(LWM2MCORE_UPDATE_ERROR_INVALID_URI);
+    }
+    else if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_HandlePackageDownloader())
     {
         LE_ERROR("Package download failed");
         result = LE_FAULT;
     }
 
+#ifdef LE_CONFIG_RTOS
+end:
+#endif /* LE_CONFIG_RTOS */
     FinalizeDownload(result);
 }
 
@@ -690,6 +714,17 @@ static le_result_t StartHttpClient
     status = le_httpClient_Start(HttpClientRef);
     if (LE_UNAVAILABLE == status)
     {
+#ifdef LE_CONFIG_RTOS
+        // Check if the device is still registered
+        le_mrc_NetRegState_t serviceState = LE_MRC_REG_UNKNOWN;
+        le_result_t res = le_mrc_GetPacketSwitchedState(&serviceState);
+        if ((res == LE_OK) && (LE_MRC_REG_UNKNOWN == serviceState))
+        {
+            LE_DEBUG("Suspend the download, MRC service state %d", serviceState);
+            downloader_SuspendDownload();
+            return status;
+        }
+#endif /* LE_CONFIG_RTOS */
         LE_ERROR("Unable to connect HTTP client, bad package URI");
         StatusCodeCb(HttpClientRef, HTTP_404);
         return status;
