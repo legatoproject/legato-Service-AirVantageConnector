@@ -1015,7 +1015,22 @@ void packageDownloader_FinalizeDownload
     LE_INFO("End downloader (status: %d): Stop FD", ret);
 
     // Close the file descriptior as the downloaded data has been written to FIFO
-    if (le_fd_Close(dwlCtxPtr->downloadFd) == -1)
+    // Firstly check if the fd is valid
+    if (-1 == dwlCtxPtr->downloadFd)
+    {
+        LE_DEBUG("Download fd is already closed");
+        // Check if the download was already finalized
+        // This could happen if the device deregisters from the network while last package bytes are
+        // received.
+        // AVC thread suspends the download and finalizes it, then download thread finalizes the
+        // download
+        if(GetDownloadStatus() == DOWNLOAD_STATUS_IDLE)
+        {
+            LE_DEBUG("Download is already finalized");
+            return;
+        }
+    }
+    else if(le_fd_Close(dwlCtxPtr->downloadFd) == -1)
     {
         LE_WARN("Failed to close download fd");
     }
