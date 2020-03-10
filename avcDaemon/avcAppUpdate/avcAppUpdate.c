@@ -1,4 +1,3 @@
-
 //--------------------------------------------------------------------------------------------------
 /**
  * This file handles managing application update (legato side) over LWM2M.

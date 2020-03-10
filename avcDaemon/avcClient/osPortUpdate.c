@@ -528,9 +528,11 @@ void lwm2mcore_CleanStaleData
         case LWM2MCORE_FW_UPDATE_TYPE:
             // Delete old FOTA job info.
             packageDownloader_DeleteFwUpdateInfo();
+#if LE_CONFIG_SOTA
             // Delete aborted/stale stored SOTA job info. Otherwise, they may create problem during
             // FOTA suspend resume activity.
             avcApp_DeletePackage();
+#endif /* LE_CONFIG_SOTA */
             break;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
