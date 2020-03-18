@@ -165,7 +165,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAltitude
     switch (result)
     {
         case LE_OK:
-            altitudeLen = snprintf(bufferPtr, *lenPtr, "%"PRIu32, altitude);
+            altitudeLen = snprintf(bufferPtr, *lenPtr, "%"PRIi32, altitude);
             if (*lenPtr < altitudeLen)
             {
                 sID = LWM2MCORE_ERR_OVERFLOW;
