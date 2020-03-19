@@ -362,19 +362,19 @@ bool lwm2mcore_UdpClose
 )
 {
     bool result = false;
-    int rc = 0;
 
-    rc = close (config.sock);
-    LE_DEBUG ("close sock %d -> %d", config.sock, rc);
-    if (0 == rc)
+    if (config.sock == SocketConfig.sock)
     {
-        if (config.sock == SocketConfig.sock)
+        int rc = 0;
+        // Delete FD monitor if the socket was opened in lwm2mcore_UdpOpen().
+        LE_DEBUG("Closed lwm2m UDP socket %d with FD monitor %p", config.sock, Lwm2mMonitorRef);
+        le_fdMonitor_Delete(Lwm2mMonitorRef);
+
+        rc = close (config.sock);
+        if (0 == rc)
         {
-            // Delete FD monitor if the socket was opened in lwm2mcore_UdpOpen().
-            LE_DEBUG("Closed lwm2m UDP socket %d with FD monitor %p", config.sock, Lwm2mMonitorRef);
-            le_fdMonitor_Delete(Lwm2mMonitorRef);
+            result = true;
         }
-        result = true;
     }
 
     LE_DEBUG ("lwm2mcore_UdpClose %d", result);
