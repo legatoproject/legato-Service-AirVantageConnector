@@ -484,7 +484,14 @@ le_result_t le_appInfo_GetName
         ///< [IN]
 )
 {
-    memcpy(appName, "test", sizeof("test"));
+    char testName[] = "test";
+
+    if (sizeof(testName) > appNameNumElements)
+    {
+        return LE_OVERFLOW;
+    }
+
+    strncpy(appName, testName, appNameNumElements);
     return LE_OK;
 }
 

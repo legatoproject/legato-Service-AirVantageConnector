@@ -6,11 +6,12 @@
 #include "le_cfg_interface.h"
 #include "le_data_interface.h"
 #include "le_sms_interface.h"
+#include "le_mrc_interface.h"
 #include "lwm2mcore.h"
 #include "update.h"
 #include "liblwm2m.h"
 #include "lwm2mcore/timer.h"
-#include "avcAppUpdate.h"
+#include "avcAppUpdate/avcAppUpdate.h"
 
 
 //--------------------------------------------------------------------------------------------------

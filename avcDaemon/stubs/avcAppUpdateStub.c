@@ -65,6 +65,11 @@ le_result_t avcApp_StartUpdate
  *  operation. During an uninstall operation the app will be removed after the client receives the
  *  object9 delete command.
  *
+ *  @return
+ *      - LE_OK if successful
+ *      - LE_NOT_FOUND if instanceId/appName not found
+ *      - LE_FAULT if there is any other error.
+ *
  */
 //--------------------------------------------------------------------------------------------------
 void avcApp_PrepareUninstall
@@ -253,6 +258,25 @@ le_result_t avcApp_GetResumePosition
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Set software update result in asset data and SW update workspace for ongoing update.
+ *
+ * @return:
+ *      - LE_OK on success
+ *      - LE_NOT_FOUND if no ongoing update.
+ *      - LE_FAULT on any other error
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_SetSwUpdateResult
+(
+    lwm2mcore_SwUpdateResult_t updateResult
+)
+{
+    LE_DEBUG("Stub");
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Set software update state in asset data and SW update workspace for ongoing update.
  *
  * @return:
@@ -266,28 +290,7 @@ le_result_t avcApp_SetSwUpdateState
     lwm2mcore_SwUpdateState_t updateState
 )
 {
-    LE_ASSERT_OK(WriteFs(SW_UPDATE_STATE_PATH, (uint8_t *)&updateState,
-                                         sizeof(lwm2mcore_SwUpdateState_t)));
-    return LE_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Set software update result in asset data and SW update workspace for ongoing update.
- *
- * @return:
- *      - LE_OK on success
- *      - LE_NOT_FOUND if no ongoing update.
- *      - LE_FAULT on any other error
- */
-//--------------------------------------------------------------------------------------------------
-le_result_t  avcApp_SetSwUpdateResult
-(
-    lwm2mcore_SwUpdateResult_t updateResult
-)
-{
-    LE_ASSERT_OK(WriteFs(SW_UPDATE_RESULT_PATH, (uint8_t *)&updateResult,
-                                          sizeof(lwm2mcore_SwUpdateResult_t)));
+    LE_DEBUG("Stub");
     return LE_OK;
 }
 
@@ -512,4 +515,19 @@ void avcApp_Init
 )
 {
     LE_DEBUG("Stub");
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Check if there is a software update related notification to send after a reboot
+ * or a service restart.
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_CheckNotificationToSend
+(
+    void
+)
+{
+    return LE_OK;
 }

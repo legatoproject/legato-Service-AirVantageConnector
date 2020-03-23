@@ -6,9 +6,14 @@ sandboxed: false
 
 executables:
 {
-    avcDaemon = (avcDaemon deviceManagement)
+    avcDaemon = (avcDaemon deviceManagement
+#if ${LE_CONFIG_LINUX} = ""
+                 ${LEGATO_ROOT}/components/fwupdate/fwupdateDaemon
+#endif
+                )
 }
 
+#if ${LE_CONFIG_LINUX} = y
 bundles:
 {
     file:
@@ -25,6 +30,7 @@ processes:
         (avcLoadConfig)
     }
 }
+#endif
 
 processes:
 {
@@ -32,7 +38,6 @@ processes:
     {
         (avcDaemon)
     }
-
     faultAction: restart
     #if ${LE_CONFIG_SERVICES_WATCHDOG} = y
         maxWatchdogTimeout: 300000
@@ -40,6 +45,9 @@ processes:
         watchdogTimeout: never
     #endif
 
+#if ${LE_CONFIG_RTOS} = y
+    maxStackBytes: 14336
+#endif
     // Maximum size of the download file (50 MBytes)
     // ToDo: Change this to "unlimited" when mktools support it
     maxFileBytes: 50000K
@@ -49,8 +57,15 @@ extern:
 {
     avcDaemon.avcDaemon.le_avc
     avcDaemon.avcDaemon.le_tpf
+#if ${LE_CONFIG_ENABLE_AV_DATA} = y
     avcDaemon.avcDaemon.le_avdata
+#endif
     avcDaemon.avcDaemon.le_coap
+
+#if ${LE_CONFIG_LINUX} = ""
+    avcDaemon.avcDaemon.le_appInfo
+    avcDaemon.avcDaemon.le_cfg
+#endif
 }
 
 requires:
@@ -65,25 +80,31 @@ requires:
 bindings:
 {
     // avcDaemon dependencies
+#if ${LE_CONFIG_LINUX} = y
     avcDaemon.avcDaemon.le_instStat -> <root>.le_instStat
     avcDaemon.avcDaemon.le_appCtrl -> <root>.le_appCtrl
     avcDaemon.avcDaemon.le_appRemove -> <root>.le_appRemove
     avcDaemon.avcDaemon.le_appInfo -> <root>.le_appInfo
     avcDaemon.avcDaemon.le_framework -> <root>.le_framework
     avcDaemon.avcDaemon.le_update -> <root>.le_update
-    avcDaemon.avcDaemon.le_data -> dataConnectionService.le_data
-    avcDaemon.avcDaemon.le_fwupdate -> fwupdateService.le_fwupdate
+    avcDaemon.watchdogChain.le_wdog -> <root>.le_wdog
     avcDaemon.avcDaemon.le_secStore -> secStore.le_secStore
+    avcDaemon.avcDaemon.le_cellnet -> cellNetService.le_cellnet
     avcDaemon.avcDaemon.le_sms  -> modemService.le_sms
+    avcDaemon.avcDaemon.le_fwupdate -> fwupdateService.le_fwupdate
+    avcDaemon.deviceManagement.le_ulpm -> powerMgr.le_ulpm
+    avcDaemon.deviceManagement.le_cellnet -> cellNetService.le_cellnet
+    avcDaemon.deviceManagement.le_fwupdate -> fwupdateService.le_fwupdate
+#endif
+    avcDaemon.avcDaemon.le_ulpm -> powerMgr.le_ulpm
+    avcDaemon.avcDaemon.le_data -> dataConnectionService.le_data
     avcDaemon.avcDaemon.le_sim  -> modemService.le_sim
     avcDaemon.avcDaemon.le_mdc  -> modemService.le_mdc
-    avcDaemon.avcDaemon.le_cellnet -> cellNetService.le_cellnet
-    avcDaemon.avcDaemon.le_ulpm -> powerMgr.le_ulpm
-    avcDaemon.watchdogChain.le_wdog -> <root>.le_wdog
+    avcDaemon.avcDaemon.le_mrc  -> modemService.le_mrc
+
     avcDaemon.httpClientLibrary.le_mdc  -> modemService.le_mdc
 
     // Device management bindings
-    avcDaemon.deviceManagement.le_ulpm -> powerMgr.le_ulpm
     avcDaemon.deviceManagement.le_data -> dataConnectionService.le_data
     avcDaemon.deviceManagement.le_info -> modemService.le_info
     avcDaemon.deviceManagement.le_ips  -> modemService.le_ips
@@ -94,6 +115,4 @@ bindings:
     avcDaemon.deviceManagement.le_temp -> modemService.le_temp
     avcDaemon.deviceManagement.le_pos -> positioningService.le_pos
     avcDaemon.deviceManagement.le_gnss -> positioningService.le_gnss
-    avcDaemon.deviceManagement.le_cellnet -> cellNetService.le_cellnet
-    avcDaemon.deviceManagement.le_fwupdate -> fwupdateService.le_fwupdate
 }

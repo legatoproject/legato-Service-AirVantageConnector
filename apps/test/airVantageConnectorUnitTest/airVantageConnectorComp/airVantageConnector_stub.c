@@ -563,9 +563,10 @@ lwm2mcore_DwlResult_t packageDownloader_SetSwUpdateState
 //--------------------------------------------------------------------------------------------------
 le_result_t packageDownloader_SetFwUpdateNotification
 (
-    bool                notifRequested,     ///< [IN] Indicates if a notification is requested
-    le_avc_Status_t     updateStatus,       ///< [IN] Update status
-    le_avc_ErrorCode_t  errorCode           ///< [IN] Error code
+    bool                        notifRequested, ///< [IN] Indicates if a notification is requested
+    le_avc_Status_t             updateStatus,   ///< [IN] Update status
+    le_avc_ErrorCode_t          errorCode,      ///< [IN] Error code
+    le_fwupdate_UpdateStatus_t  fwErrorCode     ///< [IN] FW update error code
 )
 {
     return LE_OK;
@@ -1128,6 +1129,25 @@ le_result_t tpfServer_SetTpfState
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Start a package download from a 3rd party server
+ *
+ * This will sent a request to the server to start a download.
+ *
+ * @return
+ *      - LE_OK if connection request has been sent.
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_tpf_Start
+(
+    void
+)
+{
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Delete an SMS message.
  *
  */
@@ -1139,4 +1159,46 @@ void le_sms_Delete
 )
 {
     return;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * This function must be called to register an handler for Network registration state change.
+ *
+ * @return A handler reference, which is only needed for later removal of the handler.
+ *
+ * @note Doesn't return on failure, so there's no need to check the return value for errors.
+ */
+//--------------------------------------------------------------------------------------------------
+le_mrc_NetRegStateEventHandlerRef_t le_mrc_AddNetRegStateEventHandler
+(
+    le_mrc_NetRegStateHandlerFunc_t handlerFuncPtr, ///< [IN] The handler function.
+    void*                           contextPtr      ///< [IN] The handler's context.
+)
+{
+    return NULL;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Return the downloaded update package write position.
+ *
+ * @return
+ *      - LE_OK on success
+ *      - LE_BAD_PARAMETER Invalid parameter
+ *      - LE_FAULT on failure
+ */;
+//--------------------------------------------------------------------------------------------------
+le_result_t le_fwupdate_GetResumePosition
+(
+    size_t *positionPtr     ///< [OUT] Update package read position
+)
+{
+    LE_DEBUG("Stub");
+    if (!positionPtr)
+    {
+        return LE_BAD_PARAMETER;
+    }
+    *positionPtr = 0;
+    return LE_OK;
 }

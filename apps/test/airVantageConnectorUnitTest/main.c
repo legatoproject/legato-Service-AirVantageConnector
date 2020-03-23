@@ -5,9 +5,9 @@
  */
 
 #include "legato.h"
-#include"packageDownloader.h"
+#include "packageDownloader/packageDownloader.h"
 #include "interfaces.h"
-#include"avcServer.h"
+#include "avcServer/avcServer.h"
 
 //--------------------------------------------------------------------------------------------------
 // Symbol and Enum definitions

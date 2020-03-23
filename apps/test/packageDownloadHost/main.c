@@ -9,7 +9,7 @@
 
 #include "main.h"
 #include "limit.h"
-#include "packageDownloader.h"
+#include "packageDownloader/packageDownloader.h"
 #include "downloader.h"
 #include "le_httpClient_stub.h"
 

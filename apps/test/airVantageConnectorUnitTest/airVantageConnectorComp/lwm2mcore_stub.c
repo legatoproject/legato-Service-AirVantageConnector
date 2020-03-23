@@ -759,3 +759,22 @@ lwm2mcore_Sid_t lwm2mcore_GetTpfState
 {
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * @brief Resume a package download
+ *
+ * @remark Platform adaptor function which needs to be defined on client side.
+ *
+ * @note
+ * This function is not available if @c LWM2M_EXTERNAL_DOWNLOADER compilation flag is embedded
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+void lwm2mcore_ResumePackageDownloader
+(
+    lwm2mcore_UpdateType_t updateType   ///< [IN] Update type (FW/SW)
+)
+{
+    (void)updateType;
+}

@@ -9,7 +9,7 @@
 
 #include "legato.h"
 #include "interfaces.h"
-#include "tpfServer.h"
+#include "tpf/tpfServer.h"
 
 //--------------------------------------------------------------------------------------------------
 /**

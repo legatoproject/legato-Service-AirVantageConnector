@@ -3,6 +3,7 @@ requires:
     api:
     {
         airVantage/le_avc.api               [types-only]
+        le_fwupdate.api                     [types-only]
     }
 }
 
@@ -13,7 +14,7 @@ sources:
 
 cflags:
 {
-    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/packageDownloader
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/apps/test/packageDownloadHost/packageDownloadComp
     -I${LEGATO_ROOT}/components/httpClientLibrary
     -DIFGEN_PROVIDE_PROTOTYPES

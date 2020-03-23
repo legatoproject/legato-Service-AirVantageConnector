@@ -385,6 +385,7 @@ static size_t GetUfsVersion
 }
 #endif
 
+#ifndef MK_CONFIG_AVC_DISABLE_LEGATO_VERSION
 //--------------------------------------------------------------------------------------------------
 /**
  * Attempt to read the Legato version string from the file system.
@@ -447,11 +448,12 @@ static size_t ReadLegatoVersion
             returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
         }
 
-#endif
+#endif //LE_CONFIG_LINUX
         LE_INFO("Legato version = %s, len %zd", versionBufferPtr, returnedLen);
     }
     return returnedLen;
 }
+#endif //MK_CONFIG_AVC_DISABLE_LEGATO_VERSION
 
 #ifndef MK_CONFIG_AVC_DISABLE_LEGATO_VERSION
 //--------------------------------------------------------------------------------------------------
