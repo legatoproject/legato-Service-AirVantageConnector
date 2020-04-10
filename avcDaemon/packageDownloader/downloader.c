@@ -58,7 +58,11 @@
  * HTTP client timeout for data reception in milliseconds
  */
 //--------------------------------------------------------------------------------------------------
+#if LE_CONFIG_AVC_HTTP_TIMEOUT_MS
+#define HTTP_TIMEOUT_MS     LE_CONFIG_AVC_HTTP_TIMEOUT_MS
+#else /* LE_CONFIG_AVC_HTTP_TIMEOUT_MS */
 #define HTTP_TIMEOUT_MS     30000
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
