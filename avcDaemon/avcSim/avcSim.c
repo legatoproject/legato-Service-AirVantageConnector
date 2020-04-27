@@ -340,28 +340,29 @@ SimMode_t GetCurrentSimMode
     void
 )
 {
-    le_result_t status;
-    bool autoMode;
-
     if (SimHandlerPtr->mode == MODE_IN_PROGRESS)
     {
         return MODE_IN_PROGRESS;
     }
 
-    status = le_sim_GetAutomaticSelection(&autoMode);
-    if ((status == LE_OK) && (autoMode))
+    le_sim_SimMode_t simMode = le_sim_GetSimMode();
+    SimMode_t ret;
+    switch (simMode)
     {
-        return MODE_PREF_EXTERNAL_SIM;
+        case(LE_SIM_FORCE_EXTERNAL):
+            ret = MODE_EXTERNAL_SIM;
+            break;
+        case(LE_SIM_FORCE_INTERNAL):
+            ret = MODE_INTERNAL_SIM;
+            break;
+        case(LE_SIM_PREF_EXTERNAL):
+            ret = MODE_PREF_EXTERNAL_SIM;
+            break;
+        default:
+            LE_ERROR("Invalid Sim Mode returned when getting current sim mode");
+            ret = MODE_MAX;
     }
-
-    if (le_sim_GetSelectedCard() == LE_SIM_EXTERNAL_SLOT_1)
-    {
-        return MODE_EXTERNAL_SIM;
-    }
-    else
-    {
-        return MODE_INTERNAL_SIM;
-    }
+    return ret;
 }
 
 //--------------------------------------------------------------------------------------------------
