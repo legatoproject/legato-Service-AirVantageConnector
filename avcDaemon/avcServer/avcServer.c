@@ -591,6 +591,7 @@ static bool              NotifyApplication = false;
 // Local functions
 //--------------------------------------------------------------------------------------------------
 
+#if LE_DEBUG_ENABLED || LE_INFO_ENABLED
 //--------------------------------------------------------------------------------------------------
 /**
  *  Convert avc session state to string.
@@ -634,7 +635,9 @@ static char* AvcSessionStateToStr
 
     return result;
 }
+#endif // LE_DEBUG_ENABLED || LE_INFO_ENABLED
 
+#if LE_DEBUG_ENABLED || LE_INFO_ENABLED || LE_ERROR_ENABLED
 //--------------------------------------------------------------------------------------------------
 /**
  *  Convert AVC state enum to string
@@ -667,6 +670,7 @@ static char* ConvertAvcStateToString
 
     return result;
 }
+#endif // LE_DEBUG_ENABLED || LE_INFO_ENABLED || LE_ERROR_ENABLED
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -687,7 +691,7 @@ static void UpdateCurrentAvcState
     }
 }
 
-
+#if LE_INFO_ENABLED || LE_WARN_ENABLED
 //--------------------------------------------------------------------------------------------------
 /**
  *  Convert user agreement enum to string
@@ -712,6 +716,8 @@ static char* ConvertUserAgreementToString
     }
     return result;
 }
+#endif // LE_INFO_ENABLED || LE_WARN_ENABLED
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -848,6 +854,7 @@ static le_result_t StartDeferTimer
     return LE_OK;
 }
 
+#if LE_ERROR_ENABLED
 //--------------------------------------------------------------------------------------------------
 /**
  *  Convert an le_avc_UpdateType_t value to a string for debugging.
@@ -880,6 +887,7 @@ static const char* UpdateTypeToStr
     }
     return resultPtr;
 }
+#endif // LE_ERROR_ENABLED
 
 //--------------------------------------------------------------------------------------------------
 /**

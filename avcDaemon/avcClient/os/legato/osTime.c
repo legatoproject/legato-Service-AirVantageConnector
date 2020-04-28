@@ -71,7 +71,7 @@ void lwm2mcore_UpdateSystemClock
 {
     dtls_Connection_t* connPtr = (dtls_Connection_t*)connP;
     le_cfg_IteratorRef_t cfg;
-    le_result_t result;
+    __attribute__((unused)) le_result_t result;
     le_clk_Time_t t;
     time_t clockStamp;
 

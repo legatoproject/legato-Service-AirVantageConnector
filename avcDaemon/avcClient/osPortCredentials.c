@@ -171,7 +171,7 @@ bool lwm2mcore_CheckCredential
     char buffer[LWM2MCORE_PUBLICKEY_LEN] = {0};
     size_t bufferSz = sizeof(buffer);
     bool ret = false;
-    const char* retTxt = "Not Present";
+    __attribute__((unused)) const char* retTxt = "Not Present";
     lwm2mcore_Sid_t result;
 
     (void)serverId;
