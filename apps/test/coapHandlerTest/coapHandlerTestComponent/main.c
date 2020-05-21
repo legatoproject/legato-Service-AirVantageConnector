@@ -703,7 +703,7 @@ static void CreateCborData
 
     size_t cborSize = cbor_encoder_get_buffer_size(&encoder, buf);
 
-    LE_ASSERT(cborSize < sizeof(buf))
+    LE_ASSERT(cborSize < sizeof(buf));
 
     fwrite(buf, 1, cborSize, f);
     fclose(f);

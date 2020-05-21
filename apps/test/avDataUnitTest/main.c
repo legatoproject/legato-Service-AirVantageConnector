@@ -400,7 +400,7 @@ static void TestAirVantageServerAPIs
     LE_INFO("================ push resource to the server =================");
 
     LE_ASSERT(LE_NOT_FOUND == le_avdata_Push(NUM_DOGS_VAR_RES_INVALID1, PushCallbackHandler, NULL));
-    LE_ASSERT(LE_FAULT == le_avdata_Push(NUM_DOGS_VAR_RES_INVALID2, PushCallbackHandler, NULL))
+    LE_ASSERT(LE_FAULT == le_avdata_Push(NUM_DOGS_VAR_RES_INVALID2, PushCallbackHandler, NULL));
     LE_ASSERT_OK(le_avdata_Push(NUM_DOGS_VAR_RES, PushCallbackHandler, NULL));
 
     sessionRequestRef = le_avdata_RequestSession();

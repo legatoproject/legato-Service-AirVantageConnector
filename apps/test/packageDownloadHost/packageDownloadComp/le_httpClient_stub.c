@@ -84,7 +84,7 @@ void test_le_httpClient_SimulateHttpResponse
         while (keyLocalPtr)
         {
             keyHeader_t* newKeyPtr = malloc(sizeof(keyHeader_t));
-            LE_ASSERT(NULL != newKeyPtr)
+            LE_ASSERT(NULL != newKeyPtr);
             newKeyPtr->nextPtr = NULL;
 
             snprintf(newKeyPtr->key, KEY_MAX_LEN - 1, "%s", keyLocalPtr->key);
