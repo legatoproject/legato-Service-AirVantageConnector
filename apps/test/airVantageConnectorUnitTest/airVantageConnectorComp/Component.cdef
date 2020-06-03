@@ -5,6 +5,7 @@ requires:
         airVantage/le_avc.api                               [types-only]
         airVantage/le_avdata.api                            [types-only]
         airVantage/le_tpf.api                               [types-only]
+        airVantage/le_coap.api                              [types-only]
         modemServices/le_sms.api                            [types-only]
         le_cfg.api                                          [types-only]
         le_data.api                                         [types-only]
@@ -19,6 +20,7 @@ sources:
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcFs/avcFs.c
     // AVC
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient/avcClient.c
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/coap/coap.c
 
     airVantageConnector_stub.c
     lwm2mcore_stub.c

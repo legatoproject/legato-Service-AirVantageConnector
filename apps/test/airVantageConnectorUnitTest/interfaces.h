@@ -3,6 +3,7 @@
 
 #include "le_avc_interface.h"
 #include "le_avdata_interface.h"
+#include "le_coap_interface.h"
 #include "le_cfg_interface.h"
 #include "le_data_interface.h"
 #include "le_sms_interface.h"
@@ -11,6 +12,7 @@
 #include "update.h"
 #include "liblwm2m.h"
 #include "lwm2mcore/timer.h"
+#include "lwm2mcore/coapHandlers.h"
 #include "avcAppUpdate/avcAppUpdate.h"
 
 

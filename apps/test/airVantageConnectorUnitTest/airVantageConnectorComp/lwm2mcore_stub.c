@@ -778,3 +778,225 @@ void lwm2mcore_ResumePackageDownloader
 {
     (void)updateType;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to send an unsolicited message to server (Push)
+ *
+ * @return
+ *      - true if response is initiated
+ *      - else false
+ */
+//--------------------------------------------------------------------------------------------------
+bool lwm2mcore_SendNotification
+(
+    lwm2mcore_CoapNotification_t* notificationPtr        ///< [IN] unsolictied message from device
+)
+{
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set CoAP acknowledge handler
+ */
+//--------------------------------------------------------------------------------------------------
+void lwm2mcore_SetCoapAckHandler
+(
+    coap_ack_handler_t handlerRef    ///< [IN] CoAP external acknowledge handler
+)
+{}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get token length from request
+ *
+ * @return
+ *     - CoAP token length from request
+ */
+//--------------------------------------------------------------------------------------------------
+uint8_t lwm2mcore_GetTokenLength
+(
+    lwm2mcore_CoapRequest_t* requestRef    ///< [IN] CoAP request reference
+)
+{
+    return 7;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get token from request
+ *
+ * @return
+ *     - CoAP token pointer from request
+ */
+//--------------------------------------------------------------------------------------------------
+const uint8_t* lwm2mcore_GetToken
+(
+    lwm2mcore_CoapRequest_t* requestRef    ///< [IN] CoAP request reference
+)
+{
+    uint8_t token[] = "mytoken";
+    return token;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get block1 size
+ *
+ * @return
+ *  - block size
+ */
+//--------------------------------------------------------------------------------------------------
+uint16_t lwm2mcore_GetRequestBlock1Size
+(
+    lwm2mcore_CoapRequest_t* requestRef    ///< [IN] CoAP request reference
+)
+{
+    return 1024;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get CoAP message identifier
+ *
+ * @return
+ *     - CoAP message identifier
+ */
+//--------------------------------------------------------------------------------------------------
+uint16_t lwm2mcore_GetMessageId
+(
+    lwm2mcore_CoapRequest_t* requestRef    ///< [IN] CoAP request reference
+)
+{
+    return 100;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get CoAP stream status
+ *
+ * @return
+ *     - CoAP stream status
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_StreamStatus_t lwm2mcore_GetStreamStatus
+(
+    lwm2mcore_CoapRequest_t* requestRef    ///< [IN] CoAP request reference
+)
+{
+    return LE_COAP_TX_STREAM_START;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to send a CoAP response to server.
+ *
+ * @return
+ *      - true if an asynchronous response is initiated
+ *      - else false
+ */
+//--------------------------------------------------------------------------------------------------
+bool lwm2mcore_SendResponse
+(
+    lwm2mcore_Ref_t instanceRef,                ///< [IN] instance reference
+    lwm2mcore_CoapResponse_t* responsePtr       ///< [IN] CoAP response pointer
+)
+{
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get method from request
+ *
+ * @return
+ *  - COAP_GET
+ *  - COAP_POST
+ *  - COAP_PUT
+ *  - COAP_DELETE
+ */
+//--------------------------------------------------------------------------------------------------
+coap_method_t lwm2mcore_GetRequestMethod
+(
+    lwm2mcore_CoapRequest_t* requestRef        ///< [IN] CoAP request reference
+)
+{
+    return COAP_GET;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get payload length from request
+ *
+ * @return
+ *     - CoAP payload length from request
+ */
+//--------------------------------------------------------------------------------------------------
+size_t lwm2mcore_GetRequestPayloadLength
+(
+    lwm2mcore_CoapRequest_t* requestRef    ///< [IN] CoAP request reference
+)
+{
+    return 1024;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get URI from request
+ *
+ * @return
+ *  - URI from request
+ */
+//--------------------------------------------------------------------------------------------------
+const char* lwm2mcore_GetRequestUri
+(
+    lwm2mcore_CoapRequest_t* requestRef    ///< [IN] CoAP request reference
+)
+{
+    return "uri";
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get content type from request
+ *
+ * @return
+ *  - @c true if an asynchronous response is initiated
+ *  - else @c false
+ */
+//--------------------------------------------------------------------------------------------------
+unsigned int lwm2mcore_GetContentType
+(
+    lwm2mcore_CoapRequest_t* requestRef    ///< [IN] CoAP request reference
+)
+{
+    return 12120;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set CoAP external handler
+ */
+//--------------------------------------------------------------------------------------------------
+void lwm2mcore_SetCoapExternalHandler
+(
+    coap_request_handler_t handlerRef   ///< [IN] CoAP external event handler
+)
+{}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get payload from request
+ *
+ * @return
+ *     - CoAP payload pointer from request
+ */
+//--------------------------------------------------------------------------------------------------
+const uint8_t* lwm2mcore_GetRequestPayload
+(
+    lwm2mcore_CoapRequest_t* requestRef    ///< [IN] CoAP request reference
+)
+{
+    return NULL;
+}
