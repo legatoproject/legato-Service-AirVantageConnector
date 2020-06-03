@@ -27,6 +27,7 @@ mkexe(${TEST_EXEC}
     -i ${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/platform-specific/linux/
     -i ${LEGATO_ROOT}/3rdParty/Lwm2mCore/packageDownloader/
     -i ${LEGATO_ROOT}/3rdParty/Lwm2mCore/3rdParty/wakaama/core/
+    -i ${LEGATO_ROOT}/3rdParty/Lwm2mCore/3rdParty/wakaama/core/er-coap-13/
     -i ${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/lwm2mcore/
     -i ${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager/
     -i ${LEGATO_ROOT}/interfaces/airVantage/

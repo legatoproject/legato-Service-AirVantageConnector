@@ -344,6 +344,97 @@ static void Testle_avc_Polling
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Test: Function to simulate a CoAP push
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t OnePush
+(
+    void
+)
+{
+    #define CONTENT_TYPE_OCTAVE 12120
+
+    #define LE_COAP_MAX_TOKEN_NUM_BYTES 9
+    static uint8_t token[] = "mytoken";
+    static char uri[] = "/push";
+    static uint8_t payload[3];
+    int step = 0;
+    payload[step] = 0x01; step++;
+    payload[step] = 0xf6; step++;
+    payload[step] = 0x18;
+
+    return le_coap_Push(uri,
+                        (uint8_t*)token,
+                        7,
+                        CONTENT_TYPE_OCTAVE,
+                        LE_COAP_TX_STREAM_START,
+                        payload,
+                        3);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Test: CoAP push handler
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+void PushAckCallBack
+(
+    le_coap_PushStatus_t status,
+    const uint8_t* token,
+    size_t tokenLength,
+    void* contextPtr
+)
+{
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Test: CoAP
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+static void Testle_coap
+(
+    void* param1Ptr, /// Value to be passed as param1Ptr to the function
+    void* param2Ptr  /// Value to be passed as param2Ptr to the function
+)
+{
+    AppContext_t* appCtxPtr = (AppContext_t*) param1Ptr;
+    static int counter = 0;
+
+    LE_INFO("======== Test CoAP ========");
+
+    counter++;
+
+    if (counter == 1)
+    {
+        le_coap_AddPushEventHandler(PushAckCallBack, NULL);
+        // 1st push: OK
+        LE_ASSERT_OK(OnePush());
+
+        // No ack: 2nd push busy
+        LE_ASSERT(LE_BUSY == OnePush());
+    }
+    else if (counter == 2)
+    {
+        avcServer_UpdateStatus(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
+                                       -1, -1, LE_AVC_ERR_NONE);
+
+    }
+    else
+    {
+        sleep(1);
+        // 3rd push: OK
+        LE_ASSERT_OK(OnePush());
+    }
+
+    le_sem_Post(appCtxPtr->appSemaphore);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Test: le_avc_GetUpdateType().
  *
  */
@@ -491,6 +582,27 @@ static void* AirVantageUnitTestThread
     le_event_QueueFunctionToThread(AppCtx.appThreadRef,
                                    Testle_avc_Polling, &AppCtx, NULL);
     SynchronizeTest();
+
+
+    // Test CoAP push
+    // Make 2 push: 1st OK, 2nd BUSY
+    le_event_QueueFunctionToThread(AppCtx.appThreadRef,
+                                   Testle_coap, &AppCtx, NULL);
+    SynchronizeTest();
+
+    // Call again: simulate a LE_AVC_SESSION_STOPPED event
+    le_event_QueueFunctionToThread(AppCtx.appThreadRef,
+                                   Testle_coap, &AppCtx, NULL);
+    SynchronizeTest();
+
+    // Wait for AVC handler call in coap.c
+    sleep(1);
+
+    // Make a Push, should be OK
+    le_event_QueueFunctionToThread(AppCtx.appThreadRef,
+                                   Testle_coap, &AppCtx, NULL);
+    SynchronizeTest();
+
 
     LE_INFO("======== UnitTest of airVantage Connector Passed ========");
 

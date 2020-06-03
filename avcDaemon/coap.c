@@ -29,6 +29,13 @@ static bool PushBusy = false;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Static AVC event handler
+ */
+//--------------------------------------------------------------------------------------------------
+static le_avc_StatusEventHandlerRef_t AvcStatusHandler;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Data associated with the CoAP message event
  */
 //--------------------------------------------------------------------------------------------------
@@ -112,6 +119,33 @@ static le_coap_StreamStatus_t ConvertLwm2mStreamStatus
 
         default:
             return LE_COAP_STREAM_INVALID;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * AVC event handler
+ */
+//--------------------------------------------------------------------------------------------------
+static void StatusHandler
+(
+    le_avc_Status_t status,                 ///< [IN] AVC status
+    int32_t         totalNumBytes,          ///< [IN] not used
+    int32_t         downloadProgress,       ///< [IN] not used
+    void*           contextPtr              ///< [IN] not used
+)
+{
+    (void)totalNumBytes;
+    (void)downloadProgress;
+    (void)contextPtr;
+
+    if (LE_AVC_SESSION_STOPPED == status)
+    {
+        if(PushBusy)
+        {
+            LE_DEBUG("Session is stopped and CoAP is on-going: pass it to false");
+            PushBusy = false;
+        }
     }
 }
 
@@ -477,6 +511,8 @@ le_coap_PushEventHandlerRef_t le_coap_AddPushEventHandler
 
     CoapNotification.callbackRef = handlerPtr;
     CoapNotification.callbackContextPtr = contextPtr;
+
+    AvcStatusHandler = le_avc_AddStatusEventHandler(StatusHandler, NULL);
 
     return (le_coap_PushEventHandlerRef_t) handlerPtr;
 }
