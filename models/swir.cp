@@ -33,8 +33,8 @@
         </node>
 
         <node default-label="Clock Time Configuration" path="33405">
-          <variable default-label="Time server source" path="0" type="int"></variable>
-          <variable default-label="Time server addresses" path="1" type="string"></variable>
+          <setting default-label="Time server source" path="0" type="int"></setting>
+          <setting default-label="Time server addresses" path="1" type="string"></setting>
           <command default-label="Time update operation" path="2"></command>
           <variable default-label="Time update status" path="3" type="int"></variable>
         </node>
