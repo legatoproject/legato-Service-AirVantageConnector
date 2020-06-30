@@ -1339,7 +1339,7 @@ static le_result_t GetSwUpdateInstanceId
     {
         if (LE_NOT_FOUND == result)
         {
-            LE_WARN("SW update instance id not found. Returning negative instance id.");
+            LE_DEBUG("SW update instance id not found. Returning negative instance id.");
             *instanceIdPtr = -1;
             return LE_OK;
         }

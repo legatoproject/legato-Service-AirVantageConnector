@@ -41,7 +41,14 @@ le_result_t ReadFs
     result = le_fs_Open(pathPtr, LE_FS_RDONLY, &fileRef);
     if (LE_OK != result)
     {
-        LE_ERROR("failed to open %s: %s", pathPtr, LE_RESULT_TXT(result));
+        if (result == LE_NOT_FOUND)
+        {
+            LE_DEBUG("failed to open %s: %s", pathPtr, LE_RESULT_TXT(result));
+        }
+        else
+        {
+            LE_ERROR("failed to open %s: %s", pathPtr, LE_RESULT_TXT(result));
+        }
         return result;
     }
 
