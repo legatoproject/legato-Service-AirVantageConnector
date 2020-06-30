@@ -43,6 +43,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_SetDeviceCurrentTime
     uint64_t inputTime  ///< [IN] Current clock time given
 )
 {
+#ifdef LE_CONFIG_ENABLE_CONFIG_TREE
     LE_DEBUG("input time %ld", (long)inputTime);
 
     if (!lwm2mcore_AddPostRequestHandler(lwm2mcore_UpdateSystemClock))
@@ -62,4 +63,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_SetDeviceCurrentTime
     le_cfg_CommitTxn(cfg);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
+#else
+    return LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+#endif
 }
