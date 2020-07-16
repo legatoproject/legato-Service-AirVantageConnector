@@ -175,51 +175,6 @@ static int CreateSocket
     return s;
 }
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Resolve the server address name
- *
- * @return
- *      - LE_OK     on success
- *      - LE_FAULT  on failure
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t ResolveIpAddress
-(
-    char* urlStrPtr,    ///< [IN] Server name to resolve
-    char* ipStrPtr      ///< [IN] Resolved server IP address
-)
-{
-    int rc;
-    struct addrinfo* resultPtr;
-    struct addrinfo* nextPtr;
-    struct addrinfo hints;
-    struct sockaddr_in *serverPtr;
-
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;          // Resolve for IP addr only as AV servers support only IPv4
-    hints.ai_socktype = SOCK_STREAM;
-
-    LE_DEBUG("Attempt to DNS-resolve url %s", urlStrPtr);
-    rc = getaddrinfo(urlStrPtr, NULL, &hints, &resultPtr);
-    if (rc)
-    {
-        LE_ERROR("IP %s not resolved: %s", urlStrPtr, gai_strerror(rc));
-        return LE_FAULT;
-    }
-
-    for (nextPtr = resultPtr; nextPtr != NULL; nextPtr = nextPtr->ai_next)
-    {
-        serverPtr = (struct sockaddr_in*) nextPtr->ai_addr;
-        strncpy(ipStrPtr, inet_ntoa(serverPtr->sin_addr), strlen(inet_ntoa(serverPtr->sin_addr)));
-        LE_DEBUG("Hostname IP Address %s", ipStrPtr);
-        freeaddrinfo(resultPtr);
-        return LE_OK;
-    }
-    LE_ERROR("IP %s not resolved", urlStrPtr);
-    freeaddrinfo(resultPtr);
-    return LE_FAULT;
-}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -251,38 +206,6 @@ static char* ExtractServerName
     return urlStrPtr;
 }
 
-//--------------------------------------------------------------------------------------------------
-/**
- * Resolve server IP address name
- *
- * @return
- *      - LE_OK             on success
- *      - LE_BAD_PARAMETER  NULL pointer provided
- *      - LE_FAULT          on failure
- */
-//--------------------------------------------------------------------------------------------------
-static le_result_t ResolveServerIp
-(
-    char * urlStrPtr,   ///< [IN] Server URL to resolve
-    char * ipStrPtr     ///< [OUT] Resolved server IP address
-)
-{
-    if ((NULL == urlStrPtr)
-     || (NULL == ipStrPtr) )
-    {
-        return LE_BAD_PARAMETER;
-    }
-
-    if (!strlen(urlStrPtr))
-    {
-        return LE_FAULT;
-    }
-
-    LE_DEBUG("Try to resolve %s", urlStrPtr);
-
-    // Resolve server address
-    return ResolveIpAddress(ExtractServerName(urlStrPtr), ipStrPtr);
-}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -430,75 +353,129 @@ bool lwm2mcore_UdpConnect
     char* hostPtr,                      ///< [IN] Host
     char* portPtr,                      ///< [IN] Port
     int addressFamily,                  ///< [IN] Address familly
-    struct sockaddr* saPtr,             ///< [IN] Socket address pointer
-    socklen_t* slPtr,                   ///< [IN] Socket address length
-    int* sockPtr                        ///< [IN] socket file descriptor
+    struct sockaddr* saPtr,             ///< [OUT] Socket address pointer
+    socklen_t* slPtr,                   ///< [OUT] Socket address length
+    int* sockPtr                        ///< [OUT] socket file descriptor
 )
 {
     char ipAddressStr[LE_MDC_IPV6_ADDR_MAX_BYTES] = {0};
     le_result_t res;
+    int rc;
+    struct addrinfo* resultPtr;
+    struct addrinfo* nextPtr;
+    struct addrinfo hints;
+    bool successfullyConnected = false;
+    int sockfd = -1;
+    int enable = 1;
 
-    // Resolve the server address
-    res = ResolveServerIp(serverAddressPtr, ipAddressStr);
-    if (LE_OK == res)
+    // Make sure all these pointers are not NULL
+    if ((!serverAddressPtr) || (!hostPtr) || (!portPtr) || (!saPtr) || (!slPtr) || (!sockPtr))
     {
-        struct addrinfo hints;
-        struct addrinfo* servinfoPtr = NULL;
-        struct addrinfo* p;
-        int sockfd;
-        int enable = 1;
+        LE_ERROR("Missing parameters or NULL parameters passed into function");
+        return false;
+    }
 
-        // Add the route if the default route is not set by the data connection service
-        if (!le_data_GetDefaultRouteStatus())
+    if (!strlen(serverAddressPtr))
+    {
+        LE_ERROR("No server address was passed into function");
+        return false;
+    }
+    char* urlStrPtr = ExtractServerName(serverAddressPtr);
+    LE_DEBUG("lwm2mcore_UdpConnect: urlStrPtr %s", urlStrPtr);
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = addressFamily;
+    hints.ai_socktype = SOCK_DGRAM;
+
+    LE_DEBUG("Attempt to DNS-resolve url: '%s', with host name: '%s', and on port: '%s'",
+            urlStrPtr, hostPtr, portPtr);
+
+    rc = getaddrinfo(urlStrPtr, portPtr, &hints, &resultPtr);
+    if (rc)
+    {
+        LE_ERROR("IP %s not resolved: %s", urlStrPtr, gai_strerror(rc));
+        return false;
+    }
+
+    // We test the various addresses and break once we've successfully connected to one
+    for (nextPtr = resultPtr; nextPtr != NULL && sockfd == -1; nextPtr = nextPtr->ai_next)
+    {
+        sockfd = socket(nextPtr->ai_addr->sa_family, nextPtr->ai_socktype, nextPtr->ai_protocol);
+        if (sockfd >= 0)
         {
-            LE_INFO("Add route %s", ipAddressStr);
-            res = le_data_AddRoute(ipAddressStr);
-            LE_ERROR_IF((LE_OK != res), "Not able to add the route (%s)", LE_RESULT_TXT(res));
-        }
+            *slPtr = nextPtr->ai_addrlen;
+            memcpy(saPtr, nextPtr->ai_addr, nextPtr->ai_addrlen);
 
-        // connect
-        memset(&hints, 0, sizeof(hints));
-        hints.ai_family = addressFamily;
-        hints.ai_socktype = SOCK_DGRAM;
-
-        LE_DEBUG("Attempt to DNS-resolve host & service with name %s on port %s",
-                 hostPtr, portPtr);
-        if ((0 != getaddrinfo(hostPtr, portPtr, &hints, &servinfoPtr)) || (servinfoPtr == NULL))
-        {
-            return false;
-        }
-
-        // we test the various addresses
-        sockfd = -1;
-        for(p = servinfoPtr; (p != NULL) && (sockfd == -1); p = p->ai_next)
-        {
-            sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-
-            if (sockfd >= 0)
+            if (nextPtr->ai_addr->sa_family == AF_INET)
             {
-                *slPtr = p->ai_addrlen;
-                memcpy(saPtr, p->ai_addr, p->ai_addrlen);
-
-                if(-1 == setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)))
+                struct sockaddr_in *serverPtr = (struct sockaddr_in*) nextPtr->ai_addr;
+                int bytesTriedToCopy = snprintf(ipAddressStr, sizeof(ipAddressStr), "%s",
+                                                inet_ntoa(serverPtr->sin_addr));
+                if(bytesTriedToCopy < 0)
                 {
-                    close(sockfd);
-                    sockfd = - 1;
-                    continue;
+                    LE_ERROR("Error occurred while copying IP address %m");
                 }
-
-                if (-1 == connect(sockfd, p->ai_addr, p->ai_addrlen))
+                else if(bytesTriedToCopy >= sizeof(ipAddressStr))
                 {
-                    close(sockfd);
-                    sockfd = -1;
+                    LE_ERROR("Buffer isn't large enough to store entire IP address");
+                }
+                else
+                {
+                    LE_DEBUG("Found possible Hostname IP Address %s", ipAddressStr);
                 }
             }
+            else if (nextPtr->ai_addr->sa_family == AF_INET6)
+            {
+                struct sockaddr_in6 *serverPtr = (struct sockaddr_in6*) nextPtr->ai_addr;
+                inet_ntop(nextPtr->ai_addr->sa_family,
+                        &serverPtr->sin6_addr,
+                        ipAddressStr,
+                        LE_MDC_IPV6_ADDR_MAX_BYTES);
+                LE_DEBUG("Found possible Hostname IP Address %s", ipAddressStr);
+            }
+            else
+            {
+                LE_DEBUG("Unknown Address Family");
+            }
+
+            if(-1 == setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)))
+            {
+                close(sockfd);
+                sockfd = - 1;
+                continue;
+            }
+
+            // Add the route if the default route is not set by the data connection service
+            if (!le_data_GetDefaultRouteStatus())
+            {
+                LE_DEBUG("Add route %s", ipAddressStr);
+                res = le_data_AddRoute(ipAddressStr);
+                LE_ERROR_IF((LE_OK != res), "Not able to add the route (%s)", LE_RESULT_TXT(res));
+            }
+
+            if (-1 == connect(sockfd, nextPtr->ai_addr, nextPtr->ai_addrlen))
+            {
+                close(sockfd);
+                sockfd = -1;
+            }
+            else
+            {
+                LE_DEBUG("Connection accepted at Hostname IP: %s", ipAddressStr);
+                successfullyConnected = true;
+                break;
+            }
         }
-        *sockPtr = sockfd;
-        if (NULL != servinfoPtr)
-        {
-            freeaddrinfo(servinfoPtr);
-        }
-        return true;
     }
-    return false;
+
+    // If connection is denied for all the possible hostnames IP
+    if (!successfullyConnected)
+    {
+        freeaddrinfo(resultPtr);
+        LE_ERROR("Unable to establish any connection to %s", urlStrPtr);
+        return false;
+    }
+
+    *sockPtr = sockfd;
+    freeaddrinfo(resultPtr);
+
+    return true;
 }
