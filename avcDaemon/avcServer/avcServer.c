@@ -2115,6 +2115,7 @@ static void ProcessUpdateStatus
             {
                 // There is no longer any current update, so go back to idle
                 UpdateCurrentAvcState(AVC_IDLE);
+                packageDownloader_SetConnectionNotificationState(false);
             }
             break;
 
