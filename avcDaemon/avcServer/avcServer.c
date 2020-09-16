@@ -526,6 +526,13 @@ static le_timer_Ref_t LaunchInstallTimer;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Launch stop connection timer
+ */
+//--------------------------------------------------------------------------------------------------
+static le_timer_Ref_t StopCnxTimer;
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Error occurred during update via airvantage.
  */
 //--------------------------------------------------------------------------------------------------
@@ -1066,6 +1073,24 @@ static void StartInstall
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Trigger a 2-sec timer and stop the connection in order to launch install
+ */
+//--------------------------------------------------------------------------------------------------
+static void LaunchStopCnxTimer
+(
+    void
+)
+{
+    LE_DEBUG("Starting stop cnx timer");
+
+    // Trigger a 2-sec timer
+    le_clk_Time_t interval = { .sec = 2, .usec = 0 };
+    le_timer_SetInterval(StopCnxTimer, interval);
+    le_timer_Start(StopCnxTimer);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Accept the currently pending package install
  *
  * @return
@@ -1119,8 +1144,8 @@ static le_result_t AcceptInstallPackage
                 if (sessionType == LE_AVC_BOOTSTRAP_SESSION || sessionType == LE_AVC_DM_SESSION)
                 {
                     // Stop the active session before trying to install package.
-                    LE_INFO("le_avc_StopSession in AVC mode");
-                    le_avc_StopSession();
+                    // Launch a timer in order to treat remaining commands from server
+                    LaunchStopCnxTimer();
                 }
                 else
                 {
@@ -2410,6 +2435,19 @@ static void LaunchInstallExpiryHandler
         LE_ERROR("Install handler not valid");
         UpdateCurrentAvcState(AVC_IDLE);
     }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Called when the stop connection timer expires
+ */
+//--------------------------------------------------------------------------------------------------
+static void StopConnectionExpiryHandler
+(
+    le_timer_Ref_t timerRef    ///< Timer that expired
+)
+{
+    le_avc_StopSession();
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -4799,6 +4837,9 @@ COMPONENT_INIT
 
     PollingTimerRef = le_timer_Create("polling Timer");
     le_timer_SetHandler(PollingTimerRef, PollingTimerExpiryHandler);
+
+    StopCnxTimer = le_timer_Create("launch stop connection timer");
+    le_timer_SetHandler(StopCnxTimer, StopConnectionExpiryHandler);
 
     // Initialize the sub-components
     if (LE_OK != packageDownloader_Init())
