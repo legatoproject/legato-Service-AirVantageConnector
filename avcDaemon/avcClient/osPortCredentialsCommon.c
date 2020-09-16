@@ -98,7 +98,8 @@ bool lwm2mcore_CredentialMatch
 (
     lwm2mcore_Credentials_t credId,     ///< [IN] Credential identifier
     uint16_t                serverId,   ///< [IN] server Id
-    const char*             credential  ///< [IN] Credential
+    const char*             credential, ///< [IN] Credential
+    size_t                  credLen     ///< [IN] Credential length
 )
 {
     char buffer[LWM2MCORE_PUBLICKEY_LEN] = {0};
@@ -116,13 +117,17 @@ bool lwm2mcore_CredentialMatch
         retTxt = "Present";
     }
 
-    if ((credential != NULL) && ret)
+    if ((credLen == bufferSz) && (credential != NULL) && ret)
     {
         LE_DEBUG("Checking credentials against input credential.");
-        if (strncmp(buffer, credential, bufferSz) != 0)
+        if (memcmp(buffer, credential, bufferSz) != 0)
         {
             ret = false;
         }
+    }
+    else
+    {
+        ret = false;
     }
 
     LE_DEBUG("credId %d result %s [%d]", credId, retTxt, ret);
