@@ -164,6 +164,15 @@ static bool AuthenticationPhase = false;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Authentication failure during bootstrapping
+ */
+//--------------------------------------------------------------------------------------------------
+#if LE_CONFIG_LINUX
+static bool BootstrapAuthFailed = false;
+#endif
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Retry timers related data. RetryTimersIndex is index to the array of RetryTimers.
  * RetryTimersIndex of -1 means the timers are to be retrieved. A timer of value 0 means it's
  * disabled. The timers values are in minutes.
@@ -917,6 +926,9 @@ static int EventHandler
             break;
 
         case LWM2MCORE_EVENT_AUTHENTICATION_STARTED:
+#if LE_CONFIG_LINUX
+            BootstrapAuthFailed = false;
+#endif
             if (status.u.session.type == LWM2MCORE_SESSION_BOOTSTRAP)
             {
                 LE_DEBUG("Authentication to BS started");
@@ -937,6 +949,9 @@ static int EventHandler
             if (status.u.session.type == LWM2MCORE_SESSION_BOOTSTRAP)
             {
                 LE_WARN("Authentication to BS failed");
+#if LE_CONFIG_LINUX
+                BootstrapAuthFailed = true;
+#endif
             }
             else
             {
@@ -1047,6 +1062,12 @@ static void BsFailureHandler
     void* reportPtr    ///< [IN] Pointer to the event report payload
 )
 {
+#if LE_CONFIG_LINUX
+    // Restore bootstrap.
+    LE_DEBUG("Fix BS credentials: %d", BootstrapAuthFailed);
+    avcClient_FixBootstrapCredentials(BootstrapAuthFailed);
+    BootstrapAuthFailed = false; // Reset flag
+#endif
     avcClient_Disconnect(true);
 }
 

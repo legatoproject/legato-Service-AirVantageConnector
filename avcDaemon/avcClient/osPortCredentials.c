@@ -38,6 +38,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Number of BS credentials which can be restored
+ */
+//--------------------------------------------------------------------------------------------------
+#define BS_CREDENTIAL_NB_TO_RESTORE     3
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Array to describe the location of a specific credential type in the secure storage.
  */
 //--------------------------------------------------------------------------------------------------
@@ -53,6 +60,33 @@ static const char* CredentialLocations[LWM2MCORE_CREDENTIAL_MAX] = {
     "dm_server_public_key",             ///< LWM2MCORE_CREDENTIAL_DM_SERVER_PUBLIC_KEY
     "LWM2M_DM_PSK_SECRET",              ///< LWM2MCORE_CREDENTIAL_DM_SECRET_KEY
     "LWM2M_DM_SERVER_ADDR",             ///< LWM2MCORE_CREDENTIAL_DM_ADDRESS
+};
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Structure for BS credentials restore process
+ */
+//--------------------------------------------------------------------------------------------------
+typedef struct {
+    lwm2mcore_Credentials_t credId;             ///< LwM2MCore credential Id
+    bool                    isCurrentPresent;   ///< Is the current BS credential present?
+    bool                    isBackupPresent;    ///< Is the backup BS credential present?
+    size_t                  currentSize;        ///< Current BS credential size
+    size_t                  backupSize;         ///< Backup BS credential size
+}
+BsCredentialList_t;
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Details for BS credentials restore process (Order of backup)
+ */
+//--------------------------------------------------------------------------------------------------
+static BsCredentialList_t bsCredentialsList[BS_CREDENTIAL_NB_TO_RESTORE] =
+{
+    {LWM2MCORE_CREDENTIAL_BS_PUBLIC_KEY,    false, false, 0, 0},
+    {LWM2MCORE_CREDENTIAL_BS_SECRET_KEY,    false, false, 0, 0},
+    {LWM2MCORE_CREDENTIAL_BS_ADDRESS,       false, false, 0, 0}
 };
 
 //--------------------------------------------------------------------------------------------------
@@ -262,7 +296,7 @@ lwm2mcore_Sid_t lwm2mcore_BackupCredential
                                         CredentialLocations[credId],
                                         (char*)NULL), "Buffer is not long enough");
 
-    char buffer[LE_SECSTORE_MAX_NAME_BYTES];
+    char buffer[LE_SECSTORE_MAX_ITEM_SIZE];
     size_t bufferSize = sizeof(buffer);
     le_result_t result = le_secStore_Read(credsPathStr, (uint8_t*)buffer, &bufferSize);
     if (LE_OK != result)
@@ -293,29 +327,23 @@ lwm2mcore_Sid_t lwm2mcore_BackupCredential
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
-//--------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
 /**
- * Restore credential to the previous credential.
- * Used for bs credential where we restore the credential back to the previous bs credential if
- * they exist. If not, we also remove the current bs credential and allow the device to retrieve
- * the bs credential from the modem.
- *
+ * Restore credentials. Used to trigger rollback mechanism in case of failure.
  * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ *      - LE_OK if restore operation completes successfully
+ *      - LE_NOT_FOUND if entry does not exist
+ *      - LE_FAULT if error occurs
  */
-//--------------------------------------------------------------------------------------------------
-lwm2mcore_Sid_t lwm2mcore_RestoreCredential
+//-------------------------------------------------------------------------------------------------
+static le_result_t RestoreCredentials
 (
-    lwm2mcore_Credentials_t credId,     ///< [IN] credential Id of credential to be retrieved
-    uint16_t                serverId    ///< [IN] server Id
+    lwm2mcore_Credentials_t credId     ///< [IN] credential Id of credential to be retrieved
 )
 {
-    (void)serverId;
-
     if (credId >= LWM2MCORE_CREDENTIAL_MAX)
     {
-        return LWM2MCORE_ERR_INVALID_ARG;
+        return LE_FAULT;
     }
 
     char backupCredsId[LE_SECSTORE_MAX_NAME_BYTES] = {0};
@@ -331,9 +359,9 @@ lwm2mcore_Sid_t lwm2mcore_RestoreCredential
                                         backupCredsPathStr,
                                         sizeof(backupCredsPathStr),
                                         backupCredsId,
-                                        (char*)NULL), "Buffer is not long enough");
+                                        (void*)0), "Buffer is not long enough");
 
-    char buffer[LE_SECSTORE_MAX_NAME_BYTES];
+    char buffer[LE_SECSTORE_MAX_ITEM_SIZE];
     size_t bufferSize = sizeof(buffer);
 
     le_result_t result = le_secStore_Read(backupCredsPathStr, (uint8_t*)buffer, &bufferSize);
@@ -344,7 +372,7 @@ lwm2mcore_Sid_t lwm2mcore_RestoreCredential
                                         credsPathStr,
                                         sizeof(credsPathStr),
                                         CredentialLocations[credId],
-                                        (char*)NULL), "Buffer is not long enough");
+                                        (void*)0), "Buffer is not long enough");
 
     // If doesn't exist, then it's OK. No backup is not an indication of an error, just implies that
     // key rotation never occured or we have just restore the backup.
@@ -352,7 +380,7 @@ lwm2mcore_Sid_t lwm2mcore_RestoreCredential
     {
         // Remove the current bs credential.
         le_secStore_Delete(credsPathStr);
-        return LWM2MCORE_ERR_COMPLETED_OK;
+        return LE_NOT_FOUND;
     }
 
     // Restore current bootstrap with backup copy
@@ -362,7 +390,6 @@ lwm2mcore_Sid_t lwm2mcore_RestoreCredential
     {
         LE_ERROR("Unable to restore credentials for: %s: %d %s",
                  credsPathStr, result, LE_RESULT_TXT(result));
-        return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
     // Delete backup
@@ -372,8 +399,126 @@ lwm2mcore_Sid_t lwm2mcore_RestoreCredential
     {
         LE_ERROR("Unable to delete credentials for: %s: %d %s",
                  credsPathStr, result, LE_RESULT_TXT(result));
-        return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    return LWM2MCORE_ERR_COMPLETED_OK;
+    return result;
+}
+
+//-------------------------------------------------------------------------------------------------
+/**
+ * Restore bootstrap credentials. Used to trigger rollback mechanism in case of failure.
+ */
+//-------------------------------------------------------------------------------------------------
+void avcClient_FixBootstrapCredentials
+(
+    bool isBsAuthFailure        ///< [IN] Was authentication failed with the bootstrap server ?
+)
+{
+    le_result_t result = LE_OK;
+    uint8_t bsServerAddrIndex = 0;
+
+    char currentCredential[LE_SECSTORE_MAX_ITEM_SIZE];
+    size_t currentCredentialSize = sizeof(currentCredential);
+    char backupCredential[LE_SECSTORE_MAX_ITEM_SIZE];
+    size_t backupCredentialSize = sizeof(backupCredential);
+
+    int i = 0;
+    for (i = 0; i < sizeof(bsCredentialsList) / sizeof(BsCredentialList_t); i++)
+    {
+        if (LWM2MCORE_CREDENTIAL_BS_ADDRESS == bsCredentialsList[i].credId)
+        {
+            bsServerAddrIndex = (uint8_t)i;
+        }
+
+        memset(currentCredential, 0, LE_SECSTORE_MAX_ITEM_SIZE);
+        currentCredentialSize = sizeof(currentCredential);
+
+        memset(backupCredential, 0, LE_SECSTORE_MAX_ITEM_SIZE);
+        backupCredentialSize = sizeof(backupCredential);
+
+        // Get current BS credential
+        char credsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+
+        LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                            credsPathStr,
+                                            sizeof(credsPathStr),
+                                            CredentialLocations[bsCredentialsList[i].credId],
+                                            (void*)0), "Buffer is not long enough");
+
+        result = le_secStore_Read(credsPathStr,
+                                  (uint8_t*)currentCredential,
+                                  &currentCredentialSize);
+
+        if (result != LE_OK)
+        {
+            LE_WARN("Unable to read: %s", credsPathStr);
+        }
+        else
+        {
+            bsCredentialsList[i].isCurrentPresent = true;
+            bsCredentialsList[i].currentSize = currentCredentialSize;
+        }
+
+        // Get backup BS credential
+        char backupCredsId[LE_SECSTORE_MAX_NAME_BYTES] = {0};
+        LE_ASSERT(snprintf(backupCredsId,
+                           sizeof(backupCredsId),
+                           "%s%s",
+                           CredentialLocations[bsCredentialsList[i].credId],
+                           CREDENTIAL_BACKUP) < sizeof(backupCredsId));
+
+        char backupCredsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+
+        LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                            backupCredsPathStr,
+                                            sizeof(backupCredsPathStr),
+                                            backupCredsId,
+                                            (char*)NULL), "Buffer is not long enough");
+
+        result = le_secStore_Read(backupCredsPathStr,
+                                 (uint8_t*)backupCredential,
+                                 &backupCredentialSize);
+
+        if (result != LE_OK)
+        {
+            LE_WARN("Unable to read: %s", backupCredsPathStr);
+        }
+        else
+        {
+            bsCredentialsList[i].isBackupPresent = true;
+            bsCredentialsList[i].backupSize = backupCredentialSize;
+        }
+    }
+
+    LE_DEBUG("bsServerAddrIndex %d", bsServerAddrIndex);
+    // If current BS server addr len is 0, restore all BS credentials.
+    // If bs authentication failure, restore all BS credentials.
+    if (
+          (isBsAuthFailure) ||
+           ((bsCredentialsList[bsServerAddrIndex].isCurrentPresent)
+             && (0 == bsCredentialsList[bsServerAddrIndex].currentSize))
+       )
+    {
+        LE_DEBUG("Restoring bootstrap credentials.");
+        result = RestoreCredentials(LWM2MCORE_CREDENTIAL_BS_PUBLIC_KEY);
+
+        if (result != LE_OK)
+        {
+            LE_WARN("Restore BS PSK Id failure: %s", LE_RESULT_TXT(result));
+        }
+
+        result = RestoreCredentials(LWM2MCORE_CREDENTIAL_BS_SECRET_KEY);
+
+        if (result != LE_OK)
+        {
+            LE_WARN("Restore BS PSK secret failure: %s", LE_RESULT_TXT(result));
+        }
+
+        result = RestoreCredentials(LWM2MCORE_CREDENTIAL_BS_ADDRESS);
+
+        if (result != LE_OK)
+        {
+            LE_WARN("Restore BS server addr failure: %s", LE_RESULT_TXT(result));
+        }
+    }
 }
