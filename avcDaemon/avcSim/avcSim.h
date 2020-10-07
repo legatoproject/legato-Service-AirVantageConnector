@@ -130,4 +130,64 @@ void SimModeDeinit
     void
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set SIM APDU config.
+ *
+ * @return
+ *      - LE_OK if the treatment succeeds
+ *      - LE_FAULT if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcSim_SetSimApduConfig
+(
+    const uint8_t* bufferPtr,   ///< [IN] SIM APDU
+    size_t length               ///< [IN] SIM APDU length
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Execute the (previously set) SIM APDU config.
+ *
+ * @return
+ *      - LE_OK if the treatment succeeds
+ *      - LE_FAULT if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcSim_ExecuteSimApduConfig
+(
+    void
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set (store) the SIM APDU response.
+ *
+ * @return
+ *      - LE_OK if the treatment succeeds
+ *      - LE_FAULT if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcSim_SetSimApduResponse
+(
+    const uint8_t* bufferPtr,   ///< [IN] SIM APDU response
+    size_t length               ///< [IN] SIM APDU response length
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the SIM APDU response.
+ *
+ * @return
+ *      - LE_OK if the treatment succeeds
+ *      - LE_OVERFLOW Supplied buffer was not large enough to hold the value.
+ *      - LE_FAULT if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcSim_GetSimApduResponse
+(
+    uint8_t* bufferPtr, ///< [OUT] SIM APDU response
+    size_t* lenPtr      ///< [INOUT] SIM APDU buffer size / response length
+);
+
 #endif /* _AVCSIM_H */

@@ -151,3 +151,84 @@ lwm2mcore_Sid_t lwm2mcore_GetLastSimSwitchStatus
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * @brief Function to set SIM APDU config.
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+int lwm2mcore_SetSimApduConfig
+(
+    uint16_t source,    ///< [IN] Instance ID of the object
+    char* bufferPtr,    ///< [IN] Data buffer
+    size_t length       ///< [IN] Data buffer length
+)
+{
+    LE_UNUSED(source);
+    LE_DEBUG("source %" PRIu16 " length %" PRIuS, source, length);
+    if (avcSim_SetSimApduConfig((const uint8_t *) bufferPtr, length) != LE_OK)
+    {
+        LE_ERROR("Error setting APDU Config: source %" PRIu16 " length %" PRIuS, source, length);
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * @brief Function to execute the (previously set) SIM APDU config.
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+int lwm2mcore_ExecuteSimApduConfig
+(
+    uint16_t source,    ///< [IN] Instance ID of the object
+    char* bufferPtr,    ///< [IN] Data buffer
+    size_t length       ///< [IN] Data buffer length
+)
+{
+    LE_UNUSED(bufferPtr);
+    LE_DEBUG("source %" PRIu16 " length %" PRIuS, source, length);
+    le_result_t rc = avcSim_ExecuteSimApduConfig();
+    if (rc != LE_OK)
+    {
+        LE_ERROR("Error executing APDU config: %s", LE_RESULT_TXT(rc));
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * @brief Function to retrieve the SIM APDU response.
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if the info retrieval has succeeded
+ *      - LWM2MCORE_ERR_GENERAL_ERROR if the info can't be retrieved
+ */
+//--------------------------------------------------------------------------------------------------
+int lwm2mcore_GetSimApduResponse
+(
+    uint16_t source,    ///< [IN] Instance ID of the object
+    char* bufferPtr,    ///< [INOUT] Data buffer
+    size_t* lenPtr      ///< [INOUT] Data buffer length
+)
+{
+    le_result_t rc = avcSim_GetSimApduResponse((uint8_t *) bufferPtr, lenPtr);
+    if (rc != LE_OK)
+    {
+        LE_ERROR("Error getting APDU response: len %" PRIuS " err %s", *lenPtr,
+                 LE_RESULT_TXT(rc));
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    LE_DEBUG("source %" PRIu16 " response length %" PRIuS, source, *lenPtr);
+    return LWM2MCORE_ERR_COMPLETED_OK;
+}

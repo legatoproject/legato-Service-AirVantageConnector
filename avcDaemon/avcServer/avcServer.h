@@ -210,7 +210,7 @@ LE_SHARED void avcServer_UpdateStatus
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Start a session with the AirVantage server
+ * Start a session with the AirVantage or other DM server.
  *
  * @return
  *      - LE_OK if connection request has been sent.
@@ -221,7 +221,7 @@ LE_SHARED void avcServer_UpdateStatus
 //--------------------------------------------------------------------------------------------------
 le_result_t avcServer_StartSession
 (
-    void
+    uint16_t    serverId    ///< [IN] Server ID. Can be LE_AVC_SERVER_ID_ALL_SERVERS.
 );
 
 //--------------------------------------------------------------------------------------------------

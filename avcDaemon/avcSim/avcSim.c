@@ -530,3 +530,173 @@ void SimModeDeinit
 
     SimHandlerPtr->isInit = false;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set SIM APDU config.
+ *
+ * @return
+ *      - LE_OK if the treatment succeeds
+ *      - LE_FAULT if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcSim_SetSimApduConfig
+(
+    const uint8_t* bufferPtr,   ///< [IN] SIM APDU
+    size_t length               ///< [IN] SIM APDU length
+)
+{
+    LE_DEBUG("data length %" PRIuS, length);
+    LE_DUMP(bufferPtr, length);
+
+#if LE_CONFIG_ENABLE_CONFIG_TREE
+    // Save to the config tree
+    le_cfg_IteratorRef_t iteratorRef = le_cfg_CreateWriteTxn(LE_AVC_CONFIG_TREE_ROOT);
+
+    le_cfg_SetBinary(iteratorRef, LE_AVC_CONFIG_SIM_APDU_PATH, (uint8_t *) bufferPtr, length);
+
+    le_cfg_CommitTxn(iteratorRef);
+
+    return LE_OK;
+#else
+    LE_ERROR("ConfigTree is not supported: SIM APDU config can't be stored");
+    return LE_FAULT;
+#endif
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Execute the (previously set) SIM APDU config.
+ *
+ * @return
+ *      - LE_OK if the treatment succeeds
+ *      - LE_FAULT if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcSim_ExecuteSimApduConfig
+(
+    void
+)
+{
+#if LE_CONFIG_ENABLE_CONFIG_TREE
+    uint8_t readBuf[256] = {0};
+    uint8_t byte = 0;
+    le_result_t result = LE_FAULT;
+
+    // Clear the APDU response
+    avcSim_SetSimApduResponse(&byte, sizeof(byte));
+
+    // Read stored APDU from the config tree
+    le_cfg_IteratorRef_t iteratorRef = le_cfg_CreateReadTxn(LE_AVC_CONFIG_TREE_ROOT);
+
+    size_t readLen = sizeof(readBuf);
+    le_cfg_GetBinary(iteratorRef, LE_AVC_CONFIG_SIM_APDU_PATH, readBuf, &readLen,
+                     &byte, sizeof(byte));
+
+    le_cfg_CancelTxn(iteratorRef);
+
+    LE_DEBUG("Retrieved from ConfigTree: data len %" PRIuS, readLen);
+    LE_DUMP(readBuf, readLen);
+
+    // Send to FW
+    le_sim_Id_t simId = le_sim_GetSelectedCard();
+
+    uint8_t rspImsi[128];
+    size_t rspImsiLen = sizeof(rspImsi);
+
+    result = le_sim_SendApdu(simId,
+                             readBuf,
+                             readLen,
+                             rspImsi,
+                             &rspImsiLen);
+
+    LE_DEBUG("SendApdu returned %s: len %" PRIuS, LE_RESULT_TXT(result), rspImsiLen);
+    LE_DUMP(rspImsi, rspImsiLen);
+    // Basic check of the response buffer (first 2 bytes to match the expected values)
+    if (rspImsiLen >=2 && rspImsi[0] == 0x09 && rspImsi[1] == 0x00)
+    {
+        return LE_OK;
+    }
+
+    return result;
+#else
+    LE_ERROR("ConfigTree is not supported: SIM APDU config can't be executed");
+    return LE_FAULT;
+#endif
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set (store) the SIM APDU response.
+ *
+ * @return
+ *      - LE_OK if the treatment succeeds
+ *      - LE_FAULT if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcSim_SetSimApduResponse
+(
+    const uint8_t* bufferPtr,   ///< [IN] SIM APDU response
+    size_t length               ///< [IN] SIM APDU response length
+)
+{
+    // Save to the config tree
+    LE_DEBUG("data length %" PRIuS, length);
+    LE_DUMP(bufferPtr, length);
+
+#if LE_CONFIG_ENABLE_CONFIG_TREE
+    le_cfg_IteratorRef_t iteratorRef = le_cfg_CreateWriteTxn(LE_AVC_CONFIG_TREE_ROOT);
+
+    le_cfg_SetBinary(iteratorRef, LE_AVC_CONFIG_SIM_APDU_RESP_PATH, bufferPtr, length);
+
+    le_cfg_CommitTxn(iteratorRef);
+
+    return LE_OK;
+#else
+    LE_ERROR("ConfigTree is not supported: SIM APDU response can't be stored");
+    return LE_FAULT;
+#endif
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the SIM APDU response.
+ *
+ * @return
+ *      - LE_OK if the treatment succeeds
+ *      - LE_OVERFLOW Supplied buffer was not large enough to hold the value.
+ *      - LE_FAULT if the treatment fails
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcSim_GetSimApduResponse
+(
+    uint8_t* bufferPtr, ///< [OUT] SIM APDU response
+    size_t* lenPtr      ///< [INOUT] SIM APDU buffer size / response length
+)
+{
+#if LE_CONFIG_ENABLE_CONFIG_TREE
+    // Read the data from the config tree.
+    // Normally, the APDU response would be written to the Config Tree by atAirVantage app,
+    // after it's received from the Modem FW (via AT command).
+    uint8_t byte = 0;
+
+    le_cfg_IteratorRef_t iteratorRef = le_cfg_CreateReadTxn(LE_AVC_CONFIG_TREE_ROOT);
+
+    le_result_t result = le_cfg_GetBinary(iteratorRef, LE_AVC_CONFIG_SIM_APDU_RESP_PATH,
+                                          bufferPtr, lenPtr,
+                                          &byte, sizeof(byte));
+    le_cfg_CancelTxn(iteratorRef);
+    if (result != LE_OK)
+    {
+        LE_ERROR("Error reading APDU response %s", LE_RESULT_TXT(result));
+        return result;
+    }
+
+    return LE_OK;
+#else
+    LE_UNUSED(bufferPtr);
+    LE_UNUSED(lenPtr);
+    LE_ERROR("ConfigTree is not supported: SIM APDU response can't be read");
+    return LE_FAULT;
+#endif
+}

@@ -18,7 +18,7 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Starts a periodic connection attempt to the AirVantage server.
+ * Starts a periodic connection attempt to the AirVantage or other DM server.
  *
  * @note - After a user-initiated call, this function registers itself inside a timer expiry handler
  *         to perform retries. On connection success, this function deinitializes the timer.
@@ -33,7 +33,7 @@
 //--------------------------------------------------------------------------------------------------
 le_result_t avcClient_Connect
 (
-    void
+    uint16_t    serverId    ///< [IN] Server ID. Can be LE_AVC_SERVER_ID_ALL_SERVERS.
 );
 
 //--------------------------------------------------------------------------------------------------

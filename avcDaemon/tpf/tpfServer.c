@@ -189,7 +189,7 @@ le_result_t le_tpf_Start
         return LE_FAULT;
     }
 
-    res = avcClient_Connect();
+    res = avcClient_Connect(LE_AVC_SERVER_ID_AIRVANTAGE);
     if (res != LE_OK)
     {
         tpfServer_SetTpfState(false);

@@ -27,6 +27,7 @@
 #include "avcAppUpdate/avcAppUpdate.h"
 #include "packageDownloader/packageDownloader.h"
 #include "avcFs/avcFsConfig.h"
+#include "avcSim/avcSim.h"
 #include "watchdogChain.h"
 #include "avcClient/avcClient.h"
 #include "coap/coap.h"
@@ -1033,7 +1034,7 @@ static le_result_t AcceptDownloadPackage
             QueryDownloadHandlerRef = NULL;
             UpdateCurrentAvcState(AVC_IDLE);
             // Connect to the server.
-            if (LE_OK != avcServer_StartSession())
+            if (LE_OK != avcServer_StartSession(LE_AVC_SERVER_ID_AIRVANTAGE))
             {
                 LE_ERROR("Failed to start a new session");
                 return LE_FAULT;
@@ -1241,7 +1242,7 @@ static le_result_t AcceptPendingConnection
     UpdateCurrentAvcState(AVC_CONNECTION_IN_PROGRESS);
     packageDownloader_SetConnectionNotificationState(false);
 
-    le_result_t result = avcServer_StartSession();
+    le_result_t result = avcServer_StartSession(LE_AVC_SERVER_ID_AIRVANTAGE);
     if (LE_OK != result)
     {
         LE_ERROR("Error accepting connection: %s", LE_RESULT_TXT(result));
@@ -1671,16 +1672,16 @@ static le_result_t ProcessUserAgreement
 
 //-------------------------------------------------------------------------------------------------
 /**
- * Connect to AV server
+ * Connect to AirVantage or other Device Management server (specified by Server ID)
  */
 //-------------------------------------------------------------------------------------------------
 static void ConnectToServer
 (
-    void
+    uint16_t    serverId    ///< [IN] Server ID.
 )
 {
     // Start a session.
-    if (LE_DUPLICATE == avcServer_StartSession())
+    if (LE_DUPLICATE == avcServer_StartSession(serverId))
     {
         // Session is already connected, but wireless network could have been de-provisioned
         // due to NAT timeout. Do a registration update to re-establish connection.
@@ -1691,7 +1692,7 @@ static void ConnectToServer
 
             // Connect after 2 seconds
             le_clk_Time_t interval = { .sec = 2 };
-
+            le_timer_SetContextPtr(LaunchConnectTimer, (void *) (uintptr_t) serverId);
             le_timer_SetInterval(LaunchConnectTimer, interval);
             le_timer_Start(LaunchConnectTimer);
         }
@@ -1845,8 +1846,8 @@ static void InitPollingTimer
                 LE_ERROR("Failed to write avc config from le_fs");
                 return;
             }
-
-            ConnectToServer();
+            // Polling timer initiates connection to AirVantage server only
+            ConnectToServer(LE_AVC_SERVER_ID_AIRVANTAGE);
         }
 
         remainingPollingTimer = ((pollingTimer * SECONDS_IN_A_MIN) - timeElapsed);
@@ -2361,7 +2362,12 @@ static void LaunchConnectExpiryHandler
     le_timer_Ref_t timerRef    ///< Timer that expired
 )
 {
-    avcServer_StartSession();
+#if LE_CONFIG_AVC_FEATURE_EDM
+    uint16_t serverId = (uint16_t) (uintptr_t) le_timer_GetContextPtr(timerRef);
+    avcServer_StartSession(serverId);
+#else
+    avcServer_StartSession(LE_AVC_SERVER_ID_AIRVANTAGE);
+#endif
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -2459,7 +2465,8 @@ static void PollingTimerExpiryHandler
 
     avcServer_SaveCurrentEpochTime();
 
-    ConnectToServer();
+    // Connect to AirVantage server only.
+    ConnectToServer(LE_AVC_SERVER_ID_AIRVANTAGE);
 
     // Restart the timer for the next interval
     uint32_t pollingTimerInterval;
@@ -3023,7 +3030,7 @@ le_result_t avcServer_RequestSession
 
         // Session initiated by user.
         IsUserSession = true;
-        result = avcServer_StartSession();
+        result = avcServer_StartSession(LE_AVC_SERVER_ID_AIRVANTAGE);
     }
 
     return result;
@@ -3031,7 +3038,7 @@ le_result_t avcServer_RequestSession
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Start a session with the AirVantage server
+ * Start a session with the AirVantage or other DM server.
  *
  * @return
  *      - LE_OK if connection request has been sent.
@@ -3042,15 +3049,18 @@ le_result_t avcServer_RequestSession
 //--------------------------------------------------------------------------------------------------
 le_result_t avcServer_StartSession
 (
-    void
+    uint16_t    serverId    ///< [IN] Server ID. Can be LE_AVC_SERVER_ID_ALL_SERVERS.
 )
 {
-    le_result_t result = avcClient_Connect();
+#if !LE_CONFIG_AVC_FEATURE_EDM
+    serverId = LE_AVC_SERVER_ID_AIRVANTAGE;
+#endif
+    le_result_t result = avcClient_Connect(serverId);
 
     if ((LE_BUSY == result) && avcClient_IsRetryTimerActive())  // Retry timer is active
     {
         avcClient_ResetRetryTimer();
-        return avcClient_Connect();
+        return avcClient_Connect(serverId);
     }
 
     return result;
@@ -3362,7 +3372,55 @@ le_result_t le_avc_StartSession
 {
     IsUserSession = true;
     StopDeferTimer(LE_AVC_USER_AGREEMENT_CONNECTION);
-    return avcServer_StartSession();
+    return avcServer_StartSession(LE_AVC_SERVER_ID_AIRVANTAGE);
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Start a session with a specific Device Management (DM) server.
+ *
+ * This function is similar to le_avc_StartSession(), with the main difference of adding extra
+ * parameter to specify the Server ID of the DM server; this way, it provides flexibility to
+ * connect to any DM server, not just AirVantage.
+ *
+ * For example, the device may need to communicate with EDM server that is providing support
+ * for the SIM Reachability features (LWM2M proprietory object 33408).
+ *
+ * Reserved Server IDs are:
+ * 0 for Bootstrap server
+ * 1 for AirVantage server
+ * 1000 for EDM server
+ *
+ * @note DM servers may have different capabilities in terms of which LWM2M objects they support.
+ * For instance, EDM server supports only one specific type of object (Object 33408), and does
+ * not support Objects 5 and 9, which means it doesn't allow SOTA/FOTA operations.
+ *
+ * @note To initiate a session with AirVantage server, it's preferable to use le_avc_StartSession()
+ * which exists specifically for this purpose.
+ *
+ * @note If the device doesn't have credentials for the specificed DM server, the boostrapping
+ * process will be automatically initiated.
+ *
+ * @return
+ *      - LE_OK if connection request has been sent.
+ *      - LE_FAULT on failure
+ *      - LE_DUPLICATE if already connected to the server.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avc_StartDmSession
+(
+    uint16_t    serverId,           ///< [IN] Short ID of the DM server.
+                                    ///<      Can be LE_AVC_SERVER_ID_ALL_SERVERS.
+    bool        isAutoDisconnect    ///< [IN] Whether the session should be auto disconnected
+)
+{
+    LE_INFO("Starting DM session with server %" PRIu16 " auto-disconnect: %s",
+            serverId, isAutoDisconnect ? "yes" : "no");
+    StopDeferTimer(LE_AVC_USER_AGREEMENT_CONNECTION);
+
+    IsUserSession = !isAutoDisconnect;
+    return avcServer_StartSession(serverId);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -4567,7 +4625,7 @@ void RxMessageHandler
             if (isWakeup)
             {
                 LE_INFO("Wakeup SMS received - starting AV session");
-                if (LE_OK != avcServer_StartSession())
+                if (LE_OK != avcServer_StartSession(LE_AVC_SERVER_ID_AIRVANTAGE))
                 {
                     LE_ERROR("Failed to start a new session");
                 }

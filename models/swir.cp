@@ -39,6 +39,12 @@
           <variable default-label="Time update status" path="3" type="int"></variable>
         </node>
 
+        <node default-label="SIM APDU Configuration" path="33408">
+          <setting default-label="SIM APDU Config" path="0" type="binary"></setting>
+          <command default-label="SIM APDU operation" path="1"></command>
+          <variable default-label="SIM APDU response" path="2" type="binary"></variable>
+        </node>
+
       </asset>
     </encoding>
   </data>

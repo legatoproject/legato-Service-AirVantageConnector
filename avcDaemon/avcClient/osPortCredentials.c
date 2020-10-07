@@ -8,6 +8,7 @@
  */
 
 #include <lwm2mcore/security.h>
+#include <lwm2mcore/device.h>
 #include <legato.h>
 #include <interfaces.h>
 #include "avcClient.h"
@@ -91,6 +92,59 @@ static BsCredentialList_t bsCredentialsList[BS_CREDENTIAL_NB_TO_RESTORE] =
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Compose a credentials path.
+ */
+//--------------------------------------------------------------------------------------------------
+static void GetCredPath
+(
+    uint16_t                serverId,       ///< [IN] server Id
+    lwm2mcore_Credentials_t credId,         ///< [IN] credential Id of credential to be set
+    char*                   credPathPtr,    ///< [INOUT] data buffer
+    size_t                  credPathSize    ///< [IN] data buffer length
+)
+{
+    LE_ASSERT(snprintf(credPathPtr,
+                       credPathSize,
+                       "%s",
+                       SECURE_STORAGE_PREFIX) < credPathSize);
+#if LE_CONFIG_AVC_FEATURE_EDM
+    if (serverId <= LE_AVC_SERVER_ID_AIRVANTAGE)
+    {
+        // Store to the backward-compatible location (/avms/)
+        LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                            credPathPtr,
+                                            credPathSize,
+                                            CredentialLocations[credId],
+                                            (char*)NULL), "Buffer is not long enough");
+    }
+    else
+    {
+        // Store to /avms/ServerId/
+        char serverIdStr[8] = {0};
+        LE_ASSERT(snprintf(serverIdStr,
+                           sizeof(serverIdStr),
+                           "%"PRIu16,
+                           serverId) < sizeof(serverIdStr));
+        LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                            credPathPtr,
+                                            credPathSize,
+                                            serverIdStr,
+                                            CredentialLocations[credId],
+                                            (char*)NULL), "Buffer is not long enough");
+
+        LE_INFO("Cred path: %s", credPathPtr);
+    }
+#else   // LE_CONFIG_AVC_FEATURE_EDM
+    LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                        credPathPtr,
+                                        credPathSize,
+                                        CredentialLocations[credId],
+                                        (char*)NULL), "Buffer is not long enough");
+#endif  // LE_CONFIG_AVC_FEATURE_EDM
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Retrieve a credential.
  * This API treatment needs to have a procedural treatment.
  *
@@ -111,27 +165,25 @@ lwm2mcore_Sid_t lwm2mcore_GetCredential
 )
 {
     (void)serverId;
+    le_result_t result;
+    char credsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
 
     if ((bufferPtr == NULL) || (lenPtr == NULL) || (credId >= LWM2MCORE_CREDENTIAL_MAX))
     {
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
-    char credsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+    GetCredPath(serverId, credId, credsPathStr, sizeof(credsPathStr));
 
-    LE_FATAL_IF(LE_OK != le_path_Concat("/",
-                                        credsPathStr,
-                                        sizeof(credsPathStr),
-                                        CredentialLocations[credId],
-                                        (char*)NULL), "Buffer is not long enough");
-    le_result_t result = le_secStore_Read(credsPathStr, (uint8_t*)bufferPtr, lenPtr);
+    LE_INFO("getting credential %d for server %u: path '%s'", credId, serverId, credsPathStr);
+
+    result = le_secStore_Read(credsPathStr, (uint8_t*)bufferPtr, lenPtr);
     if (LE_OK != result)
     {
         LE_ERROR("Unable to retrieve credentials for %d: %s: %d %s",
                  credId, credsPathStr, result, LE_RESULT_TXT(result));
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
-
     LE_DEBUG("credId %d, len %zu", credId, *lenPtr);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
@@ -165,19 +217,16 @@ lwm2mcore_Sid_t lwm2mcore_SetCredential
 
     char credsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
 
-    LE_FATAL_IF(LE_OK != le_path_Concat("/",
-                                        credsPathStr,
-                                        sizeof(credsPathStr),
-                                        CredentialLocations[credId],
-                                        (char*)NULL), "Buffer is not long enough");
+    GetCredPath(serverId, credId, credsPathStr, sizeof(credsPathStr));
+
+    LE_INFO("setting credential %d for server %u: path '%s'", credId, serverId, credsPathStr);
 
     le_result_t result = le_secStore_Write(credsPathStr, (uint8_t*)bufferPtr, len);
     if (LE_OK != result)
     {
-        LE_ERROR("Unable to write credentials for %d", credId);
+        LE_ERROR("Unable to write credentials for %d, path '%s'", credId, credsPathStr);
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
-
     LE_DEBUG("credId %d, len %zu", credId, len);
 
     return LWM2MCORE_ERR_COMPLETED_OK;
@@ -236,33 +285,27 @@ bool lwm2mcore_DeleteCredential
     uint16_t                serverId    ///< [IN] server Id
 )
 {
-    (void)serverId;
-
     if (credId >= LWM2MCORE_CREDENTIAL_MAX)
     {
         LE_ERROR("Bad parameter credId[%u]", credId);
-        return LE_BAD_PARAMETER;
+        return false;
     }
 
     char credsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
 
-    LE_FATAL_IF(LE_OK != le_path_Concat("/",
-                                        credsPathStr,
-                                        sizeof(credsPathStr),
-                                        CredentialLocations[credId],
-                                        (char*)NULL), "Buffer is not long enough");
+    GetCredPath(serverId, credId, credsPathStr, sizeof(credsPathStr));
 
     le_result_t result = le_secStore_Delete(credsPathStr);
     if ((LE_OK != result) && (LE_NOT_FOUND != result))
     {
         LE_ERROR("Unable to delete credentials for %d: %d %s",
                  credId, result, LE_RESULT_TXT(result));
-        return LE_FAULT;
+        return false;
     }
 
     LE_DEBUG("credId %d deleted", credId);
 
-    return LE_OK;
+    return true;
 }
 
 //--------------------------------------------------------------------------------------------------
