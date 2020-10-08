@@ -1007,7 +1007,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
 
                 do
                 {
-                    if ((LE_MRC_BITMASK_RAT_ALL == ratBitMask) || (ratBitMask & i))
+                    if (ratBitMask & i)
                     {
                         if ((*bearersNbPtr) < maxBearersNb)
                         {
