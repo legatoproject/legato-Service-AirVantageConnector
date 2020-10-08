@@ -1364,6 +1364,10 @@ le_result_t avcClient_Disconnect
     }
     else
     {
+        // Although AVC session may not be established at this moment, but the retry mechanism of
+        // DCS may establish data connection, hence AVC session after the request to stop AVC
+        // session. So cancel the data connection request here.
+        StopBearer();
         result = LE_DUPLICATE;
     }
 
