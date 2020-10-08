@@ -2162,6 +2162,8 @@ static void SotaRestore
             // Restore the object 9 reference, the download will be resumed by the check
             // of pending notifications.
             CurrentObj9 = instanceRef;
+            GetSwUpdateBytesDownloaded(&TotalCount);
+            LE_INFO("Bytes downloaded: %"PRIuS, TotalCount);
             break;
 
         case LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED:
