@@ -9,6 +9,7 @@
           <setting default-label="Default minimum period" path="2" type="int"></setting>
           <setting default-label="Default maximum period" path="3" type="int"></setting>
           <setting default-label="Notification storing when disabled or offline" path="6" type="boolean"></setting>
+          <variable default-label="Disable timeout" path="5" type="int"></variable>
           <setting default-label="Binding" path="7" type="string"></setting>
           <command default-label="Registration update trigger" path="8"></command>
         </node>
