@@ -957,6 +957,7 @@ static int EventHandler
             {
                 LE_WARN("Authentication to DM failed");
             }
+            AuthenticationPhase = false;
             avcServer_UpdateStatus(LE_AVC_AUTH_FAILED, LE_AVC_UNKNOWN_UPDATE,
                                    -1, -1, LE_AVC_ERR_NONE);
             break;

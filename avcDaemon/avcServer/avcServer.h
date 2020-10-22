@@ -216,6 +216,7 @@ LE_SHARED void avcServer_UpdateStatus
  *      - LE_OK if connection request has been sent.
  *      - LE_FAULT on failure
  *      - LE_DUPLICATE if already connected.
+ *      - LE_BUSY if currently retrying or authenticating.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcServer_StartSession

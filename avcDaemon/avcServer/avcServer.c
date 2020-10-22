@@ -3037,6 +3037,7 @@ le_result_t avcServer_RequestSession
  *      - LE_OK if connection request has been sent.
  *      - LE_FAULT on failure
  *      - LE_DUPLICATE if an AV session is already connected.
+ *      - LE_BUSY if currently retrying or authenticating.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t avcServer_StartSession
@@ -3351,6 +3352,7 @@ void le_avc_RemoveSessionRequestEventHandler
  *      - LE_OK if connection request has been sent.
  *      - LE_FAULT on failure
  *      - LE_DUPLICATE if already connected to AirVantage server.
+ *      - LE_BUSY if currently retrying or authenticating.
  */
 //--------------------------------------------------------------------------------------------------
 le_result_t le_avc_StartSession
