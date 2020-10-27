@@ -1127,3 +1127,15 @@ void le_sms_Delete
 {
     return;
 }
+
+//-------------------------------------------------------------------------------------------------
+/**
+ * Restore bootstrap credentials. Used to trigger rollback mechanism in case of failure.
+ */
+//-------------------------------------------------------------------------------------------------
+void avcClient_FixBootstrapCredentials
+(
+    bool isBsAuthFailure        ///< [IN] Was authentication failed with the bootstrap server ?
+)
+{
+}

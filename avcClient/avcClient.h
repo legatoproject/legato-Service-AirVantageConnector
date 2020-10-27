@@ -234,4 +234,14 @@ le_result_t avcClient_LaunchFwUpdate
     void
 );
 
+//-------------------------------------------------------------------------------------------------
+/**
+ * Restore bootstrap credentials. Used to trigger rollback mechanism in case of failure.
+ */
+//-------------------------------------------------------------------------------------------------
+void avcClient_FixBootstrapCredentials
+(
+    bool isBsAuthFailure        ///< [IN] Was authentication failed with the bootstrap server ?
+);
+
 #endif // LEGATO_AVC_CLIENT_INCLUDE_GUARD
