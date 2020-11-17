@@ -184,6 +184,7 @@ typedef enum
     AVC_DOWNLOAD_PENDING,       ///< Received pending download; no response sent yet
     AVC_DOWNLOAD_IN_PROGRESS,   ///< Accepted download, and in progress
     AVC_DOWNLOAD_COMPLETE,      ///< Download is complete
+    AVC_DOWNLOAD_TIMEOUT,       ///< Download is timeout
     AVC_INSTALL_PENDING,        ///< Received pending install; no response sent yet
     AVC_INSTALL_IN_PROGRESS,    ///< Accepted install, and in progress
     AVC_UNINSTALL_PENDING,      ///< Received pending uninstall; no response sent yet
@@ -618,6 +619,7 @@ static char* AvcSessionStateToStr
         case LE_AVC_DOWNLOAD_PENDING:       result = "Download Pending";        break;
         case LE_AVC_DOWNLOAD_IN_PROGRESS:   result = "Download in Progress";    break;
         case LE_AVC_DOWNLOAD_COMPLETE:      result = "Download complete";       break;
+        case LE_AVC_DOWNLOAD_TIMEOUT:       result = "Download timeout";        break;
         case LE_AVC_DOWNLOAD_FAILED:        result = "Download Failed";         break;
         case LE_AVC_INSTALL_PENDING:        result = "Install Pending";         break;
         case LE_AVC_INSTALL_IN_PROGRESS:    result = "Install in progress";     break;
@@ -663,6 +665,7 @@ static char* ConvertAvcStateToString
         case AVC_IDLE:                      result = "Idle";                    break;
         case AVC_DOWNLOAD_PENDING:          result = "Download pending";        break;
         case AVC_DOWNLOAD_IN_PROGRESS:      result = "Download in progress";    break;
+        case AVC_DOWNLOAD_TIMEOUT:          result = "Download timeout";        break;
         case AVC_DOWNLOAD_COMPLETE:         result = "Download complete";       break;
         case AVC_INSTALL_PENDING:           result = "Install pending";         break;
         case AVC_INSTALL_IN_PROGRESS:       result = "Install in progress";     break;
@@ -1965,6 +1968,11 @@ static void ProcessUpdateStatus
                 // Set the bytes downloaded to workspace for resume operation
                 avcApp_SetSwUpdateBytesDownloaded();
             }
+            break;
+
+        case LE_AVC_DOWNLOAD_TIMEOUT:
+            UpdateCurrentAvcState(AVC_DOWNLOAD_TIMEOUT);
+            ConnectToServer(LE_AVC_SERVER_ID_AIRVANTAGE);
             break;
 
         case LE_AVC_DOWNLOAD_COMPLETE:

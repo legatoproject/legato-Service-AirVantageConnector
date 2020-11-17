@@ -1053,15 +1053,6 @@ void packageDownloader_FinalizeDownload
             LE_DEBUG("Store thread with return value = %d", *storeThreadReturnPtr);
         }
 
-        // Check if the downloaded is suspended
-        LE_DEBUG("Check if the downloaded is suspended, ret %d, suspended ? %d",
-                 ret, downloader_CheckDownloadToSuspend());
-        if ((LE_OK != ret)
-         && (downloader_CheckDownloadToSuspend()))
-        {
-            ret = LE_OK;
-            LE_DEBUG("Download is suspended: consider download as OK");
-        }
 
         // Check is an issue happened on download start
         // In this case, LwM2MCore already sends a notification to AVC
@@ -1088,6 +1079,14 @@ void packageDownloader_FinalizeDownload
                                                    ResumeDownloadRequest,
                                                    NULL,
                                                    NULL);
+                }
+                else if (LE_CLOSED == *storeThreadReturnPtr)
+                {
+                    avcServer_UpdateStatus(LE_AVC_DOWNLOAD_TIMEOUT,
+                                           LE_AVC_FIRMWARE_UPDATE,
+                                           -1,
+                                           -1,
+                                           LE_AVC_ERR_INTERNAL);
                 }
                 else
                 {
@@ -1611,13 +1610,7 @@ le_result_t packageDownloader_AbortDownload
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
-        //TODO
-            //dwlResult = packageDownloader_SetFwUpdateState(LWM2MCORE_FW_UPDATE_STATE_IDLE);
-            //if (DWL_OK != dwlResult)
-            {
-                return LE_FAULT;
-            }
-            break;
+            return LE_FAULT;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
             dwlResult = packageDownloader_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
