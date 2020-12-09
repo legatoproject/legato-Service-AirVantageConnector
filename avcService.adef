@@ -95,6 +95,7 @@ bindings:
     avcDaemon.deviceManagement.le_ulpm -> powerMgr.le_ulpm
     avcDaemon.deviceManagement.le_cellnet -> cellNetService.le_cellnet
     avcDaemon.deviceManagement.le_fwupdate -> fwupdateService.le_fwupdate
+    avcDaemon.deviceManagement.le_power -> powerService.le_power
     avcDaemon.avcDaemon.le_clkSync -> <root>.le_clkSync
 #endif
     avcDaemon.avcDaemon.le_ulpm -> powerMgr.le_ulpm
