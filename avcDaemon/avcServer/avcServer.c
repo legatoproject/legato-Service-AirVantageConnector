@@ -3419,7 +3419,7 @@ le_result_t le_avc_StartDmSession
             serverId, isAutoDisconnect ? "yes" : "no");
     StopDeferTimer(LE_AVC_USER_AGREEMENT_CONNECTION);
 
-    IsUserSession = !isAutoDisconnect;
+    IsUserSession = IsUserSession || !isAutoDisconnect;
     return avcServer_StartSession(serverId);
 }
 

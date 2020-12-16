@@ -150,7 +150,18 @@ static le_event_Id_t BsFailureEventId;
  * Denoting a session is established to the DM server.
  */
 //--------------------------------------------------------------------------------------------------
+#if LE_CONFIG_AVC_FEATURE_EDM
+//--------------------------------------------------------------------------------------------------
+/**
+ * Session started array to keep track of sessions started on a specific server Id.
+ * 0 for BS/AV server
+ * 1 for any other server
+ */
+//--------------------------------------------------------------------------------------------------
+static int SessionStarted[2] = {0, 0};
+#else
 static bool SessionStarted = false;
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -230,6 +241,44 @@ static uint16_t ServerId = LE_AVC_SERVER_ID_AIRVANTAGE;
 // Local functions
 //--------------------------------------------------------------------------------------------------
 
+#if LE_CONFIG_AVC_FEATURE_EDM
+//--------------------------------------------------------------------------------------------------
+/**
+ * Return the serverIdx used to identify session started flag for this specific server Id.
+ */
+//--------------------------------------------------------------------------------------------------
+static int GetServerIdx
+(
+    uint16_t serverId
+)
+{
+    if (serverId <= LE_AVC_SERVER_ID_AIRVANTAGE)
+    {
+        return 0;
+    }
+    else
+    {
+        return 1;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Reset session started flag for all server Id when session is disconnected.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ResetSessionStarted
+(
+    void
+)
+{
+    int i = 0;
+    for (i = 0; i < NUM_ARRAY_MEMBERS(SessionStarted); i++)
+    {
+        SessionStarted[i] = 0;
+    }
+}
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -505,7 +554,11 @@ static void ConnectionStateHandler
                 // Call the callback.
                 BearerEventCb(connected, contextPtr);
             }
+#if LE_CONFIG_AVC_FEATURE_EDM
+            ResetSessionStarted();
+#else
             SessionStarted = false;
+#endif
             AuthenticationPhase = false;
         }
         else
@@ -816,7 +869,11 @@ static int EventHandler
                 LE_ERROR("Session failure on bootstrap server");
                 le_event_Report(BsFailureEventId, NULL, 0);
             }
+#if LE_CONFIG_AVC_FEATURE_EDM
+            ResetSessionStarted();
+#else
             SessionStarted = false;
+#endif
             break;
 
         case LWM2MCORE_EVENT_SESSION_FINISHED:
@@ -826,8 +883,11 @@ static int EventHandler
                 LE_DEBUG("Session finished");
                 avcServer_UpdateStatus(LE_AVC_SESSION_STOPPED, LE_AVC_UNKNOWN_UPDATE,
                                        -1, -1, LE_AVC_ERR_NONE);
-
+#if LE_CONFIG_AVC_FEATURE_EDM
+                if (!(SessionStarted[GetServerIdx(ServerId)]))
+#else
                 if (false == SessionStarted)
+#endif
                 {
                     // In this case, check if a package download is not pending
                     lwm2mcore_UpdateType_t type;
@@ -876,8 +936,11 @@ static int EventHandler
                 }
                 StopBearer();
             }
-
+#if LE_CONFIG_AVC_FEATURE_EDM
+            ResetSessionStarted();
+#else
             SessionStarted = false;
+#endif
             AuthenticationPhase = false;
             break;
 
@@ -891,11 +954,19 @@ static int EventHandler
             else if (!avcServer_IsDownloadInProgress())
             {
                 LE_DEBUG("Connected to DM");
+#if LE_CONFIG_AVC_FEATURE_EDM
+                if (!(SessionStarted[GetServerIdx(ServerId)]))
+#else
                 if (!SessionStarted)
+#endif
                 {
                     avcServer_UpdateStatus(LE_AVC_SESSION_STARTED, LE_AVC_UNKNOWN_UPDATE,
                                            -1, -1, LE_AVC_ERR_NONE);
+#if LE_CONFIG_AVC_FEATURE_EDM
+                    SessionStarted[GetServerIdx(ServerId)] = 1;
+#else
                     SessionStarted = true;
+#endif
                 }
             }
             else
@@ -943,7 +1014,11 @@ static int EventHandler
                 LE_DEBUG("Authentication to DM started");
             }
             AuthenticationPhase = true;
+#if LE_CONFIG_AVC_FEATURE_EDM
+            if (!(SessionStarted[GetServerIdx(ServerId)]))
+#else
             if (!SessionStarted)
+#endif
             {
                 avcServer_UpdateStatus(LE_AVC_AUTH_STARTED, LE_AVC_UNKNOWN_UPDATE,
                                        -1, -1, LE_AVC_ERR_NONE);
@@ -1128,7 +1203,11 @@ le_result_t avcClient_Connect
 )
 {
     // Check if a session is already started.
+#if LE_CONFIG_AVC_FEATURE_EDM
+    if (SessionStarted[GetServerIdx(serverId)])
+#else
     if (SessionStarted)
+#endif
     {
         // No need to start a retry timer. Perform reset/cleanup.
         ResetRetryTimers();
