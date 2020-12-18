@@ -158,7 +158,7 @@ static int CreateSocket
         {
             if (-1 == bind(s, p->ai_addr, p->ai_addrlen))
             {
-                close(s);
+                le_fd_Close(s);
                 s = -1;
             }
         }
@@ -372,7 +372,7 @@ bool lwm2mcore_UdpClose
         LE_DEBUG("Closed lwm2m UDP socket %d with FD monitor %p", config.sock, Lwm2mMonitorRef);
         le_fdMonitor_Delete(Lwm2mMonitorRef);
 
-        rc = close (config.sock);
+        rc = le_fd_Close(config.sock);
         if (0 == rc)
         {
             result = true;
@@ -381,6 +381,20 @@ bool lwm2mcore_UdpClose
 
     LE_DEBUG ("lwm2mcore_UdpClose %d", result);
     return result;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Close the provided socket
+ * This function is called by the LWM2MCore and must be adapted to the platform.
+ */
+//--------------------------------------------------------------------------------------------------
+void lwm2mcore_UdpSocketClose
+(
+    int sockFd             ///< [IN] socket file descriptor
+)
+{
+    le_fd_Close(sockFd);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -476,7 +490,7 @@ bool lwm2mcore_UdpConnect
 
                 if (-1 == connect(sockfd, p->ai_addr, p->ai_addrlen))
                 {
-                    close(sockfd);
+                    le_fd_Close(sockfd);
                     sockfd = -1;
                 }
             }
