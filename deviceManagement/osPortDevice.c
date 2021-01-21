@@ -20,7 +20,6 @@
 #include "avcSim.h"
 
 #include "avcClient.h"
-#include "clientConfig.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -167,86 +166,6 @@ typedef struct
     getVersion_t funcPtr;       ///< Function to read the component version
 }
 ComponentVersion_t;
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Convert le_power power source enum type to lwm2m enum type
- *
- * @return
- *      - LWM2M power source enum type is returned
- */
-//--------------------------------------------------------------------------------------------------
-static lwm2mcore_powerSource_enum_t ConvertPowerSource
-(
-    le_power_PowerSource_t powerSource
-)
-{
-    switch (powerSource)
-    {
-        case LE_POWER_DC_POWER:
-            return LWM2MCORE_DEVICE_PWR_SRC_TYPE_DC_POWER;
-
-        case LE_POWER_INTERNAL_BATTERY:
-            return LWM2MCORE_DEVICE_PWR_SRC_TYPE_BAT_INT;
-
-        case LE_POWER_EXTERNAL_BATTERY:
-            return LWM2MCORE_DEVICE_PWR_SRC_TYPE_BAT_EXT;
-
-        case LE_POWER_UNDEFINED:
-            return LWM2MCORE_DEVICE_PWR_SRC_TYPE_UNUSED;
-
-        case LE_POWER_POE:
-            return LWM2MCORE_DEVICE_PWR_SRC_TYPE_PWR_OVER_ETH;
-
-        case LE_POWER_USB:
-            return LWM2MCORE_DEVICE_PWR_SRC_TYPE_USB;
-
-        case LE_POWER_AC_POWER:
-            return LWM2MCORE_DEVICE_PWR_SRC_TYPE_AC_POWER;
-
-        default:
-            return LWM2MCORE_DEVICE_PWR_SRC_TYPE_DC_POWER;
-    }
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Convert le_power battery status enum type to lwm2m enum type
- *
- * @return
- *      - LWM2M power source enum type is returned
- */
-//--------------------------------------------------------------------------------------------------
-static lwm2mcore_batteryStatus_enum_t ConvertBatteryStatus
-(
-    le_power_BatteryStatus_t batteryStatus
-)
-{
-    switch (batteryStatus)
-    {
-        case LE_POWER_NORMAL:
-            return LWM2MCORE_DEVICE_BATTERY_NORMAL;
-
-        case LE_POWER_CHARGING:
-            return LWM2MCORE_DEVICE_BATTERY_CHARGING;
-
-        case LE_POWER_CHARGE_COMPLETE:
-            return LWM2MCORE_DEVICE_BATTERY_CHARGE_COMPLETE;
-
-        case LE_POWER_DAMAGED:
-            return LWM2MCORE_DEVICE_BATTERY_DAMAGED;
-
-        case LE_POWER_LOW:
-            return LWM2MCORE_DEVICE_BATTERY_LOW;
-
-        case LE_POWER_NOT_INSTALL:
-            return LWM2MCORE_DEVICE_BATTERY_NOT_INSTALL;
-
-        case LE_POWER_UNKNOWN:
-        default:
-            return LWM2MCORE_DEVICE_BATTERY_UNKNOWN;
-    }
-}
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -933,47 +852,6 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
     }
 
     *lenPtr = strlen(bufferPtr);
-    return LWM2MCORE_ERR_COMPLETED_OK;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Retrieve the available power source
- *
- * @return
- *      - LWM2MCORE_ERR_COMPLETED_OK if the treatment succeeds
- *      - LWM2MCORE_ERR_GENERAL_ERROR if the treatment fails
- *      - LWM2MCORE_ERR_INVALID_ARG if a parameter is invalid in resource handler
- */
-//--------------------------------------------------------------------------------------------------
-LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAvailablePowerInfo
-(
-    lwm2mcore_powerInfo_t* powerInfoPtr,  ///< [INOUT] power source list
-    size_t* powerNbPtr                    ///< [INOUT] power source number
-)
-{
-    uint8_t index = 0;
-    le_power_PowerInfo_t powerInfo[CONN_MONITOR_AVAIL_POWER_SOURCE_MAX_NB] = { { .voltage = 0 } };
-
-    if (!powerInfoPtr || !powerNbPtr)
-    {
-        return LWM2MCORE_ERR_INVALID_ARG;
-    }
-
-    if (LE_OK != le_power_GetPowerInfo(powerInfo, powerNbPtr))
-    {
-        return LWM2MCORE_ERR_GENERAL_ERROR;
-    }
-
-    for (index = 0; index < *powerNbPtr; ++index)
-    {
-        powerInfoPtr[index].source  = ConvertPowerSource(powerInfo[index].source);
-        powerInfoPtr[index].voltage = powerInfo[index].voltage;
-        powerInfoPtr[index].current = powerInfo[index].current;
-        powerInfoPtr[index].level   = powerInfo[index].level;
-        powerInfoPtr[index].status  = ConvertBatteryStatus(powerInfo[index].status);
-    }
-
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
 
