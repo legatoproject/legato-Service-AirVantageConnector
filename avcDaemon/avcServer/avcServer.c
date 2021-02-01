@@ -4788,6 +4788,27 @@ le_result_t le_avc_SetUserAgreement
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Function to set the NAT timeout
+ *
+ * This function sets the NAT timeout in volatile memory.
+ * When data need to be sent by the client, a check is made between this NAT timeout value and the
+ * time when last data were received from the server or sent to the server.
+ * If one of these times is greater than the NAT timeout, a DTLS resume is initiated.
+ * Default value if this function is not called: 40 seconds (set in LwM2MCore).
+ * Value 0 will deactivate any DTLS resume.
+ * This function can be called at any time.
+ */
+//--------------------------------------------------------------------------------------------------
+void le_avc_SetNatTimeout
+(
+    uint32_t timeout        ///< [IN] Timeout (unit: seconds)
+)
+{
+    lwm2mcore_SetNatTimeout(timeout);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Initialization function for AVC Daemon
  */
 //--------------------------------------------------------------------------------------------------
