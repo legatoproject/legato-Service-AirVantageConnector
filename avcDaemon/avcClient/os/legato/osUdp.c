@@ -157,14 +157,14 @@ static int CreateSocket
         {
             if(-1 == setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)))
             {
-                le_fd_Close(s);
+                close(s);
                 s = - 1;
                 continue;
             }
 
             if (-1 == bind(s, p->ai_addr, p->ai_addrlen))
             {
-                le_fd_Close(s);
+                close(s);
                 s = -1;
             }
         }
@@ -275,9 +275,9 @@ bool lwm2mcore_UdpOpen
 
 //--------------------------------------------------------------------------------------------------
 /**
- * Close the udp connection
+ * Close the socket
  * This function is called by the LWM2MCore and must be adapted to the platform
- * The aim of this function is to close a udp connection.
+ * The aim of this function is to close a socket
  *
  * @return
  *      - true on success
@@ -299,7 +299,7 @@ bool lwm2mcore_UdpClose
         LE_DEBUG("Closed lwm2m UDP socket %d with FD monitor %p", config.sock, Lwm2mMonitorRef);
         le_fdMonitor_Delete(Lwm2mMonitorRef);
 
-        rc = le_fd_Close(config.sock);
+        rc = close (config.sock);
         if (0 == rc)
         {
             result = true;
@@ -308,20 +308,6 @@ bool lwm2mcore_UdpClose
 
     LE_DEBUG ("lwm2mcore_UdpClose %d", result);
     return result;
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Close the provided socket
- * This function is called by the LWM2MCore and must be adapted to the platform.
- */
-//--------------------------------------------------------------------------------------------------
-void lwm2mcore_UdpSocketClose
-(
-    int sockFd             ///< [IN] socket file descriptor
-)
-{
-    le_fd_Close(sockFd);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -403,36 +389,12 @@ bool lwm2mcore_UdpConnect
     LE_DEBUG("Attempt to DNS-resolve url: '%s', with host name: '%s', and on port: '%s'",
             urlStrPtr, hostPtr, portPtr);
 
-#ifdef LE_CONFIG_LINUX
-// Code block is written as per manpage: https://man7.org/linux/man-pages/man3/getaddrinfo.3.html
-// However, EAI_AGAIN/EAI_SYSTEM only available on linux and missing in rtos platform. Hence, it is
-// put under separate code block.
-    do
-    {
-        rc = getaddrinfo(urlStrPtr, portPtr, &hints, &resultPtr);
-    }
-    while (EAI_AGAIN == rc);
-
-    if (rc)
-    {
-        if (EAI_SYSTEM == rc)
-        {
-            LE_ERROR("IP %s not resolved: %s, %m", urlStrPtr, gai_strerror(rc));
-        }
-        else
-        {
-            LE_ERROR("IP %s not resolved: %s", urlStrPtr, gai_strerror(rc));
-        }
-        return false;
-    }
-#else
     rc = getaddrinfo(urlStrPtr, portPtr, &hints, &resultPtr);
     if (rc)
     {
         LE_ERROR("IP %s not resolved: %s", urlStrPtr, gai_strerror(rc));
         return false;
     }
-#endif
 
     // We test the various addresses and break once we've successfully connected to one
     for (nextPtr = resultPtr; nextPtr != NULL && sockfd == -1; nextPtr = nextPtr->ai_next)
@@ -477,7 +439,7 @@ bool lwm2mcore_UdpConnect
 
             if(-1 == setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)))
             {
-                le_fd_Close(sockfd);
+                close(sockfd);
                 sockfd = - 1;
                 continue;
             }
@@ -492,7 +454,7 @@ bool lwm2mcore_UdpConnect
 
             if (-1 == connect(sockfd, nextPtr->ai_addr, nextPtr->ai_addrlen))
             {
-                le_fd_Close(sockfd);
+                close(sockfd);
                 sockfd = -1;
             }
             else
