@@ -936,12 +936,6 @@ static le_result_t RequestDownload
         return LE_IO_ERROR;
     }
 
-    // Initialize the package downloader, except for a download resume
-    if (!dwlCtxPtr->resume)
-    {
-        lwm2mcore_PackageDownloaderInit();
-    }
-
     downloaderResult = lwm2mcore_StartPackageDownloader(dwlCtxPtr);
     if (LWM2MCORE_ERR_COMPLETED_OK != downloaderResult)
     {
@@ -1231,11 +1225,16 @@ void packageDownloader_FinalizeDownload
                                 case LE_TERMINATED:
                                 case LE_FAULT:
                                 case LE_TIMEOUT:
+                                case LE_UNAVAILABLE:
                                     errorCode = LE_AVC_ERR_NETWORK;
                                     break;
 
                                 case LE_NO_MEMORY:
                                     errorCode = LE_AVC_ERR_RAM;
+                                    break;
+
+                                case LE_BAD_PARAMETER:
+                                    errorCode = LE_AVC_ERR_BAD_PACKAGE;
                                     break;
 
                                 default:
