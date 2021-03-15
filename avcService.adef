@@ -64,7 +64,8 @@ extern:
 
 #if ${LE_CONFIG_LINUX} = ""
     avcDaemon.avcDaemon.le_appInfo
-    avcDaemon.avcDaemon.le_cfg
+    avcCfg      = avcDaemon.avcDaemon.le_cfg
+    fwUpdateCfg = avcDaemon.fwupdateDaemon.le_cfg
 #endif
     avcDaemon.watchdogChain.le_wdog
 }
