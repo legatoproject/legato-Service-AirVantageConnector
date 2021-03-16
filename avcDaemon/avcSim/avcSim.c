@@ -585,7 +585,7 @@ le_result_t avcSim_ExecuteSimApduConfig
     le_result_t result = LE_FAULT;
 
     // Clear the APDU response
-    avcSim_SetSimApduResponse(&byte, sizeof(byte));
+    avcSim_SetSimApduResponse(NULL, 0);
 
     // Read stored APDU from the config tree
     le_cfg_IteratorRef_t iteratorRef = le_cfg_CreateReadTxn(LE_AVC_CONFIG_TREE_ROOT);
@@ -637,19 +637,28 @@ le_result_t avcSim_ExecuteSimApduConfig
 //--------------------------------------------------------------------------------------------------
 le_result_t avcSim_SetSimApduResponse
 (
-    const uint8_t* bufferPtr,   ///< [IN] SIM APDU response
+    const uint8_t* bufferPtr,   ///< [IN] SIM APDU response. If NULL, delete the stored response.
     size_t length               ///< [IN] SIM APDU response length
 )
 {
     // Save to the config tree
     LE_DEBUG("data length %" PRIuS, length);
-    LE_DUMP(bufferPtr, length);
+    if (bufferPtr)
+    {
+        LE_DUMP(bufferPtr, length);
+    }
 
 #if LE_CONFIG_ENABLE_CONFIG_TREE
     le_cfg_IteratorRef_t iteratorRef = le_cfg_CreateWriteTxn(LE_AVC_CONFIG_TREE_ROOT);
 
-    le_cfg_SetBinary(iteratorRef, LE_AVC_CONFIG_SIM_APDU_RESP_PATH, bufferPtr, length);
-
+    if (bufferPtr)
+    {
+        le_cfg_SetBinary(iteratorRef, LE_AVC_CONFIG_SIM_APDU_RESP_PATH, bufferPtr, length);
+    }
+    else
+    {
+        le_cfg_DeleteNode(iteratorRef, LE_AVC_CONFIG_SIM_APDU_RESP_PATH);
+    }
     le_cfg_CommitTxn(iteratorRef);
 
     return LE_OK;
@@ -685,7 +694,7 @@ le_result_t avcSim_GetSimApduResponse
 
     le_result_t result = le_cfg_GetBinary(iteratorRef, LE_AVC_CONFIG_SIM_APDU_RESP_PATH,
                                           bufferPtr, lenPtr,
-                                          &byte, sizeof(byte));
+                                          &byte, 0);
     le_cfg_CancelTxn(iteratorRef);
     if (result != LE_OK)
     {

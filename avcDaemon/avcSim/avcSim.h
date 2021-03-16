@@ -170,7 +170,7 @@ le_result_t avcSim_ExecuteSimApduConfig
 //--------------------------------------------------------------------------------------------------
 le_result_t avcSim_SetSimApduResponse
 (
-    const uint8_t* bufferPtr,   ///< [IN] SIM APDU response
+    const uint8_t* bufferPtr,   ///< [IN] SIM APDU response. If NULL, delete the stored response.
     size_t length               ///< [IN] SIM APDU response length
 );
 
