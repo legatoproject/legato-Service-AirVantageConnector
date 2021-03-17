@@ -170,6 +170,7 @@ static void CellNetStateHandler
 )
 {
     le_mdc_ProfileRef_t profileRef;
+    le_result_t result = LE_FAULT;
 
     if (SimHandlerPtr->mode != MODE_IN_PROGRESS)
     {
@@ -193,9 +194,17 @@ static void CellNetStateHandler
             }
             else
             {
-                if (le_mdc_SetDefaultAPN(profileRef) != LE_OK)
+                result = le_mdc_SetDefaultAPN(profileRef);
+                if (result != LE_OK)
                 {
-                    LE_ERROR("Could not set default APN for the select SIM");
+                    if (result == LE_UNSUPPORTED)
+                    {
+                        LE_WARN("Default APN switching is unsupported");
+                    }
+                    else
+                    {
+                        LE_ERROR("Could not set default APN for the select SIM");
+                    }
                 }
                 else
                 {
