@@ -1324,57 +1324,66 @@ void packageDownloader_FinalizeDownload
 #if LE_CONFIG_SOTA
     else if (LWM2MCORE_SW_UPDATE_TYPE == pkgDwlPtr->data.updateType)
     {
-        if (LE_OK == ret)
-        {
-            // SOTA usecase. As there is no store thread, if download returns LE_OK, that should
-            // be enough to send download complete status.
-
-            // Send download complete event.
-            // Not setting the downloaded number of bytes and percentage
-            // allows using the last stored values.
-            avcServer_UpdateStatus(LE_AVC_DOWNLOAD_COMPLETE,
-                                    LE_AVC_APPLICATION_UPDATE,
-                                    -1,
-                                    -1,
-                                    LE_AVC_ERR_NONE);
-
-            // Trigger a connection to the server: the update state and result will be
-            // read to determine if the download was successful
-            le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
-                                            UpdateStatus,
-                                            NULL,
-                                            NULL);
-        }
-
         if (downloader_CheckDownloadToSuspend())
         {
-            le_avc_ErrorCode_t errorCode = LE_AVC_ERR_NONE;
-
-            if (LE_OK != downloadStatus)
-            {
-                switch (downloadStatus)
-                {
-                    case LE_COMM_ERROR:
-                    case LE_TERMINATED:
-                    case LE_FAULT:
-                    case LE_TIMEOUT:
-                        errorCode = LE_AVC_ERR_NETWORK;
-                        break;
-
-                    case LE_NO_MEMORY:
-                        errorCode = LE_AVC_ERR_RAM;
-                        break;
-
-                    default:
-                        break;
-                }
-            }
-
-            ErrorCode = errorCode;
             le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
                                            ResumeDownloadRequest,
                                            NULL,
                                            NULL);
+        }
+        else
+        {
+            if (LE_OK == ret)
+            {
+                // SOTA usecase. As there is no store thread, if download returns LE_OK, that should
+                // be enough to send download complete status.
+
+                // Send download complete event.
+                // Not setting the downloaded number of bytes and percentage
+                // allows using the last stored values.
+                avcServer_UpdateStatus(LE_AVC_DOWNLOAD_COMPLETE,
+                                       LE_AVC_APPLICATION_UPDATE,
+                                       -1,
+                                       -1,
+                                       LE_AVC_ERR_NONE);
+
+                // Trigger a connection to the server: the update state and result will be
+                // read to determine if the download was successful
+                le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
+                                                UpdateStatus,
+                                                NULL,
+                                                NULL);
+            }
+            else
+            {
+                le_avc_ErrorCode_t errorCode = LE_AVC_ERR_NONE;
+
+                if (LE_OK != downloadStatus)
+                {
+                    switch (downloadStatus)
+                    {
+                        case LE_COMM_ERROR:
+                        case LE_TERMINATED:
+                        case LE_FAULT:
+                        case LE_TIMEOUT:
+                            errorCode = LE_AVC_ERR_NETWORK;
+                            break;
+
+                        case LE_NO_MEMORY:
+                            errorCode = LE_AVC_ERR_RAM;
+                            break;
+
+                        default:
+                            break;
+                    }
+                }
+
+                ErrorCode = errorCode;
+                le_event_QueueFunctionToThread(dwlCtxPtr->mainRef,
+                                               ResumeDownloadRequest,
+                                               NULL,
+                                               NULL);
+            }
         }
     }
 #endif /* LE_CONFIG_SOTA */
