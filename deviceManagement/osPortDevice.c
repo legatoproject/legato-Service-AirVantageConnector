@@ -21,20 +21,7 @@
 
 #include "avcClient.h"
 #include "clientConfig.h"
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Define for FW version buffer length
- */
-//--------------------------------------------------------------------------------------------------
-#define FW_BUFFER_LENGTH    512
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Define for unknown version
- */
-//--------------------------------------------------------------------------------------------------
-#define UNKNOWN_VERSION     "unknown"
+#include "osPortCache.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -168,6 +155,15 @@ typedef struct
 }
 ComponentVersion_t;
 
+#ifndef LE_CONFIG_CUSTOM_OS
+//--------------------------------------------------------------------------------------------------
+/**
+ * Declare LkVersionCache used to store the current LK Version.
+ */
+//--------------------------------------------------------------------------------------------------
+static char LkVersionCache[FW_BUFFER_LENGTH] = UNKNOWN_VERSION;
+#endif //LE_CONFIG_CUSTOM_OS
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Convert le_power power source enum type to lwm2m enum type
@@ -292,6 +288,38 @@ static size_t GetModemVersion
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Attempt to write the new LK version string into cache.
+ *
+ * @return
+ *      - LE_OK when successfully written to LkVersionCache.
+ *      - LE_FAULT otherwise.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t osPortDevice_SetLkVersion
+(
+    const char *newLkVersion
+)
+{
+    int bytesWritten = snprintf(LkVersionCache, sizeof(LkVersionCache), "%s", newLkVersion);
+    if (bytesWritten <= 0)
+    {
+        LE_ERROR("Error while copying the newLkVersion (%m)");
+        return LE_FAULT;
+    }
+    else if (bytesWritten >= sizeof(LkVersionCache))
+    {
+        LE_ERROR("Size of LkVersionCache buffer isn't large enough to hold the newLkVersion");
+        return LE_FAULT;
+    }
+    else
+    {
+        LE_INFO("Successfully copied new LK version: %s", LkVersionCache);
+    }
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Attempt to read the LK version string from the file system.
  *
  * @return
@@ -305,26 +333,23 @@ static size_t GetLkVersion
 )
 {
     size_t returnedLen = 0;
-    static char LkVersionCache[FW_BUFFER_LENGTH] = UNKNOWN_VERSION;
-
-    if (NULL != versionBufferPtr)
+    // Check input parameters
+    if (versionBufferPtr == NULL)
     {
-        if (LE_OK != le_fwupdate_GetAppBootloaderVersion(versionBufferPtr, len))
-        {
-            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
-        }
-        else
-        {
-            // update the cached LK version
-            snprintf(LkVersionCache, sizeof(LkVersionCache), "%s", versionBufferPtr);
-            returnedLen = strlen(versionBufferPtr);
-        }
+        LE_ERROR("The versionBufferPtr is NULL");
+    }
+    else if (len == 0)
+    {
+        LE_ERROR("Buffer size is zero");
     }
     else
     {
-        LE_ERROR("Buffer pointer is NULL");
+        // We are reading directly from the cached value present when this component is
+        // initialized, and the reason is because the new LK version will not be present
+        // within /proc/cmdline in the event of firware update until the device is rebooted.
+        returnedLen = snprintf(versionBufferPtr, len, "%s", LkVersionCache);
+        LE_INFO("App Bootloader version %s, returnedLen %zd", versionBufferPtr, returnedLen);
     }
-    LE_INFO("App Bootloader version %s, returnedLen %zd", versionBufferPtr, returnedLen);
     return returnedLen;
 }
 #endif

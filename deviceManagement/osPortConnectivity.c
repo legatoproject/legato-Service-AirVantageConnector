@@ -14,6 +14,7 @@
 #undef LE_MDC_IPV6_ADDR_MAX_BYTES
 #undef LE_MDC_APN_NAME_MAX_BYTES
 #include "interfaces.h"
+#include "osPortCache.h"
 
 //--------------------------------------------------------------------------------------------------
 // Symbol and Enum definitions
@@ -2708,6 +2709,20 @@ static void DataConnectionStateHandler
 COMPONENT_INIT
 {
     LE_INFO("start dm component");
+
+#ifndef LE_CONFIG_CUSTOM_OS
+    // Cache the current LK version when we start this component, this will be used when
+    // GetLkVersion is called, and is only updated when the device reboots even after
+    // a firmware update it's only changed within /proc/cmdline post reboot.
+    char newLkVersion[FW_BUFFER_LENGTH] = UNKNOWN_VERSION;
+    if (LE_OK !=  le_fwupdate_GetAppBootloaderVersion(newLkVersion, sizeof(newLkVersion)))
+    {
+        snprintf(newLkVersion, sizeof(newLkVersion), "%s", UNKNOWN_VERSION);
+    }
+
+    // Writing to LkVersionCache found within osPortDevice.
+    osPortDevice_SetLkVersion(newLkVersion);
+#endif //LE_CONFIG_CUSTOM_OS
 
     // Initialize the bearer and register for data connection status.
     // We wont be requesting a data connection in this component, but we need to know
