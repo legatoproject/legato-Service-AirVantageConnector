@@ -17,7 +17,7 @@ requires:
 {
     api:
     {
-        airVantage/le_avc.api    [types-only]
+        airVantage/le_avc.api [types-only]
         le_data.api
         le_ulpm.api
         modemServices/le_info.api
