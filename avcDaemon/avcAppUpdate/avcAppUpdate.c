@@ -314,6 +314,7 @@ static bool IsHiddenApp
 #if LE_CONFIG_ENABLE_CONFIG_TREE
     if (true == le_cfg_QuickGetBool("/lwm2m/hideDefaultApps", true))
     {
+        // Base static list of apps to hide
         static char* appList[] =
             {
                 "atAirVantage",
@@ -351,6 +352,14 @@ static bool IsHiddenApp
             }
         }
     }
+    // Additionally check if the app is tagged with "disableAirVantageManagement" in configTree
+    char strBuffer[LE_CFG_STR_LEN_BYTES] = "";
+    char pathBuffer[LE_CFG_STR_LEN_BYTES] = "";
+    snprintf(pathBuffer, sizeof(pathBuffer),
+             "/apps/%s/tags/disableAirVantageManagement", appNamePtr);
+    // Get the value of the "disableAirVantageManagement" tag for the app if it exists
+    le_cfg_QuickGetString(pathBuffer, strBuffer, sizeof(strBuffer), "false");
+    return (strcmp(strBuffer, "true") == 0);
 #endif
     return false;
 }
