@@ -126,4 +126,7 @@ bindings:
 #if ${LE_CONFIG_ENABLE_WIFI} = y
     avcDaemon.deviceManagement.le_wifiClient -> wifiService.le_wifiClient
 #endif
+#if ${LE_CONFIG_AVC_FEATURE_EDM} = y
+    avcDaemon.avcDaemon.le_atClient -> atService.le_atClient
+#endif
 }

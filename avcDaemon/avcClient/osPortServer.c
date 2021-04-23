@@ -98,3 +98,45 @@ lwm2mcore_Sid_t lwm2mcore_SetPollingTimer
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the EDM Polling Timer
+ *
+ * @return
+ *      - LWM2MCORE_ERR_COMPLETED_OK if succeeds
+ *      - LWM2MCORE_ERR_INCORRECT_RANGE parameter out of range
+ *      - LWM2MCORE_ERR_OP_NOT_SUPPORTED if not supported
+ *      - LWM2MCORE_ERR_GENERAL_ERROR other failure
+ */
+//--------------------------------------------------------------------------------------------------
+lwm2mcore_Sid_t lwm2mcore_SetEdmPollingTimer
+(
+    uint32_t interval   ///< [IN] Polling Timer interval in seconds
+)
+{
+#if LE_CONFIG_AVC_FEATURE_EDM
+    uint32_t value = interval;
+    LE_INFO("Setting EDM polling timer to %"PRIu32" seconds", interval);
+    // TBD: 1s < value < 1year - is it good enough check for EDM?
+    if (false == lwm2mcore_CheckLifetimeLimit(interval))
+    {
+        return LWM2MCORE_ERR_INCORRECT_RANGE;
+    }
+
+    // TBD: 20years magic number - is it good for EDM?
+    if (LWM2MCORE_LIFETIME_VALUE_DISABLED == interval)
+    {
+        value = 0;
+    }
+
+    if (LE_OK != avcServer_SetEdmPollingTimerInSeconds(value))
+    {
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
+
+    return LWM2MCORE_ERR_COMPLETED_OK;
+#else
+    return LWM2MCORE_ERR_OP_NOT_SUPPORTED;
+#endif
+}

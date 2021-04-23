@@ -4424,6 +4424,87 @@ le_result_t avcServer_SetPollingTimerInSeconds
     return result;
 }
 
+
+#if LE_CONFIG_AVC_FEATURE_EDM
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to set the EDM polling timer to a value in seconds
+ *
+ * @return
+ *      - LE_OK on success.
+ *      - LE_OUT_OF_RANGE if the polling timer value is out of range (0 to 525600).
+ *      - LE_TIMOUT if timeout occured.
+ *      - LE_FAULT upon failure to set it.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcServer_SetEdmPollingTimerInSeconds
+(
+    uint32_t pollingTimeSecs ///< [IN] Polling timer interval, seconds
+)
+{
+    le_result_t result = LE_OK;
+    le_atClient_DeviceRef_t devRef;
+    uint32_t pollingTimeMins = pollingTimeSecs / SECONDS_IN_A_MIN;
+
+    LE_INFO("Setting EDM polling timer to %u minutes", pollingTimeMins);
+
+    // Prepare the device
+    int fd = open("/dev/ttyAT", O_RDWR | O_NOCTTY | O_NONBLOCK);
+    devRef = le_atClient_Start(fd);
+    le_atClient_CmdRef_t cmdRef;
+    cmdRef = le_atClient_Create();
+    result = le_atClient_SetDevice(cmdRef, devRef);
+    if (result != LE_OK)
+    {
+        LE_ERROR("Error setting AT client device: %s", LE_RESULT_TXT(result));
+        goto exit;
+    }
+
+    // Send the command: AT+DRCC=1,T where T is periodic session time in munites.
+    char cmdBuf[64] = {0};
+    snprintf(cmdBuf, sizeof(cmdBuf), "AT+DRCC=0,%u", pollingTimeMins);
+    LE_INFO("Sending AT command: %s", cmdBuf);
+    result = le_atClient_SetCommandAndSend(&cmdRef,
+                                           devRef,
+                                           cmdBuf,
+                                           "",
+                                           "OK|ERROR|+CME ERROR",
+                                           LE_ATDEFS_COMMAND_DEFAULT_TIMEOUT);
+    if (result != LE_OK)
+    {
+        LE_ERROR("Error sending AT command: %s", LE_RESULT_TXT(result));
+        goto exit;
+    }
+
+    // Get the response
+    char respBuf[LE_ATDEFS_RESPONSE_MAX_BYTES] = {0};
+    result = le_atClient_GetFinalResponse(cmdRef,respBuf, LE_ATDEFS_RESPONSE_MAX_BYTES);
+    if (result != LE_OK)
+    {
+        LE_ERROR("Error getting AT command response: %s", LE_RESULT_TXT(result));
+        goto exit;
+    }
+    else if (strcmp(respBuf,"OK") != 0)
+    {
+        LE_ERROR("Final response not OK: '%s'", respBuf);
+        result = LE_FAULT;
+        goto exit;
+    }
+    LE_DEBUG("Response: %s value %s", LE_RESULT_TXT(result), respBuf);
+
+    // Close/cleanup
+exit:
+    result = le_atClient_Delete(cmdRef);
+    if (result != LE_OK)
+    {
+        LE_ERROR("Error deleting AT client: %s", LE_RESULT_TXT(result));
+    }
+
+    close(fd);
+    return result;
+}
+#endif // LE_CONFIG_AVC_FEATURE_EDM
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Function to get the user agreement state
