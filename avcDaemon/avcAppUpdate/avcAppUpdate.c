@@ -329,6 +329,7 @@ static bool IsHiddenApp
                 "portService",
                 "positioningService",
                 "powerMgr",
+                "powerService",
                 "qmiAirVantage",
                 "secStore",
                 "smsInboxService",
