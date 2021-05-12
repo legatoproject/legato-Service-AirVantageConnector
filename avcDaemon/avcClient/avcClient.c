@@ -159,9 +159,11 @@ static le_event_Id_t BsFailureEventId;
  */
 //--------------------------------------------------------------------------------------------------
 static int SessionStarted[2] = {0, 0};
+// Server ID used for Extended Device Management Server
+#define EDM_SERVER_ID 1000
 #else
 static bool SessionStarted = false;
-#endif
+#endif // LE_CONFIG_AVC_FEATURE_EDM
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1348,6 +1350,11 @@ le_result_t avcClient_Disconnect
     le_result_t result = LE_OK;
 
     avcServer_ResetDownloadAgreement();
+
+#ifdef LE_CONFIG_AVC_FEATURE_EDM
+    // Do not send DEREGISTER message for EDM server
+    lwm2mcore_SkipDeregister(Lwm2mInstanceRef, EDM_SERVER_ID);
+#endif
 
     // If the LWM2MCORE_TIMER_STEP timer is running, this means that a connection is active.
     // In that case, attempt to disconnect.
