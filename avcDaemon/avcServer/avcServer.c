@@ -4462,7 +4462,7 @@ le_result_t avcServer_SetEdmPollingTimerInSeconds
 
     // Send the command: AT+DRCC=1,T where T is periodic session time in munites.
     char cmdBuf[64] = {0};
-    snprintf(cmdBuf, sizeof(cmdBuf), "AT+DRCC=0,%u", pollingTimeMins);
+    snprintf(cmdBuf, sizeof(cmdBuf), "AT+DRCC=0,%u", (unsigned int)pollingTimeMins);
     LE_INFO("Sending AT command: %s", cmdBuf);
     result = le_atClient_SetCommandAndSend(&cmdRef,
                                            devRef,

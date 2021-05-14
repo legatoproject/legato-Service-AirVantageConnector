@@ -9,6 +9,9 @@ executables:
     avcDaemon = (avcDaemon deviceManagement
 #if ${LE_CONFIG_LINUX} = ""
                  ${LEGATO_ROOT}/components/fwupdate/fwupdateDaemon
+#if ${LE_CONFIG_AVC_FEATURE_EDM} = y
+                 atClientAlt1250
+#endif
 #endif
                 )
 }
@@ -126,7 +129,9 @@ bindings:
 #if ${LE_CONFIG_ENABLE_WIFI} = y
     avcDaemon.deviceManagement.le_wifiClient -> wifiService.le_wifiClient
 #endif
+#if ${LE_CONFIG_LINUX} = y
 #if ${LE_CONFIG_AVC_FEATURE_EDM} = y
     avcDaemon.avcDaemon.le_atClient -> atService.le_atClient
+#endif
 #endif
 }
