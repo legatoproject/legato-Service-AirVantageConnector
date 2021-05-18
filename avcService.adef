@@ -102,6 +102,8 @@ bindings:
     avcDaemon.deviceManagement.le_fwupdate -> fwupdateService.le_fwupdate
     avcDaemon.deviceManagement.le_power -> powerService.le_power
     avcDaemon.avcDaemon.le_clkSync -> <root>.le_clkSync
+#elif ${MK_CONFIG_AVC_DISABLE_MCU_VERSION} = ""
+    avcDaemon.deviceManagement.le_ulpm -> powerMgr.le_ulpm
 #endif
     avcDaemon.avcDaemon.le_ulpm -> powerMgr.le_ulpm
     avcDaemon.avcDaemon.le_data -> dataConnectionService.le_data

@@ -683,7 +683,7 @@ static size_t GetCarrierPriVersion
 }
 #endif
 
-#ifndef LE_CONFIG_CUSTOM_OS
+#ifndef MK_CONFIG_AVC_DISABLE_MCU_VERSION
 //--------------------------------------------------------------------------------------------------
 /**
  * Retrieve MCU version
@@ -702,7 +702,7 @@ static size_t GetMcuVersion
 
     if (NULL != versionBufferPtr)
     {
-#if LE_CONFIG_SOTA
+#if defined(LE_CONFIG_SOTA) || !defined(MK_CONFIG_AVC_DISABLE_MCU_VERSION)
         char mcuVersion[LE_ULPM_MAX_VERS_LEN+1];
         if (LE_OK == le_ulpm_GetFirmwareVersion(mcuVersion, sizeof(mcuVersion)))
         {
@@ -716,7 +716,7 @@ static size_t GetMcuVersion
             }
         }
         else
-#endif /* end LE_CONFIG_SOTA */
+#endif /* end defined(LE_CONFIG_SOTA) || !defined(MK_CONFIG_AVC_DISABLE_MCU_VERSION) */
         {
             LE_ERROR("Failed to retrieve MCU version");
             returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
@@ -911,7 +911,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
 #ifndef MK_CONFIG_NO_CARRIER_PRI
       { CARRIER_PRI_TAG,        GetCarrierPriVersion        },
 #endif
-#ifndef LE_CONFIG_CUSTOM_OS
+#ifndef MK_CONFIG_AVC_DISABLE_MCU_VERSION
       { MCU_TAG,                GetMcuVersion               }
 #endif
     };
