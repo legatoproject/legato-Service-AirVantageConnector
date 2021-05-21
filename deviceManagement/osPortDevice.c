@@ -702,7 +702,6 @@ static size_t GetMcuVersion
 
     if (NULL != versionBufferPtr)
     {
-#if defined(LE_CONFIG_SOTA) || !defined(MK_CONFIG_AVC_DISABLE_MCU_VERSION)
         char mcuVersion[LE_ULPM_MAX_VERS_LEN+1];
         if (LE_OK == le_ulpm_GetFirmwareVersion(mcuVersion, sizeof(mcuVersion)))
         {
@@ -716,7 +715,6 @@ static size_t GetMcuVersion
             }
         }
         else
-#endif /* end defined(LE_CONFIG_SOTA) || !defined(MK_CONFIG_AVC_DISABLE_MCU_VERSION) */
         {
             LE_ERROR("Failed to retrieve MCU version");
             returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);

@@ -19,9 +19,7 @@ requires:
     {
         airVantage/le_avc.api [types-only]
         le_data.api
-#if ${LE_CONFIG_SOTA} = y
-        le_ulpm.api
-#elif ${MK_CONFIG_AVC_DISABLE_MCU_VERSION} = ""
+#if ${MK_CONFIG_AVC_DISABLE_MCU_VERSION} = ""
         le_ulpm.api
 #endif
 #if ${LE_CONFIG_LINUX} = y
