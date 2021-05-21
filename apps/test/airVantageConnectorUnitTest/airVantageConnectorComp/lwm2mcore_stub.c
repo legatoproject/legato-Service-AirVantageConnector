@@ -1000,3 +1000,45 @@ const uint8_t* lwm2mcore_GetRequestPayload
 {
     return NULL;
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the flag specifying whether Extended Device Management (EDM) feature is enabled
+ */
+//--------------------------------------------------------------------------------------------------
+void lwm2mcore_SetEdmEnabled
+(
+    lwm2mcore_Ref_t instanceRef,    ///< [IN] instance reference
+    bool isEdmEnabled               ///< [IN] Whether EDM is enabled
+)
+{}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Set the "active" server ID
+ *
+ * Extended Device Management (EDM) requires the ability to establish a session with DM server with
+ * specific Short Server ID. This API sets the selective server as "active", so that other known
+ * DM servers are excluded from the session.
+ */
+//--------------------------------------------------------------------------------------------------
+void lwm2mcore_SetServer
+(
+    lwm2mcore_Ref_t instanceRef,    ///< [IN] instance reference
+    uint16_t        serverId        ///< [IN] server ID. Can be ALL_SERVERS (0xFFFF)
+)
+{}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Skip deregister msg for a serverID. By default, a deregister message is sent by default
+ * when disconnecting.
+ */
+//--------------------------------------------------------------------------------------------------
+void lwm2mcore_SkipDeregister
+(
+    lwm2mcore_Ref_t instanceRef,    ///< [IN] Instance reference
+    uint16_t shortID                ///< [IN] Server ID
+)
+{}

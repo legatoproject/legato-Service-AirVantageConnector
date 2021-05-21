@@ -10,6 +10,9 @@ requires:
         le_data.api                                         [types-only]
         modemServices/le_sms.api                            [types-only]
         modemServices/le_mrc.api                            [types-only]
+#if ${LE_CONFIG_AVC_FEATURE_EDM} = y
+        atServices/le_atClient.api                          [types-only]
+#endif
     }
 }
 
