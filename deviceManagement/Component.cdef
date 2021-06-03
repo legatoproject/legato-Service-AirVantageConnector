@@ -79,7 +79,7 @@ cflags:
     -I${LEGATO_ROOT}/components/power
     -std=gnu99
     -DWITH_SHA256
-#if ${LE_CONFIG_LINUX} = ""
+#if ${MK_CONFIG_AVC_DISABLE_MCU_VERSION} = y
     -DAV_SYSTEM_CONFIGURATION
 #endif
 }
