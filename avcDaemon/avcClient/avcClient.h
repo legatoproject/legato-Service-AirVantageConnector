@@ -52,6 +52,20 @@ le_result_t avcClient_Disconnect
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Check the session started flag for a given server Id.
+ *
+ * @return
+ *      - true if session is started
+ *      - false otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+bool avcClient_IsSessionStarted
+(
+    uint16_t serverId
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
  * LwM2M client entry point to send a registration update.
  *
  * @return

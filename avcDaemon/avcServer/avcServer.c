@@ -4890,6 +4890,23 @@ void le_avc_SetNatTimeout
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Check whether the session is started for a given Server Id.
+ *
+ * @return
+ *      - true if session is started
+ *      - false otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+bool le_avc_IsSessionStarted
+(
+    uint16_t serverId       ///< [IN] Short Server ID
+)
+{
+    return avcClient_IsSessionStarted(serverId);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Initialization function for AVC Daemon
  */
 //--------------------------------------------------------------------------------------------------
