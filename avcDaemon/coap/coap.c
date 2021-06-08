@@ -36,6 +36,16 @@ static le_avc_StatusEventHandlerRef_t AvcStatusHandler;
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * String debug
+ */
+//--------------------------------------------------------------------------------------------------
+#define COAP_PUSH_RESULT_SUCCESS_STRING         "SUCCESS"
+#define COAP_PUSH_RESULT_TIMEOUT_STRING         "TIMEOUT"
+#define COAP_PUSH_RESULT_FAILURE_STRING         "FAILURE"
+#define COAP_PUSH_RESULT_INVALID_STRING         "INVALID"
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Data associated with the CoAP message event
  */
 //--------------------------------------------------------------------------------------------------
@@ -210,12 +220,51 @@ static le_coap_PushStatus_t ConvertAckToPushStatus
     lwm2mcore_AckResult_t result     ///< [IN] Acknowledge status in Lwm2mCore
 )
 {
-    if (result == LWM2MCORE_ACK_RECEIVED)
+    switch (result)
     {
-        return LE_COAP_PUSH_SUCCESS;
-    }
+        case LWM2MCORE_ACK_RECEIVED:
+            return LE_COAP_PUSH_SUCCESS;
 
-    return LE_COAP_PUSH_FAILED;
+        case LWM2MCORE_ACK_TIMEOUT:
+            return LE_COAP_PUSH_TIMEOUT;
+
+        case LWM2MCORE_ACK_FAILURE:
+            return LE_COAP_PUSH_FAILED;
+
+        default:
+            LE_ERROR("Invalid push result: %d", result);
+            return LE_COAP_PUSH_FAILED;
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Return string related to CoAP result
+ *
+ * @return
+ *     - CoAP error string
+ */
+//--------------------------------------------------------------------------------------------------
+static char* ConvertPushStatusToString
+(
+    le_coap_PushStatus_t result     ///< [IN] CoAP push result
+)
+{
+    switch (result)
+    {
+        case LE_COAP_PUSH_SUCCESS:
+            return COAP_PUSH_RESULT_SUCCESS_STRING;
+
+        case LE_COAP_PUSH_TIMEOUT:
+            return COAP_PUSH_RESULT_TIMEOUT_STRING;
+
+        case LE_COAP_PUSH_FAILED:
+            return COAP_PUSH_RESULT_FAILURE_STRING;
+
+        default:
+            LE_ERROR("Invalid push result: %d", result);
+            return COAP_PUSH_RESULT_INVALID_STRING;
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -309,8 +358,13 @@ static void CoapAckHandler
                               (le_coap_PushHandlerFunc_t)coapNotificationPtr->callbackRef;
 
     le_coap_PushStatus_t pushStatus = ConvertAckToPushStatus(ackResult);
+    if (LE_COAP_PUSH_SUCCESS != pushStatus)
+    {
+        LE_ERROR("CoAP push error: %s (lwm2mcore error %d)",
+                 ConvertPushStatusToString(pushStatus), ackResult);
+    }
 
-    if (pushStatus == LE_COAP_PUSH_FAILED)
+    if (LE_COAP_PUSH_SUCCESS != pushStatus)
     {
         // Reset the busy flag, to prevent the stream from permanently remaining in busy state.
         PushBusy = false;
@@ -648,6 +702,37 @@ le_result_t le_coap_Push
     // Reset the busy flag, to prevent the stream from permanently remaining in busy state.
     PushBusy = false;
     return LE_FAULT;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * This function retrieves the last CoAP error code for a CoAP push
+ *
+ * If the last CoAP push leads to a timeout, this function will return LE_FAULT if it's called.
+ *
+ * @return
+ *     - LE_OK on success.
+ *     - LE_BAD_PARAMETER on incorrect parameter
+ *     - LE_FAULT if failed.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_coap_GetLastErrorCode
+(
+    le_coap_Code_t*    errorCodePtr            ///< [OUT] Error code
+)
+{
+    uint8_t lwm2mcoreErroCode = 0;
+    if (!errorCodePtr)
+    {
+        return LE_BAD_PARAMETER;
+    }
+    if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_GetLastCoapPushError(&lwm2mcoreErroCode))
+    {
+        return LE_FAULT;
+    }
+    *errorCodePtr = (le_coap_Code_t)lwm2mcoreErroCode;
+    return LE_OK;
 }
 
 //--------------------------------------------------------------------------------------------------
