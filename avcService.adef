@@ -133,7 +133,7 @@ bindings:
 #endif
 #if ${LE_CONFIG_LINUX} = y
 #if ${LE_CONFIG_AVC_FEATURE_EDM} = y
-    avcDaemon.avcDaemon.le_atClient -> atService.le_atClient
+    avcDaemon.le_pa_avc.le_atClient -> atService.le_atClient
 #endif
 #endif
 }

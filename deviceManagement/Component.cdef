@@ -48,7 +48,6 @@ requires:
 
     component:
     {
-        $LEGATO_AVC_PA_DEFAULT
         ${LEGATO_ROOT}/components/power
     }
 }
