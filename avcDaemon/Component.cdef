@@ -34,9 +34,6 @@ requires:
         modemServices/le_sms.api
         le_clkSync.api
 #endif
-#if ${LE_CONFIG_AVC_FEATURE_EDM} = y
-        atServices/le_atClient.api
-#endif
     }
 
     component:
@@ -54,6 +51,7 @@ requires:
         ${LEGATO_ROOT}/components/3rdParty/zlib
         ${LEGATO_ROOT}/components/appCfg
 #endif
+        $LEGATO_AVC_PA
     }
 #if ${LE_CONFIG_LINUX} = y
     lib:
@@ -178,7 +176,7 @@ sources:
 
 cflags:
 {
-    -I${LEGATO_ROOT}/components/airVantage/platformAdaptor/inc
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/platformAdaptor/inc
     -I${LEGATO_ROOT}/components/appCfg
     -I${LEGATO_ROOT}/components/watchdogChain
     -I${LEGATO_ROOT}/framework/liblegato
