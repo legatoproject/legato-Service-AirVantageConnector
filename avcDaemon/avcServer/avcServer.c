@@ -4433,7 +4433,7 @@ le_result_t avcServer_SetPollingTimerInSeconds
  * @return
  *      - LE_OK on success.
  *      - LE_OUT_OF_RANGE if the polling timer value is out of range (0 to 525600).
- *      - LE_TIMOUT if timeout occured.
+ *      - LE_TIMEOUT if timeout occured.
  *      - LE_FAULT upon failure to set it.
  */
 //--------------------------------------------------------------------------------------------------
@@ -4460,7 +4460,7 @@ le_result_t avcServer_SetEdmPollingTimerInSeconds
         goto exit;
     }
 
-    // Send the command: AT+DRCC=1,T where T is periodic session time in munites.
+    // Send the command: AT+DRCC=1,T where T is periodic session time in minutes.
     char cmdBuf[64] = {0};
     snprintf(cmdBuf, sizeof(cmdBuf), "AT+DRCC=0,%u", (unsigned int)pollingTimeMins);
     LE_INFO("Sending AT command: %s", cmdBuf);
@@ -4473,6 +4473,7 @@ le_result_t avcServer_SetEdmPollingTimerInSeconds
     if (result != LE_OK)
     {
         LE_ERROR("Error sending AT command: %s", LE_RESULT_TXT(result));
+        cmdRef = NULL;
         goto exit;
     }
 
@@ -4494,12 +4495,14 @@ le_result_t avcServer_SetEdmPollingTimerInSeconds
 
     // Close/cleanup
 exit:
-    result = le_atClient_Delete(cmdRef);
-    if (result != LE_OK)
+    if (cmdRef)
     {
-        LE_ERROR("Error deleting AT client: %s", LE_RESULT_TXT(result));
+        result = le_atClient_Delete(cmdRef);
+        if (result != LE_OK)
+        {
+            LE_ERROR("Error deleting AT client: %s", LE_RESULT_TXT(result));
+        }
     }
-
     close(fd);
     return result;
 }
