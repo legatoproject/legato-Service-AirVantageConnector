@@ -4469,10 +4469,20 @@ le_result_t avcServer_SetEdmPollingTimerInSeconds
                                            cmdBuf,
                                            "",
                                            "OK|ERROR|+CME ERROR",
-                                           LE_ATDEFS_COMMAND_DEFAULT_TIMEOUT);
+                                           5000);
     if (result != LE_OK)
     {
-        LE_ERROR("Error sending AT command: %s", LE_RESULT_TXT(result));
+        /* A timeout is a result of the modem not supporting this command. We will
+         * proceed without returning an error */
+        if (result == LE_TIMEOUT)
+        {
+            LE_DEBUG("AT command timed out. Command not supported by modem.");
+            result = LE_OK;
+        }
+        else
+        {
+            LE_ERROR("Error sending AT command: %s", LE_RESULT_TXT(result));
+        }
         cmdRef = NULL;
         goto exit;
     }
