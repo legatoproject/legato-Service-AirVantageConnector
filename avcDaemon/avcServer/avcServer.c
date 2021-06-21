@@ -4476,7 +4476,14 @@ le_result_t avcServer_SetEdmPollingTimerInSeconds
          * proceed without returning an error */
         if (result == LE_TIMEOUT)
         {
-            LE_DEBUG("AT command timed out. Command not supported by modem.");
+            LE_DEBUG("AT cmd timed out. Command not supported by modem.");
+            result = LE_OK;
+        }
+        /* A fault can occur when modem does not have an updated support for DRCC=0,T where
+        *  T can be at max 2mins. */
+        else if ((result == LE_FAULT) && (pollingTimeMins > 2))
+        {
+            LE_DEBUG("AT cmd faulted with invalid range values. Command not fully supported.");
             result = LE_OK;
         }
         else
