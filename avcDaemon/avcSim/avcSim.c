@@ -559,7 +559,7 @@ le_result_t avcSim_SetSimApduConfig
     LE_DEBUG("data length %" PRIuS, length);
     LE_DUMP(bufferPtr, length);
 
-#if LE_CONFIG_ENABLE_CONFIG_TREE
+#if LE_CONFIG_AVC_FEATURE_EDM
     // Save to the config tree
     le_cfg_IteratorRef_t iteratorRef = le_cfg_CreateWriteTxn(LE_AVC_CONFIG_TREE_ROOT);
 
@@ -588,7 +588,7 @@ le_result_t avcSim_ExecuteSimApduConfig
     void
 )
 {
-#if LE_CONFIG_ENABLE_CONFIG_TREE
+#if LE_CONFIG_AVC_FEATURE_EDM
     uint8_t readBuf[256] = {0};
     uint8_t byte = 0;
     le_result_t result = LE_FAULT;
@@ -657,7 +657,7 @@ le_result_t avcSim_SetSimApduResponse
         LE_DUMP(bufferPtr, length);
     }
 
-#if LE_CONFIG_ENABLE_CONFIG_TREE
+#if LE_CONFIG_AVC_FEATURE_EDM
     le_cfg_IteratorRef_t iteratorRef = le_cfg_CreateWriteTxn(LE_AVC_CONFIG_TREE_ROOT);
 
     if (bufferPtr)
@@ -693,7 +693,7 @@ le_result_t avcSim_GetSimApduResponse
     size_t* lenPtr      ///< [INOUT] SIM APDU buffer size / response length
 )
 {
-#if LE_CONFIG_ENABLE_CONFIG_TREE
+#if LE_CONFIG_AVC_FEATURE_EDM
     // Read the data from the config tree.
     // Normally, the APDU response would be written to the Config Tree by atAirVantage app,
     // after it's received from the Modem FW (via AT command).
