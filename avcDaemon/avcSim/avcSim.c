@@ -364,6 +364,9 @@ SimMode_t GetCurrentSimMode
         case(LE_SIM_FORCE_INTERNAL):
             ret = MODE_INTERNAL_SIM;
             break;
+        case(LE_SIM_FORCE_REMOTE):
+            ret = MODE_INTERNAL_SIM;
+            break;
         case(LE_SIM_PREF_EXTERNAL):
             ret = MODE_PREF_EXTERNAL_SIM;
             break;
