@@ -51,7 +51,9 @@ requires:
         ${LEGATO_ROOT}/components/3rdParty/zlib
         ${LEGATO_ROOT}/components/appCfg
 #endif
+#if ${LE_CONFIG_AVC_FEATURE_EDM} = y
         $LEGATO_AVC_PA
+#endif
     }
 #if ${LE_CONFIG_LINUX} = y
     lib:
