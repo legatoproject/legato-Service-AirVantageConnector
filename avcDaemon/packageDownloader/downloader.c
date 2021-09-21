@@ -903,14 +903,14 @@ downloaderResult_t downloader_StartDownload
     if (LE_OK != status)
     {
         LE_ERROR("Unable to start HTTP client");
-        goto end;
+        goto error;
     }
 
     status = le_httpClient_SetAsyncMode(HttpClientRef, true);
     if ((LE_OK != status) && (LE_DUPLICATE != status))
     {
         LE_ERROR("Unable to set asynchronous mode");
-        goto end;
+        goto error;
     }
 
     PackageUriDetails.opaquePtr = opaquePtr;
@@ -921,6 +921,15 @@ downloaderResult_t downloader_StartDownload
                                    HTTP_GET,
                                    PackageUriDetails.pathPtr,
                                    SendRequestRspCb);
+    goto end;
+
+error:
+    if (HttpClientRef)
+    {
+        le_httpClient_Delete(HttpClientRef);
+        HttpClientRef = NULL;
+    }
+
 end:
     return ConvertResult(status);
 }
