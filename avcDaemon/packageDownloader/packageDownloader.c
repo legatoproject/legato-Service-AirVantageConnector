@@ -1047,6 +1047,15 @@ void packageDownloader_FinalizeDownload
             LE_DEBUG("Store thread with return value = %d", *storeThreadReturnPtr);
         }
 
+        // Check if the downloaded is suspended
+        LE_DEBUG("Check if the downloaded is suspended, ret %d, suspended ? %d",
+                 ret, downloader_CheckDownloadToSuspend());
+        if ((LE_OK != ret)
+         && (downloader_CheckDownloadToSuspend()))
+        {
+            ret = LE_OK;
+            LE_DEBUG("Download is suspended: consider download as OK");
+        }
 
         // Check is an issue happened on download start
         // In this case, LwM2MCore already sends a notification to AVC
