@@ -107,7 +107,7 @@ static void GetCredPath
                        credPathSize,
                        "%s",
                        SECURE_STORAGE_PREFIX) < credPathSize);
-#if LE_CONFIG_AVC_FEATURE_EDM
+
     if (serverId <= LE_AVC_SERVER_ID_AIRVANTAGE)
     {
         // Store to the backward-compatible location (/avms/)
@@ -134,13 +134,6 @@ static void GetCredPath
 
         LE_INFO("Cred path: %s", credPathPtr);
     }
-#else   // LE_CONFIG_AVC_FEATURE_EDM
-    LE_FATAL_IF(LE_OK != le_path_Concat("/",
-                                        credPathPtr,
-                                        credPathSize,
-                                        CredentialLocations[credId],
-                                        (char*)NULL), "Buffer is not long enough");
-#endif  // LE_CONFIG_AVC_FEATURE_EDM
 }
 
 //--------------------------------------------------------------------------------------------------

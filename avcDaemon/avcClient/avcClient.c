@@ -234,10 +234,12 @@ LE_MEM_DEFINE_STATIC_POOL(ActivityTimerEventsPool,
 //--------------------------------------------------------------------------------------------------
 static le_mem_PoolRef_t ActivityTimerEventsPool;
 
-#if LE_CONFIG_AVC_FEATURE_EDM
-/// Server ID for the current session.
+//--------------------------------------------------------------------------------------------------
+/**
+ * Server ID for the current session
+ */
+//--------------------------------------------------------------------------------------------------
 static uint16_t ServerId = LE_AVC_SERVER_ID_AIRVANTAGE;
-#endif
 
 //--------------------------------------------------------------------------------------------------
 // Local functions
@@ -1077,8 +1079,8 @@ static void StartBearer
 
 #if LE_CONFIG_AVC_FEATURE_EDM
     lwm2mcore_SetEdmEnabled(Lwm2mInstanceRef, true);
-    lwm2mcore_SetServer(Lwm2mInstanceRef, ServerId);
 #endif
+    lwm2mcore_SetServer(Lwm2mInstanceRef, ServerId);
 
     LE_INFO("Start Bearer");
     // Initialize the bearer and open a data connection.
@@ -1169,11 +1171,7 @@ static void avcClient_RetryTimer
     le_timer_Ref_t timerRef    ///< [IN] Expired timer reference
 )
 {
-#if LE_CONFIG_AVC_FEATURE_EDM
     le_result_t rc = avcClient_Connect(ServerId);
-#else
-    le_result_t rc = avcClient_Connect(LE_AVC_SERVER_ID_AIRVANTAGE);
-#endif
     if (rc != LE_OK)
     {
         LE_ERROR("Unable to request a connection to the server");
@@ -1233,11 +1231,7 @@ le_result_t avcClient_Connect
     }
 
     // Set the Server ID global (assuming only one session can happen at a time)
-#if LE_CONFIG_AVC_FEATURE_EDM
     ServerId = serverId;
-#else
-    LE_UNUSED(serverId);
-#endif
 
     // If Lwm2mInstanceRef exists, then that means the current call is a "retry", which is
     // performed by stopping the previous data connection first.
