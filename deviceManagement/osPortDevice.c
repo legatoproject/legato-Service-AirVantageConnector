@@ -213,6 +213,9 @@ static lwm2mcore_powerSource_enum_t ConvertPowerSource
         case LE_POWER_AC_POWER:
             return LWM2MCORE_DEVICE_PWR_SRC_TYPE_AC_POWER;
 
+        case LE_POWER_SOLAR:
+            return LWM2MCORE_DEVICE_PWR_SRC_TYPE_SOLAR;
+
         default:
             return LWM2MCORE_DEVICE_PWR_SRC_TYPE_DC_POWER;
     }
