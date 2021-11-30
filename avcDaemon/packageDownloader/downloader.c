@@ -994,6 +994,7 @@ void downloader_SuspendDownload
 
     // Suspend ongoing download
     SetDownloadStatus(DWL_SUSPEND);
+    le_httpClient_SetTimeout(HttpClientRef, 1);
 }
 
 //--------------------------------------------------------------------------------------------------
