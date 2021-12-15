@@ -69,7 +69,6 @@ extern:
     avcDaemon.avcDaemon.le_appInfo
     avcCfg      = avcDaemon.avcDaemon.le_cfg
     fwUpdateCfg = avcDaemon.fwupdateDaemon.le_cfg
-    avcDaemon.avcDaemon.le_secStore
 #endif
     avcDaemon.watchdogChain.le_wdog
 }
