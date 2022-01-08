@@ -1255,6 +1255,10 @@ le_result_t avcClient_Connect
         }
 
         StopBearer();
+
+        // Release memory allocated in lwm2mcore
+        lwm2mcore_Free(Lwm2mInstanceRef);
+        Lwm2mInstanceRef = NULL;
     }
 
     StartBearer();
