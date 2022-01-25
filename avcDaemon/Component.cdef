@@ -23,13 +23,13 @@ requires:
         modemServices/le_mdc.api
         modemServices/le_mrc.api
         modemServices/le_sim.api
-        le_secStore.api
 #if ${LE_CONFIG_LINUX} = y
         le_instStat.api
         le_appRemove.api
         le_appCtrl.api
         le_update.api
         le_framework.api
+        le_secStore.api
         le_cellnet.api
         modemServices/le_sms.api
         le_clkSync.api
@@ -207,8 +207,6 @@ cflags:
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/platform-specific/rtos
     -I${LEGATO_BUILD}/3rdParty/inc
     -I${MAP_SRC_PATH}/apps/swi_libs
-    -I${IKS_PATH}
-    -I${IKS_PATH_SRC}
     -DLWM2M_CLIENT_MODE
     -DLWM2M_LITTLE_ENDIAN
     -DLWM2M_BOOTSTRAP
