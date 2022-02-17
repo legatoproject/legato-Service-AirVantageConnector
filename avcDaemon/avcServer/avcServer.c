@@ -4849,6 +4849,79 @@ bool le_avc_IsSessionStarted
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Provision a credential used for connecting to AirVantage.
+ *
+ * @return
+ *      - LE_OK on success.
+ *      - LE_FAULT if failed.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_avc_SetCredential
+(
+    le_avc_CredentialType_t credType, ///< [IN] Credential type
+    uint16_t                serverId, ///< [IN] LwM2M server identity
+    const uint8_t*          credPtr,  ///< [IN] Credential
+    size_t                  credSize  ///< [IN] Credential size in bytes
+)
+{
+    lwm2mcore_Credentials_t lwm2mCredType;
+    lwm2mcore_Sid_t         lwm2mStatus = LWM2MCORE_ERR_GENERAL_ERROR;
+
+    // Map le_avc credential type to lwm2mcore credential type
+    switch (credType)
+    {
+        case LE_AVC_FW_PUBLIC_KEY:
+        {
+            lwm2mCredType = LWM2MCORE_CREDENTIAL_FW_KEY;
+            break;
+        }
+#if defined(LE_CONFIG_SOTA)
+        case LE_AVC_SW_PUBLIC_KEY:
+        {
+            lwm2mCredType = LWM2MCORE_CREDENTIAL_SW_KEY;
+            break;
+        }
+#endif // defined(LE_CONFIG_SOTA)
+        case LE_AVC_BS_SERVER_ADDRESS:
+        {
+            lwm2mCredType = LWM2MCORE_CREDENTIAL_BS_ADDRESS;
+            break;
+        }
+        case LE_AVC_BS_PSK_ID:
+        {
+            lwm2mCredType = LWM2MCORE_CREDENTIAL_BS_PUBLIC_KEY;
+            break;
+        }
+        case LE_AVC_BS_PSK:
+        {
+            lwm2mCredType = LWM2MCORE_CREDENTIAL_BS_SECRET_KEY;
+            break;
+        }
+        default:
+        {
+            LE_ERROR("API does not support setting credential type %u", credType);
+            goto exit;
+        }
+    }
+
+    lwm2mStatus = lwm2mcore_SetCredential(lwm2mCredType,
+                                          serverId,
+                                          (char*)credPtr,
+                                          credSize);
+    if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mStatus)
+    {
+        LE_ERROR("Failed to write LwM2M credential: %u", lwm2mStatus);
+        goto exit;
+    }
+
+    LE_INFO("LwM2M cred %u successfully written", lwm2mCredType);
+
+exit:
+    return (LWM2MCORE_ERR_COMPLETED_OK == lwm2mStatus) ? LE_OK : LE_FAULT;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Initialization function for AVC Daemon
  */
 //--------------------------------------------------------------------------------------------------
