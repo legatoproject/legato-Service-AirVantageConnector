@@ -455,8 +455,8 @@ static void ClientCloseSessionHandler
 
             if (assetDataClientPtr->msgRef == sessionRef)
             {
-                le_mem_Release(assetDataClientPtr);
                 le_dls_Remove(&AssetDataClientList, linkPtr);
+                le_mem_Release(assetDataClientPtr);
                 linkPtr = NULL;
             }
             else
