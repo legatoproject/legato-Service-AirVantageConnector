@@ -462,8 +462,8 @@ static void DeleteTimestamp
 
         if (timestampPtr->timestamp == timestamp)
         {
-            le_mem_Release(timestampPtr);
             le_dls_Remove(&recRef->timestampList, linkPtr);
+            le_mem_Release(timestampPtr);
             linkPtr = NULL;
         }
         else
@@ -509,15 +509,15 @@ static void DeleteResourceData
                     le_mem_Release(dataPtr->strValuePtr);
                 }
 
-                le_mem_Release(dataPtr);
                 le_dls_Remove(&resourceDataPtr->dataList, &dataPtr->link);
+                le_mem_Release(dataPtr);
 
                 // Delete this resource if this is the only data entry
                 if (0 == le_dls_NumLinks(&resourceDataPtr->dataList))
                 {
                     LE_DEBUG("Deleting the resource since no data");
-                    le_mem_Release(resourceDataPtr);
                     le_dls_Remove(&recRef->resourceList, linkPtr);
+                    le_mem_Release(resourceDataPtr);
                 }
             }
 
