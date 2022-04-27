@@ -22,6 +22,8 @@
 #include "avcServer/avcServer.h"
 #include "packageDownloader/packageDownloader.h"
 #include "workspace.h"
+#include "dtlsConnection.h"
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Initialize memory areas for Lwm2m
@@ -970,6 +972,8 @@ static int EventHandler
                     SessionStarted = true;
 #endif
                 }
+                // Set NAT timeout back to default value
+                dtls_SetNatTimeout(DTLS_NAT_TIMEOUT);
             }
             else
             {
@@ -1370,6 +1374,9 @@ le_result_t avcClient_Disconnect
         }
         else
         {
+            // If disconnect even occurs due to network, we will lower the NAT timeout to manage
+            // the case where it reconnects immediately for FOTA/SOTA.
+            dtls_SetNatTimeout(DTLS_SHORT_NAT_TIMEOUT);
             result = (lwm2mcore_Disconnect(Lwm2mInstanceRef)) ? LE_OK : LE_FAULT;
         }
     }

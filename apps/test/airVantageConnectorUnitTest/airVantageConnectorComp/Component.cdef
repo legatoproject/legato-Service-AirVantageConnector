@@ -27,6 +27,7 @@ sources:
 
     airVantageConnector_stub.c
     lwm2mcore_stub.c
+    dtlsConnection_stub.c
 }
 
 cflags:

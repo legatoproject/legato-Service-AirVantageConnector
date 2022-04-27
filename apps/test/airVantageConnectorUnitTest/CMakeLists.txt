@@ -36,6 +36,7 @@ mkexe(${TEST_EXEC}
     -i ${LEGATO_ROOT}/interfaces/
     -i ${PA_DIR}/simu/components/le_pa_avc
     -i ${LEGATO_ROOT}/components/airVantage/platformAdaptor/inc/
+    -i ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/apps/test/airVantageConnectorUnitTest/airVantageConnectorComp/
     -s ${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/lwm2mcore/
     ${CFLAGS}
     ${LFLAGS}
