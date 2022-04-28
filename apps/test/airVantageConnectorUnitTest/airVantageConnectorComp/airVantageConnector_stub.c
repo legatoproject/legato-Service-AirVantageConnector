@@ -1116,6 +1116,19 @@ le_result_t tpfServer_SetTpfState
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Initialize the TPF subsystem
+ */
+//--------------------------------------------------------------------------------------------------
+void tpfServer_Init
+(
+    void
+)
+{
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Start a package download from a 3rd party server
  *
  * This will sent a request to the server to start a download.

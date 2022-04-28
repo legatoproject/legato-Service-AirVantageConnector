@@ -61,4 +61,16 @@ LE_SHARED le_result_t tpfServer_GetTpfState
     bool* isTpfEnabledPtr                  ///< [OUT] true if third party FOTA service is activated
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize the TPF subsystem
+ *
+ * Restarts TPF download if it was interrupted by power loss.
+ */
+//--------------------------------------------------------------------------------------------------
+LE_SHARED void tpfServer_Init
+(
+    void
+);
+
 #endif // LEGATO_AVC_SERVER_INCLUDE_GUARD

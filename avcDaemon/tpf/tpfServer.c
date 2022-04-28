@@ -89,6 +89,33 @@ le_result_t tpfServer_GetTpfState
     return LE_OK;
 }
 
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize the TPF subsystem
+ *
+ * Restarts TPF download if it was interrupted by power loss.
+ */
+//--------------------------------------------------------------------------------------------------
+void tpfServer_Init
+(
+    void
+)
+{
+    bool tpfEnabled = false;
+    le_result_t res;
+
+    if ((tpfServer_GetTpfState(&tpfEnabled) == LE_OK) &&
+        tpfEnabled)
+    {
+        res = avcClient_Connect(LE_AVC_SERVER_ID_AIRVANTAGE);
+        if (res != LE_OK)
+        {
+            tpfServer_SetTpfState(false);
+        }
+    }
+}
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Set package URL
