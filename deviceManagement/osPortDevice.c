@@ -107,6 +107,13 @@
 #define MCU_TAG             DELIM("MCU")
 
 //--------------------------------------------------------------------------------------------------
+/**
+ * Define for TEE (Trusted Execution Environment) tag in FW version string
+ */
+//--------------------------------------------------------------------------------------------------
+#define TEE_TAG             DELIM("TEE")
+
+//--------------------------------------------------------------------------------------------------
  /**
  *  Path to the file that stores the Legato baseline version number string.
  */
@@ -741,6 +748,47 @@ static size_t GetMcuVersion
 }
 #endif
 
+#ifdef MK_CONFIG_AVC_ENABLE_TEE_VERSION
+//--------------------------------------------------------------------------------------------------
+/**
+ * Retrieve TEE (Trusted Execution Environment) version
+ *
+ * @return
+ *      - written buffer length
+ */
+//--------------------------------------------------------------------------------------------------
+static size_t GetTeeVersion
+(
+    char* versionBufferPtr,         ///< [INOUT] Buffer to hold the string.
+    size_t len                      ///< [IN] Buffer length
+)
+{
+    size_t returnedLen = 0;
+
+    if (NULL != versionBufferPtr)
+    {
+        char teeVersion[FW_BUFFER_LENGTH];
+        if (LE_OK == le_info_GetTeeVersion(teeVersion, sizeof(teeVersion)))
+        {
+            if (strnlen(teeVersion, sizeof(teeVersion)))
+            {
+                returnedLen = snprintf(versionBufferPtr, len, "%s", teeVersion);
+            }
+            else
+            {
+                returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
+            }
+        }
+        else
+        {
+            LE_ERROR("Failed to retrieve TEE version");
+            returnedLen = snprintf(versionBufferPtr, len, "%s", UNKNOWN_VERSION);
+        }
+        LE_INFO("TEE version %s, len %zd", versionBufferPtr, returnedLen);
+    }
+    return returnedLen;
+}
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -926,7 +974,10 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetDeviceFirmwareVersion
       { CARRIER_PRI_TAG,        GetCarrierPriVersion        },
 #endif
 #ifndef MK_CONFIG_AVC_DISABLE_MCU_VERSION
-      { MCU_TAG,                GetMcuVersion               }
+      { MCU_TAG,                GetMcuVersion               },
+#endif
+#ifdef MK_CONFIG_AVC_ENABLE_TEE_VERSION
+      { TEE_TAG,                GetTeeVersion             }
 #endif
     };
 
