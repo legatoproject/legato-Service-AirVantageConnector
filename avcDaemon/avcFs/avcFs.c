@@ -123,6 +123,16 @@ le_result_t WriteFs
         return result;
     }
 
+    // Truncate down to the new size in case the new size is different from the old size
+    // On some platforms SetSize is not implemented, but is unnecessary in that case
+    // because file is truncated down to size anyway.
+    result = le_fs_SetSize(pathPtr, size);
+    if (LE_OK != result && LE_NOT_IMPLEMENTED != result)
+    {
+        LE_ERROR("Failed to set file size %s: %s", pathPtr, LE_RESULT_TXT(result));
+        return result;
+    }
+
     return LE_OK;
 }
 
