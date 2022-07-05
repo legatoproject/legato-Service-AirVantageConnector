@@ -241,6 +241,7 @@ static le_mem_PoolRef_t ActivityTimerEventsPool;
 static uint16_t ServerId = LE_AVC_SERVER_ID_AIRVANTAGE;
 #endif
 
+
 //--------------------------------------------------------------------------------------------------
 // Local functions
 //--------------------------------------------------------------------------------------------------
@@ -1729,4 +1730,11 @@ void avcClient_Init
     {
         LE_ERROR("Can not subscribe to LwM2MCore events");
     }
+
+#if MK_CONFIG_AVMS_USE_IOT_KEYSTORE && !LE_CONFIG_TARGET_HL78
+    // Migrate secret AVMS credentials from secure storage to IoTKeystore.
+    // Currently the migration is only supported on ThreadX platform and in future needs to be
+    // supported on Linux platform. Migration is not required on FreeRTOS platform.
+    MigrateAVMSCredentialIKS();
+#endif
 }
