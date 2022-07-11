@@ -18,6 +18,9 @@
 #include "packageDownloader.h"
 #include "le_httpClientLib.h"
 
+#include "tpf/tpfServer.h"
+
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Define value for HTTP protocol in HTTP header
@@ -117,6 +120,45 @@ static uint16_t HttpErrorCode = 0;
  */
 //--------------------------------------------------------------------------------------------------
 static le_result_t HttpClientResult = LE_UNAVAILABLE;
+
+
+#ifdef MK_CONFIG_AT_IP_SSL
+
+// Status whether certStore is available
+static bool NoCertStore = false;
+
+// Certificate content pool
+static le_mem_PoolRef_t   CertAndKeyDataPool;
+
+// Certificate info structure of cipher suite
+typedef struct CipherSuiteInfo
+{
+    // Cipher suite index
+    uint8_t cipherIndex;
+
+    // Authentication type
+    le_certStore_AuthType_t authType;
+
+    // Root cert
+    uint8_t *rootCert;
+    size_t rootCertLen;
+
+    // Client cert
+    uint8_t *clientCert;
+    size_t clientCertLen;
+
+    // Private key
+    uint8_t *privateKey;
+    size_t privateKeyLen;
+}
+CipherSuiteInfo_t;
+
+// Certificate info related to the cipher suite
+static CipherSuiteInfo_t CipherSuiteCerts;
+
+LE_MEM_DEFINE_STATIC_POOL(CertAndKeyDataPool, 1, LE_CERTSTORE_MAX_CERT_KEY_SIZE);
+
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -634,6 +676,269 @@ void downloader_RequestDownloadRetry
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Release certificates data from pool
+ *
+ * @return none
+ */
+//--------------------------------------------------------------------------------------------------
+static void ReleaseCerts
+(
+    void
+)
+{
+#ifdef MK_CONFIG_AT_IP_SSL
+    CipherSuiteCerts.cipherIndex = 0;
+    CipherSuiteCerts.authType = LE_CERTSTORE_UNKNOWN_AUTH;
+
+    if (CipherSuiteCerts.rootCert)
+    {
+        le_mem_Release(CipherSuiteCerts.rootCert);
+        CipherSuiteCerts.rootCert = NULL;
+        CipherSuiteCerts.rootCertLen = 0;
+    }
+
+    if (CipherSuiteCerts.clientCert)
+    {
+        le_mem_Release(CipherSuiteCerts.clientCert);
+        CipherSuiteCerts.clientCert = NULL;
+        CipherSuiteCerts.clientCertLen = 0;
+    }
+
+    if (CipherSuiteCerts.privateKey)
+    {
+        le_mem_Release(CipherSuiteCerts.privateKey);
+        CipherSuiteCerts.privateKey = NULL;
+        CipherSuiteCerts.privateKeyLen = 0;
+    }
+#endif
+}
+
+#ifdef MK_CONFIG_AT_IP_SSL
+//--------------------------------------------------------------------------------------------------
+/**
+ * Read certificates from certstore
+ *
+ * @return
+ *      - LE_OK         Successfully read certificate
+ *      - LE_NOT_FOUND  Certificte not found
+ *      - LE_FAULT      Otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t ReadCerts
+(
+    uint32_t cipherIndex                        ///< [IN] Cipher Suite profile index
+)
+{
+    le_certStore_CipherSuiteInfo_t cipherSuiteInfo;
+    uint8_t *readFsData = NULL;
+    size_t readCount;
+    le_result_t res;
+
+    if (NoCertStore)
+    {
+        LE_WARN("No le_certStore service");
+        return LE_FAULT;
+    }
+
+    res = le_certStore_GetCipherSuiteInfo(cipherIndex, &cipherSuiteInfo);
+    if (res != LE_OK)
+    {
+        LE_ERROR("Can't retrieve cipher suite information by index: %d", cipherIndex);
+        return LE_FAULT;
+    }
+
+    CipherSuiteCerts.cipherIndex = cipherSuiteInfo.cipherIndex;
+    CipherSuiteCerts.authType = cipherSuiteInfo.authType;
+
+    readFsData = (uint8_t*)le_mem_ForceAlloc(CertAndKeyDataPool);
+    memset(readFsData, 0, LE_CERTSTORE_MAX_CERT_KEY_SIZE);
+    readCount = LE_CERTSTORE_MAX_CERT_KEY_SIZE;
+
+    res = le_certStore_GetRootCert(cipherSuiteInfo.rootCertIndex, readFsData, &readCount);
+    if (LE_OK != res)
+    {
+        LE_ERROR("Failed to read certificate");
+        le_mem_Release(readFsData);
+        return LE_FAULT;
+    }
+
+    // Store the Root Certificate
+    CipherSuiteCerts.rootCert = readFsData;
+    CipherSuiteCerts.rootCertLen = readCount;
+
+    if (CipherSuiteCerts.authType == LE_CERTSTORE_MUTUAL_AUTH)
+    {
+        readFsData = (uint8_t *)le_mem_ForceAlloc(CertAndKeyDataPool);
+        memset(readFsData, 0, LE_CERTSTORE_MAX_CERT_KEY_SIZE);
+        readCount = LE_CERTSTORE_MAX_CERT_KEY_SIZE;
+        res = le_certStore_GetClientCert(cipherSuiteInfo.clientCertIndex, readFsData, &readCount);
+        if (LE_OK != res)
+        {
+            LE_ERROR("Failed to read client certificate");
+            return LE_FAULT;
+        }
+
+        // Store the Own (Client) Certificate
+        CipherSuiteCerts.clientCert = readFsData;
+        CipherSuiteCerts.clientCertLen = readCount;
+
+        readFsData = (uint8_t*)le_mem_ForceAlloc(CertAndKeyDataPool);
+        memset(readFsData, 0, LE_CERTSTORE_MAX_CERT_KEY_SIZE);
+        readCount = LE_CERTSTORE_MAX_CERT_KEY_SIZE;
+        res = le_certStore_GetPrivateKey(cipherSuiteInfo.clientCertIndex, readFsData, &readCount);
+        if (LE_OK != res)
+        {
+            LE_ERROR("Failed to read client private key");
+            return LE_FAULT;
+        }
+
+        // Store the Own (Client) Private Key
+        CipherSuiteCerts.privateKey = readFsData;
+        CipherSuiteCerts.privateKeyLen = readCount;
+    }
+
+    return LE_OK;
+}
+#endif
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Load default root certificate
+ *
+ * @return
+ *      - LE_OK         on success
+ *      - LE_FAULT      otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t ReadDefaultCert
+(
+    void
+)
+{
+    le_result_t res = le_httpClient_AddCertificate(HttpClientRef,
+                                                   DefaultDerKey,
+                                                   DEFAULT_DER_KEY_LEN);
+    if (LE_OK != res)
+    {
+        LE_ERROR("Failed to add default certificate");
+        return res;
+    }
+
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Configure an HTTP reference with corresponding TLS certificates
+ *
+ * @return
+ *      - LE_OK         on success
+ *      - LE_FAULT      otherwise
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t ConfigCerts
+(
+    void
+)
+{
+#ifdef MK_CONFIG_AT_IP_SSL
+    le_result_t res;
+    bool isTpfEnabled = false;
+    int32_t cipherSuiteIndex = TPF_DEFAULT_CIPHER_SUITE_INDEX;
+
+    // Check if HTTP client reference already exists.
+    if (!HttpClientRef)
+    {
+        LE_ERROR("HTTP client reference is not created!");
+        return LE_FAULT;
+    }
+
+    tpfServer_GetCipherSuiteProfileIndex(&cipherSuiteIndex);
+
+    // This function is being called by following four normal fota and third-party fota cases:
+    // (0) le_certStore service is unavialable (either cannot be connected or doesn't exist)
+    // (1) normal fota: no need to setup cipher suite
+    // (2) third-party fota with cipher index <0: no need to setup cipher suite, treat it as (1)
+    // (3) third-party fota with cipher index >=0: need to setup cipher suite
+    res = tpfServer_GetTpfState(&isTpfEnabled);
+
+    if (LE_OK == res && isTpfEnabled && cipherSuiteIndex >= 0)
+    {
+        // Case (0)
+        if (NoCertStore)
+        {
+            LE_ERROR("le_certStore cannot be connected or doesn't exist");
+            return LE_FAULT;
+        }
+
+        // Case (3), load certificates of cipher suite
+        res = ReadCerts(cipherSuiteIndex);
+        if (LE_OK != res)
+        {
+            LE_ERROR("Failed to load certificates of cipher suite index %d", cipherSuiteIndex);
+            goto err;
+        }
+
+        res = le_httpClient_SetCipherSuites(HttpClientRef, CipherSuiteCerts.cipherIndex);
+        if (res != LE_OK)
+        {
+            LE_ERROR("Can't set cipher suite code %d to httpLib", CipherSuiteCerts.cipherIndex);
+            goto err;
+        }
+
+        res = le_httpClient_AddCertificate(HttpClientRef,
+                                           CipherSuiteCerts.rootCert,
+                                           CipherSuiteCerts.rootCertLen);
+        if (res != LE_OK)
+        {
+            LE_ERROR("Can't set root certificate to httpLib");
+            goto err;
+        }
+
+        // Only need to set client cert and private key to httpLib when in mutual authentication
+        if (CipherSuiteCerts.authType == LE_CERTSTORE_MUTUAL_AUTH)
+        {
+            res = le_httpClient_AddOwnCertificate(HttpClientRef,
+                                                  CipherSuiteCerts.clientCert,
+                                                  CipherSuiteCerts.clientCertLen);
+            if (res != LE_OK)
+            {
+                LE_ERROR("Can't set client certificate to httpLib");
+                goto err;
+            }
+
+            res = le_httpClient_AddOwnPrivateKey(HttpClientRef,
+                                                 CipherSuiteCerts.privateKey,
+                                                 CipherSuiteCerts.privateKeyLen);
+            if (LE_OK != res)
+            {
+                LE_ERROR("Failed to add client private key");
+                goto err;
+            }
+        }
+
+        return LE_OK;
+    }
+    else
+    {
+        // Case (1) and (2), load default root certificate
+        return ReadDefaultCert();
+    }
+
+err:
+
+    ReleaseCerts();
+    return LE_FAULT;
+
+#else
+
+    return ReadDefaultCert();
+
+#endif
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Initialize and start HTTP client
  *
  * @return
@@ -695,11 +1000,11 @@ static le_result_t StartHttpClient
 
     if (PackageUriDetails.isSecure)
     {
-        status = le_httpClient_AddCertificate(HttpClientRef, DefaultDerKey, DEFAULT_DER_KEY_LEN);
+        status = ConfigCerts();
         if (LE_OK != status)
         {
-            LE_ERROR("Failed to add certificate");
-            return status;
+            LE_ERROR("Failed configure TLS");
+            goto end;
         }
     }
 
@@ -722,22 +1027,30 @@ static le_result_t StartHttpClient
         {
             LE_DEBUG("Suspend the download, MRC service state %d", serviceState);
             downloader_SuspendDownload();
-            return status;
+            goto end;
         }
 #endif /* LE_CONFIG_RTOS */
         LE_ERROR("Unable to connect HTTP client, bad package URI");
         StatusCodeCb(HttpClientRef, HTTP_404);
-        return status;
+        goto end;
     }
 
     if (LE_OK != status)
     {
         LE_ERROR("Unable to connect HTTP client");
-        return status;
+        goto end;
     }
+
+    // Release certs
+    ReleaseCerts();
 
     HttpClientResult = status;
     return LE_OK;
+
+end:
+
+    ReleaseCerts();
+    return status;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1074,4 +1387,42 @@ lwm2mcore_Sid_t lwm2mcore_GetLastHttpErrorCode
 
     *errorCode = HttpErrorCode;
     return LWM2MCORE_ERR_COMPLETED_OK;;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize the downloader module
+ *
+ * @return none
+ */
+//--------------------------------------------------------------------------------------------------
+void downloader_Init
+(
+    void
+)
+{
+#ifdef MK_CONFIG_AT_IP_SSL
+    le_result_t res;
+    // Initialize the memory pool for certificates used to download fota package from third-party
+    // server
+    CertAndKeyDataPool = le_mem_InitStaticPool(CertAndKeyDataPool,
+                                               1,
+                                               LE_CERTSTORE_MAX_CERT_KEY_SIZE);
+
+    LE_INFO("Connecting to le_certStore service");
+    res = le_certStore_TryConnectService();
+    if (LE_OK != res)
+    {
+        if (LE_UNAVAILABLE == res)
+        {
+            // Wait until connected if service exists but not ready
+            le_certStore_ConnectService();
+        }
+        else
+        {
+            LE_WARN("le_certStore cannot be connected or doesn't exist");
+            NoCertStore = true;
+        }
+    }
+#endif
 }

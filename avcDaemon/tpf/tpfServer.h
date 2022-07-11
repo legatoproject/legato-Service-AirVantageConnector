@@ -20,17 +20,32 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
- * FTP server state filesystem directory path
+ * TPF mode state filesystem path
  */
 //--------------------------------------------------------------------------------------------------
 #define TPF_SERVER_LEFS_DIR                     "/avc/fw/isTpfServerEnable"
 
 //--------------------------------------------------------------------------------------------------
 /**
- * FTP server state filesystem directory path
+ * TPF server package URL filesystem path
  */
 //--------------------------------------------------------------------------------------------------
-#define TPF_SERVER_URL_DIR                     "/avc/param5"
+#define TPF_SERVER_URL_DIR                      "/avc/param5"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * TPF cipher suite index filesystem path
+ */
+//--------------------------------------------------------------------------------------------------
+#define TPF_CIPHER_SUITE_INDEX_PATH             "/avc/param6"
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Default cipher suite index
+ */
+//--------------------------------------------------------------------------------------------------
+#define TPF_DEFAULT_CIPHER_SUITE_INDEX      -1
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -59,6 +74,21 @@ LE_SHARED le_result_t tpfServer_SetTpfState
 LE_SHARED le_result_t tpfServer_GetTpfState
 (
     bool* isTpfEnabledPtr                  ///< [OUT] true if third party FOTA service is activated
+);
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get the cipher suite profile index for download from 3rd party server.
+ *
+ * @return
+ *      - LE_OK                 on success
+ *      - LE_NOT_FOUND          if configuration not found in file system
+ *      - LE_FAULT              failure in all other cases
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t tpfServer_GetCipherSuiteProfileIndex
+(
+    int32_t* cipherSuiteProfileIndex        ///< [OUT] Cipher suite profile index
 );
 
 //--------------------------------------------------------------------------------------------------

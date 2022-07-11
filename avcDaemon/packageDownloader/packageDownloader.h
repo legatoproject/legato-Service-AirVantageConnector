@@ -429,4 +429,17 @@ void downloader_RequestDownloadRetry
     void* param1Ptr,     ///< [IN] Not used, should be NULL
     void* param2Ptr      ///< [IN] Not used, should be NULL
 );
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Initialize the downloader module
+ *
+ * @return none
+ */
+//--------------------------------------------------------------------------------------------------
+void downloader_Init
+(
+    void
+);
+
 #endif /*_PACKAGEDOWNLOADER_H */

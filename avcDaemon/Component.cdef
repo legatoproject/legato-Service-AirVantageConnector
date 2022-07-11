@@ -34,6 +34,9 @@ requires:
         modemServices/le_sms.api
         le_clkSync.api
 #endif
+#if ${MK_CONFIG_AT_IP_SSL} = y
+        le_certStore.api [optional]
+#endif
     }
 
     component:

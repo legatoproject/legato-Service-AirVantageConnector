@@ -71,6 +71,9 @@ extern:
     fwUpdateCfg = avcDaemon.fwupdateDaemon.le_cfg
     avcDaemon.avcDaemon.le_secStore
 #endif
+#if ${MK_CONFIG_AT_IP_SSL} = y
+    avcDaemon.avcDaemon.le_certStore
+#endif
     avcDaemon.watchdogChain.le_wdog
 }
 

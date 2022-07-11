@@ -5001,6 +5001,7 @@ COMPONENT_INIT
 #endif /* end MK_CONFIG_AVC_DISABLE_COAP */
     avcClient_Init();
     tpfServer_Init();
+    downloader_Init();
 
     // Read the user defined timeout from config tree @ /apps/avcService/activityTimeout
     int timeout = 20;

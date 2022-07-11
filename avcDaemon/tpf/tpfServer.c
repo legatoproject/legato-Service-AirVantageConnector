@@ -187,6 +187,126 @@ le_result_t le_tpf_GetPackageUri
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Function to set the cipher suite profile index for download from 3rd party server using HTTP(S)
+ * protocol
+ *
+ * @return
+ *      - LE_OK                 on success
+ *      - LE_FAULT              if failed to configure the cipher suite index
+ *
+ * @note
+ *      Parameter cipherSuiteProfileIndex can be -1 which indicates that the caller doesn't specify
+ *      a cipher suite to use, in this case, only the internal default root certificate will be used
+ *      for https connection.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_tpf_SetCipherSuiteProfileIndex
+(
+    int32_t cipherSuiteProfileIndex         ///< [IN] Cipher suite index
+)
+{
+#ifdef MK_CONFIG_AT_IP_SSL
+
+    le_result_t result;
+    size_t len = sizeof(cipherSuiteProfileIndex);
+
+    // When cipher suite index < 0, indicates that no cipher suite will be used, and the default
+    // value -1 for cipher suite index will be stored to FS.
+    if (cipherSuiteProfileIndex < 0)
+    {
+        LE_INFO("No cipher suite will be used!");
+        cipherSuiteProfileIndex = TPF_DEFAULT_CIPHER_SUITE_INDEX;
+    }
+
+    LE_DEBUG("Saving cipher suite index %d to %s",
+             cipherSuiteProfileIndex,
+             TPF_CIPHER_SUITE_INDEX_PATH);
+
+    result = WriteFs(TPF_CIPHER_SUITE_INDEX_PATH, (uint8_t*)(&cipherSuiteProfileIndex), len);
+    if (LE_OK != result)
+    {
+        LE_ERROR("Failed to write %s: %s", TPF_CIPHER_SUITE_INDEX_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    return LE_OK;
+
+#else
+
+    return LE_NOT_IMPLEMENTED;
+
+#endif
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get the cipher suite profile index for download from 3rd party server.
+ *
+ * @return
+ *      - LE_OK                 on success
+ *      - LE_NOT_FOUND          if configuration not found in file system
+ *      - LE_FAULT              failure in all other cases
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t tpfServer_GetCipherSuiteProfileIndex
+(
+    int32_t* cipherSuiteProfileIndex        ///< [OUT] Cipher suite profile index
+)
+{
+#ifdef MK_CONFIG_AT_IP_SSL
+
+    le_result_t result;
+    size_t len = sizeof(int32_t);
+
+    if (!cipherSuiteProfileIndex)
+    {
+        LE_KILL_CLIENT("Parameter is NULL!");
+        return LE_FAULT;
+    }
+
+    result = ReadFs(TPF_CIPHER_SUITE_INDEX_PATH, (uint8_t*)cipherSuiteProfileIndex, &len);
+    if (LE_OK != result)
+    {
+        if (LE_NOT_FOUND == result)
+        {
+            LE_WARN("Cipher suite index not found");
+            return LE_NOT_FOUND;
+        }
+
+        LE_ERROR("Failed to read %s: %s", TPF_CIPHER_SUITE_INDEX_PATH, LE_RESULT_TXT(result));
+        return LE_FAULT;
+    }
+
+    LE_DEBUG("Read cipher suite index: %d", cipherSuiteProfileIndex);
+    return LE_OK;
+
+#else
+
+    return LE_NOT_IMPLEMENTED;
+
+#endif
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function to get the cipher suite profile index for download from 3rd party server.
+ *
+ * @return
+ *      - LE_OK                 on success
+ *      - LE_NOT_FOUND          if configuration not found in file system
+ *      - LE_FAULT              failure in all other cases
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_tpf_GetCipherSuiteProfileIndex
+(
+    int32_t* cipherSuiteProfileIndex        ///< [OUT] Cipher suite profile index
+)
+{
+    return tpfServer_GetCipherSuiteProfileIndex(cipherSuiteProfileIndex);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Start a package download from a 3rd party server
  *
  * This will sent a request to the server to start a download.
