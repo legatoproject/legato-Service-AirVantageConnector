@@ -566,7 +566,10 @@ le_coap_PushEventHandlerRef_t le_coap_AddPushEventHandler
     CoapNotification.callbackRef = handlerPtr;
     CoapNotification.callbackContextPtr = contextPtr;
 
-    AvcStatusHandler = le_avc_AddStatusEventHandler(StatusHandler, NULL);
+    if (!AvcStatusHandler)
+    {
+        AvcStatusHandler = le_avc_AddStatusEventHandler(StatusHandler, NULL);
+    }
 
     return (le_coap_PushEventHandlerRef_t) handlerPtr;
 }
@@ -585,6 +588,12 @@ void le_coap_RemovePushEventHandler
     {
         CoapNotification.callbackRef = NULL;
         CoapNotification.callbackContextPtr = NULL;
+    }
+
+    if (AvcStatusHandler)
+    {
+        le_avc_RemoveStatusEventHandler(AvcStatusHandler);
+        AvcStatusHandler = NULL;
     }
 }
 
