@@ -1493,11 +1493,6 @@ static void* StoreFwThread
     // fd has been passed to le_fwupdate_Download(), so do not close in this thread.
     fd = -1;
 
-    if (LE_OK != result)
-    {
-        lwm2mcore_SuspendDownload();
-    }
-
 thread_end_close_fd:
     FwUpdateResult = result;
     // Only close fd if it is open in this thread.
