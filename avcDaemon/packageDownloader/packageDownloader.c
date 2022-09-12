@@ -3,6 +3,10 @@
  *
  * <HR>
  *
+ * Note: Ensure that timers are created and manipulated by only one thread.
+ * Store thread must not manipulate the timers created by avcDaemon thread.
+ * Refer https://docs.legato.io/latest/c_timer.html for proper methods to use timers.
+ *
  * Copyright (C) Sierra Wireless Inc.
  *
  */
@@ -1456,7 +1460,6 @@ static void* StoreFwThread
 
             case LE_NO_MEMORY:
                 LE_ERROR("FW update download initialization: memory allocation issue");
-                lwm2mcore_SuspendDownload();
                 // Do not return, the FIFO should be opened in order to unblock the Download thread
                 fwupdateInitError = true;
                 break;
