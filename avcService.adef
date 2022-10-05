@@ -69,8 +69,8 @@ extern:
     avcDaemon.avcDaemon.le_appInfo
     avcCfg      = avcDaemon.avcDaemon.le_cfg
     fwUpdateCfg = avcDaemon.fwupdateDaemon.le_cfg
-#endif
     avcDaemon.watchdogChain.le_wdog
+#endif
 }
 
 requires:
@@ -92,7 +92,6 @@ bindings:
     avcDaemon.avcDaemon.le_appInfo -> <root>.le_appInfo
     avcDaemon.avcDaemon.le_framework -> <root>.le_framework
     avcDaemon.avcDaemon.le_update -> <root>.le_update
-    avcDaemon.watchdogChain.le_wdog -> <root>.le_wdog
     avcDaemon.avcDaemon.le_secStore -> secStore.le_secStore
     avcDaemon.avcDaemon.le_cellnet -> cellNetService.le_cellnet
     avcDaemon.avcDaemon.le_sms  -> modemService.le_sms

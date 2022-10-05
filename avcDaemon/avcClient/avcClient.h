@@ -258,4 +258,16 @@ void avcClient_FixBootstrapCredentials
     bool isBsAuthFailure        ///< [IN] Was authentication failed with the bootstrap server ?
 );
 
+#if MK_CONFIG_AVMS_USE_IOT_KEYSTORE && !LE_CONFIG_TARGET_HL78
+//-------------------------------------------------------------------------------------------------
+/**
+ * Migration secret AVMS credentials to IoTKeystore.
+ */
+//-------------------------------------------------------------------------------------------------
+void MigrateAVMSCredentialIKS
+(
+    void
+);
+#endif
+
 #endif // LEGATO_AVC_CLIENT_INCLUDE_GUARD

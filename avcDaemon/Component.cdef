@@ -93,7 +93,23 @@ sources:
 #endif
 
 #if ${LE_CONFIG_LINUX} = y
-    avcClient/osPortCredentials.c
+    #if ${MK_CONFIG_AVMS_USE_IOT_KEYSTORE} = y
+        avcClient/osPortCredentialsSecure.c
+    #else
+        avcClient/osPortCredentials.c
+    #endif
+
+    #if ${MK_CONFIG_AVMS_USE_IOT_KEYSTORE} = y
+        // This is building the required wrapping internal iotKeystore functions.
+        // Ideally, the wrapping would not be done on the module but off-target. Do not modify any
+        // of the files below.
+        // TODO: Remove in the future
+        avcClient/security/cmdFormat.c
+        avcClient/security/err.c
+        avcClient/security/bigEndianInt.c
+        avcClient/security/der.c
+        avcClient/security/pa_log.c
+    #endif
 #else
     ${LEGATO_OS_PORT_CREDENTIALS_ALT}
 #endif
@@ -201,6 +217,10 @@ cflags:
     -DAVDATA_READ_BUFFER_BYTES=4096
     -DAVDATA_PUSH_BUFFER_BYTES=4096
     -DAVDATA_PUSH_STREAM_BYTES=20000
+    #if ${MK_CONFIG_AVMS_USE_IOT_KEYSTORE} = y
+        -I${LEGATO_ROOT}/proprietary/qct/wp76xx/inc/security
+        -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient/security
+    #endif
 #else
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient
     -I${LEGATO_ROOT}/framework/liblegato/rtos
@@ -230,6 +250,10 @@ ldflags:
 {
 #if ${LE_CONFIG_LINUX} = y
     -L${LEGATO_BUILD}/3rdParty/lib
+    #if ${MK_CONFIG_AVMS_USE_IOT_KEYSTORE} = y
+        -L${LEGATO_ROOT}/proprietary/qct/wp76xx/lib/
+        -liotkeystore
+    #endif
 #else
     -L${LEGATO_BUILD}/3rdParty/tinydtls/lib -ltinydtls
 #endif
