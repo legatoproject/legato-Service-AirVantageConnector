@@ -881,6 +881,14 @@ static lwm2mcore_Sid_t MigrateCredentialID
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
+    if (lwm2mcore_CheckCredential(credId, ServerId) == true)
+    {
+        LE_INFO("Credential '%s' already exists in IoTKeystore. Skip migration.", credName);
+        return LWM2MCORE_ERR_ALREADY_PROCESSED;
+    }
+
+    LE_INFO("Migrate %s to IoTKeyStore", credName);
+
     status = le_secStore_Read(credName, (uint8_t*)buffer, &len);
     if (LE_OK != status)
     {
@@ -919,20 +927,30 @@ void MigrateAVMSCredentialIKS
 )
 {
     lwm2mcore_Sid_t status = LWM2MCORE_ERR_GENERAL_ERROR;
-    char* resultstr = "FAIL";
+    char* resultstr = "Fail";
 
     status = MigrateCredentialID(LWM2MCORE_CREDENTIAL_BS_SECRET_KEY);
     if (LWM2MCORE_ERR_COMPLETED_OK == status)
     {
-        resultstr = "PASS";
+        resultstr = "Pass";
+    }
+    else if (LWM2MCORE_ERR_ALREADY_PROCESSED == status)
+    {
+        resultstr = "Not Applicable";
     }
 
     LE_INFO("%s: Migration of BS secret key from secure storage to IoTKeystore", resultstr);
 
+    resultstr = "Fail";
+
     status = MigrateCredentialID(LWM2MCORE_CREDENTIAL_DM_SECRET_KEY);
     if (LWM2MCORE_ERR_COMPLETED_OK == status)
     {
-        resultstr = "PASS";
+        resultstr = "Pass";
+    }
+    else if (LWM2MCORE_ERR_ALREADY_PROCESSED == status)
+    {
+        resultstr = "Not Applicable";
     }
 
     LE_INFO("%s: Migration of DM secret key from secure storage to IoTKeystore", resultstr);
