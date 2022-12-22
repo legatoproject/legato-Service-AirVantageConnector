@@ -1808,8 +1808,8 @@ void avcClient_Init
 
 #if MK_CONFIG_AVMS_USE_IOT_KEYSTORE && !LE_CONFIG_TARGET_HL78
     // Migrate secret AVMS credentials from secure storage to IoTKeystore.
-    // Currently the migration is only supported on ThreadX platform and in future needs to be
-    // supported on Linux platform. Migration is not required on FreeRTOS platform.
+    // Currently the migration is only supported on ThreadX and Linux platform.
+    // Migration is not required on FreeRTOS platform.
     MigrateAVMSCredentialIKS();
 #endif
 }

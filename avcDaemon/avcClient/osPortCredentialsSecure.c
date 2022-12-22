@@ -519,6 +519,7 @@ lwm2mcore_Sid_t lwm2mcore_GetCredential
         case LWM2MCORE_CREDENTIAL_BS_SECRET_KEY:
         case LWM2MCORE_CREDENTIAL_DM_SECRET_KEY:
         {
+            LE_INFO("Retrieving %s from IoTKeystore", credName);
             // NOTE: It is not possible to retrieve the raw value of a credential stored in the
             // IKS so, instead, we get a reference and cast it as a char[]. To use the key, the
             // caller must convert it back to an IKS key reference object.
@@ -609,6 +610,7 @@ lwm2mcore_Sid_t lwm2mcore_SetCredential
         case LWM2MCORE_CREDENTIAL_BS_SECRET_KEY:
         case LWM2MCORE_CREDENTIAL_DM_SECRET_KEY:
         {
+            LE_INFO("Setting %s in IoTKeystore", credName);
             iksStatus = WriteIksCredential(credName,
                                         IKS_KEY_TYPE_TLS_1_2_PSK_SHA256,
                                         (uint8_t*)bufferPtr,
@@ -857,8 +859,13 @@ lwm2mcore_Sid_t lwm2mcore_BackupCredential
 #ifndef LE_CONFIG_TARGET_HL78
 //--------------------------------------------------------------------------------------------------
 /**
- * Migrate given credential value from secure storage to IoTKeystore
- *
+ * Migrate given credential value from secure storage to IoTKeystore.
+ * First check whether the credential already exists in IoTKeystore. If the credential already
+ * exists then there is no need to migrate credential. However, if the credential does not exist in
+ * IoTKeystore, migrate the credential from config tree based secure storage or modem SFS depending
+ * on where the credential is stored in the platform.
+ * After the credential has been migrated to IoTKeystore, delete the credential from secure storage
+ * to avoid duplication of credentials.
  * @return
  *      - LWM2MCORE_ERR_COMPLETED_OK on success.
  *      - LWM2MCORE_ERR_GENERAL_ERROR if failed.
@@ -889,6 +896,7 @@ static lwm2mcore_Sid_t MigrateCredentialID
 
     LE_INFO("Migrate %s to IoTKeyStore", credName);
 
+    // Read from either config tree based secure storage or modem SFS.
     status = le_secStore_Read(credName, (uint8_t*)buffer, &len);
     if (LE_OK != status)
     {
@@ -911,7 +919,17 @@ static lwm2mcore_Sid_t MigrateCredentialID
         return LWM2MCORE_ERR_GENERAL_ERROR;
     }
 
-    LE_INFO("LwM2M cred %u (%s) successfully written", credId, credName);
+    LE_INFO("LwM2M cred %u (%s) successfully written to IoTKeystore", credId, credName);
+
+    LE_INFO("Deleting LwM2M cred %u (%s) from secure storage", credId, credName);
+    status = le_secStore_Delete(credName);
+    if (LE_OK != status)
+    {
+        LE_ERROR("Failed to retrieve credential %s: %s from secure storage",
+                    credName, LE_RESULT_TXT(status));
+
+        return LWM2MCORE_ERR_GENERAL_ERROR;
+    }
 
     return LWM2MCORE_ERR_COMPLETED_OK;
 }
