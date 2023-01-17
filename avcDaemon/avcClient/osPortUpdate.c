@@ -843,6 +843,11 @@ lwm2mcore_Sid_t lwm2mcore_SoftwareUpdateInstance
     {
         result = avcApp_CreateObj9Instance(instanceId);
         LE_DEBUG("Instance creation result: %s ", LE_RESULT_TXT(result));
+        if (LE_DUPLICATE == result)
+        {
+            LE_WARN("Object creation overrides instanceId %d", instanceId);
+            return LWM2MCORE_ERR_COMPLETED_OK;
+        }
     }
     else
     {
