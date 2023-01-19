@@ -894,8 +894,21 @@ static lwm2mcore_Sid_t MigrateCredentialID
 
     if (lwm2mcore_CheckCredential(credId, ServerId) == true)
     {
-        LE_INFO("Credential '%s' already exists in IoTKeystore. Skip migration.", credName);
-        return LWM2MCORE_ERR_ALREADY_PROCESSED;
+        if(credId == LWM2MCORE_CREDENTIAL_DM_SECRET_KEY)
+        {
+            LE_INFO("Credential '%s' already exists in IoTKeystore. Skip migration.", credName);
+            return LWM2MCORE_ERR_ALREADY_PROCESSED;
+        }
+
+        LE_INFO("Credential '%s' already exists in IoTKeystore. Delete it.", credName);
+        if (lwm2mcore_DeleteCredential(credId, ServerId) == true)
+        {
+            LE_INFO("Delete successfully");
+        }
+        else
+        {
+            return LWM2MCORE_ERR_GENERAL_ERROR;
+        }
     }
 
     LE_INFO("Migrate %s to IoTKeyStore", credName);
@@ -956,10 +969,6 @@ void MigrateAVMSCredentialIKS
     {
         resultstr = "Pass";
     }
-    else if (LWM2MCORE_ERR_ALREADY_PROCESSED == status)
-    {
-        resultstr = "Not Applicable";
-    }
 
     LE_INFO("%s: Migration of BS secret key from secure storage to IoTKeystore", resultstr);
 
@@ -969,10 +978,6 @@ void MigrateAVMSCredentialIKS
     if (LWM2MCORE_ERR_COMPLETED_OK == status)
     {
         resultstr = "Pass";
-    }
-    else if (LWM2MCORE_ERR_ALREADY_PROCESSED == status)
-    {
-        resultstr = "Not Applicable";
     }
 
     LE_INFO("%s: Migration of DM secret key from secure storage to IoTKeystore", resultstr);
