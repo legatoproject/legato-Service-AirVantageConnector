@@ -339,6 +339,16 @@ le_result_t le_tpf_Start
     }
 
     res = avcClient_Connect(LE_AVC_SERVER_ID_AIRVANTAGE);
+#if LE_CONFIG_RTOS
+    if ((LE_DUPLICATE == res) || (LE_BUSY == res))
+    {
+        // Restart the AVC session if it's ongoing or started
+        LE_DEBUG("Restart AVC session");
+        avcClient_Disconnect(true);
+        res = avcClient_Connect(LE_AVC_SERVER_ID_AIRVANTAGE);
+    }
+#endif /* LE_CONFIG_RTOS */
+
     if (res != LE_OK)
     {
         tpfServer_SetTpfState(false);

@@ -2849,7 +2849,12 @@ static le_result_t CheckFwInstallResult
                                                                        &updateStatus,
                                                                        &errorCode,
                                                                        &fwUpdateErrorCode);
-        if ((LE_OK == result) && (notifRequested))
+        if (IsTpfOngoing())
+        {
+            LE_INFO("Ignoring query connection in TPF mode");
+            return LE_OK;
+        }
+        else if ((LE_OK == result) && (notifRequested))
         {
             avcServer_QueryConnection(LE_AVC_FIRMWARE_UPDATE, statusHandlerPtr, contextPtr);
         }
