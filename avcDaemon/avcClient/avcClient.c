@@ -470,6 +470,23 @@ static void TpfBearerEventCb
             LE_DEBUG("Package adress : %s",buffer);
             LE_DEBUG("URL length : %zd",bufferLen);
 
+            // Check FW install result and notification flag
+            bool isFwUpdateToNotify = false;
+            if ((LE_OK == avcServer_CheckFwInstallResult(&isFwUpdateToNotify, NULL, NULL))
+                 && isFwUpdateToNotify)
+            {
+                return;
+            }
+
+            // Check if a TPF FOTA install pending notification should be sent 
+            // because it was not accepted
+            bool notify = false;
+            if ((LE_OK == packageDownloader_GetFwUpdateInstallPending(&notify)) && (notify))
+            {
+                ResumeFwInstall();
+                return;
+            }
+
             // Check if TPF download should be resumed
             size_t offset = 0;
             if (LE_OK != le_fwupdate_GetResumePosition(&offset))
@@ -479,11 +496,30 @@ static void TpfBearerEventCb
 
             if (offset)
             {
+                lwm2mcore_Sid_t infoResult;
+                lwm2mcore_UpdateType_t updateType = LWM2MCORE_MAX_UPDATE_TYPE;
+                uint64_t packageSize = 0;
+                // Get download info from workspace
+                infoResult = lwm2mcore_GetDownloadInfo(&updateType, &packageSize);
+                if (LWM2MCORE_ERR_COMPLETED_OK != infoResult)
+                {
+                    LE_DEBUG("Error to get package info");
+                    goto begin;
+                }
+
+                // Check if a download can be resumed
+                if (!packageSize)
+                {
+                    LE_DEBUG("No download to resume");
+                    goto begin;
+                }
+
                 LE_INFO("Resume TPF download at offset: %zu", offset);
                 lwm2mcore_ResumePackageDownloader(LWM2MCORE_FW_UPDATE_TYPE);
                 return;
             }
 
+begin:
             // Define the URI
             uri.oid = FW_UPDATE_OBJECT_ID;   //object 5
             uri.oiid = FW_UPDATE_OBJECT_INSTANCE_ID;  // only one ressource

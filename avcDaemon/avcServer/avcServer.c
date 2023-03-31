@@ -2821,7 +2821,6 @@ static le_result_t CheckFwInstallResult
 
         *isFwUpdateToNotifyPtr = true;
         avcServer_UpdateStatus(updateStatus, LE_AVC_FIRMWARE_UPDATE, -1, -1, errorCode);
-        packageDownloader_SetFwUpdateNotification(true, updateStatus, errorCode, fwUpdateStatus);
 
         if (IsTpfOngoing())
         {
@@ -2829,10 +2828,17 @@ static le_result_t CheckFwInstallResult
             return LE_OK;
         }
 
+        packageDownloader_SetFwUpdateNotification(true, updateStatus, errorCode, fwUpdateStatus);
         avcServer_QueryConnection(LE_AVC_FIRMWARE_UPDATE, statusHandlerPtr, contextPtr);
     }
     else
     {
+        if (IsTpfOngoing())
+        {
+            LE_INFO("Ignoring query connection in TPF mode");
+            return LE_OK;
+        }
+
         // Check if a connection is required because the update result was not notified to
         // the server
         bool notifRequested = false;
@@ -2870,6 +2876,12 @@ static void CheckNotificationToSend
     uint64_t numBytesToDownload = 0;
     le_avc_Status_t avcStatus;
     le_avc_ErrorCode_t errorCode;
+
+    if (IsTpfOngoing())
+    {
+        LE_INFO("Ignoring check notification in TPF mode");
+        return;
+    }
 
     if (AVC_IDLE != CurrentState)
     {
@@ -2960,13 +2972,6 @@ static void CheckNotificationToSend
             return;
         }
 
-        if (IsTpfOngoing())
-        {
-             LE_INFO("tpfState to resume");
-             le_tpf_Start();
-             return;
-        }
-
         if (QueryDownloadHandlerRef == NULL)
         {
             // Request user agreement for download
@@ -2993,6 +2998,27 @@ static void CheckNotificationToSend
 //--------------------------------------------------------------------------------------------------
 // Internal interface functions
 //--------------------------------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * In case a firmware was installed, check the install result and update the firmware update state
+ * and result accordingly.
+ *
+ * @return
+ *      - LE_OK     The function succeeded
+ *      - LE_FAULT  An error occurred
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcServer_CheckFwInstallResult
+(
+    bool*                       isFwUpdateToNotifyPtr,  ///< [INOUT] Is a FW update needed to be
+                                                        ///< notified to the server?
+    le_avc_StatusHandlerFunc_t  statusHandlerPtr,       ///< [IN] Pointer on handler function
+    void*                       contextPtr              ///< [IN] Context
+)
+{
+    return CheckFwInstallResult(isFwUpdateToNotifyPtr, statusHandlerPtr, contextPtr);
+}
 
 //--------------------------------------------------------------------------------------------------
 /**

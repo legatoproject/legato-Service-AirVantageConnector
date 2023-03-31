@@ -338,6 +338,25 @@ le_result_t avcServer_SaveCurrentEpochTime
 (
     void
 );
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * In case a firmware was installed, check the install result and update the firmware update state
+ * and result accordingly.
+ *
+ * @return
+ *      - LE_OK     The function succeeded
+ *      - LE_FAULT  An error occurred
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcServer_CheckFwInstallResult
+(
+    bool*                       isFwUpdateToNotifyPtr,  ///< [INOUT] Is a FW update needed to be
+                                                        ///< notified to the server?
+    le_avc_StatusHandlerFunc_t  statusHandlerPtr,       ///< [IN] Pointer on handler function
+    void*                       contextPtr              ///< [IN] Context
+);
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Resume firmware install if necessary
