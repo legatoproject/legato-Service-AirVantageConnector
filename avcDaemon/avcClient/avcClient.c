@@ -454,7 +454,10 @@ static void TpfBearerEventCb
         if (!nbrObject)
         {
             LE_ERROR("ERROR in LwM2M obj reg");
-            return;
+
+            // This may happen when we call lwm2mcore_ObjectRegister again. So, assuming
+            // FW_UPDATE_OBJECT_ID was registered for TPF
+            nbrObject = FW_UPDATE_OBJECT_ID;
         }
         //check if the FwupdateObj is registered
         if (nbrObject >= FW_UPDATE_OBJECT_ID)
