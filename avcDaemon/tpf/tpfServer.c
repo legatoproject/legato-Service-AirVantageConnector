@@ -193,6 +193,7 @@ le_result_t le_tpf_GetPackageUri
  * @return
  *      - LE_OK                 on success
  *      - LE_FAULT              if failed to configure the cipher suite index
+ *      - LE_BAD_PARAMETER      if given cipher suite is invalid
  *
  * @note
  *      Parameter cipherSuiteProfileIndex can be -1 which indicates that the caller doesn't specify
@@ -210,12 +211,13 @@ le_result_t le_tpf_SetCipherSuiteProfileIndex
     le_result_t result;
     size_t len = sizeof(cipherSuiteProfileIndex);
 
-    // When cipher suite index < 0, indicates that no cipher suite will be used, and the default
-    // value -1 for cipher suite index will be stored to FS.
-    if (cipherSuiteProfileIndex < 0)
+    // When cipher suite index out of range, indicates that no cipher suite will be used,
+    // and the default value -1 for cipher suite index will be stored to FS.
+    if ((cipherSuiteProfileIndex > LE_CERTSTORE_MAX_CIPHER_SUITE_INDEX) ||
+        (cipherSuiteProfileIndex < 0))
     {
-        LE_INFO("No cipher suite will be used!");
-        cipherSuiteProfileIndex = TPF_DEFAULT_CIPHER_SUITE_INDEX;
+        LE_ERROR("Cipher suite index out of range, no cipher suite will be used!");
+        return LE_BAD_PARAMETER;
     }
 
     LE_DEBUG("Saving cipher suite index %d to %s",
