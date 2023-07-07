@@ -214,7 +214,7 @@ le_result_t le_tpf_SetCipherSuiteProfileIndex
     // When cipher suite index out of range, indicates that no cipher suite will be used,
     // and the default value -1 for cipher suite index will be stored to FS.
     if ((cipherSuiteProfileIndex > LE_CERTSTORE_MAX_CIPHER_SUITE_INDEX) ||
-        (cipherSuiteProfileIndex < 0))
+        (cipherSuiteProfileIndex < TPF_DEFAULT_CIPHER_SUITE_INDEX))
     {
         LE_ERROR("Cipher suite index out of range, no cipher suite will be used!");
         return LE_BAD_PARAMETER;
