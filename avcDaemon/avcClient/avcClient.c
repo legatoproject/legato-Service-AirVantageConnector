@@ -1466,9 +1466,16 @@ le_result_t avcClient_Disconnect
 )
 {
     LE_DEBUG("Disconnect");
-
+    
+    bool isTpfEnabled = false;
     le_result_t result = LE_OK;
-
+    
+    // Prevent closing third party FOTA session by +WDSS=1,0.
+    if ((LE_OK == tpfServer_GetTpfState(&isTpfEnabled)) && (isTpfEnabled))
+    {
+        LE_INFO("Third party FOTA is activated!");
+        return LE_OK ;
+    }
     avcServer_ResetDownloadAgreement();
 
 #ifdef LE_CONFIG_AVC_FEATURE_EDM
