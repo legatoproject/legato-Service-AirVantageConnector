@@ -473,23 +473,6 @@ static void TpfBearerEventCb
             LE_DEBUG("Package adress : %s",buffer);
             LE_DEBUG("URL length : %zd",bufferLen);
 
-            // Check FW install result and notification flag
-            bool isFwUpdateToNotify = false;
-            if ((LE_OK == avcServer_CheckFwInstallResult(&isFwUpdateToNotify, NULL, NULL))
-                 && isFwUpdateToNotify)
-            {
-                return;
-            }
-
-            // Check if a TPF FOTA install pending notification should be sent 
-            // because it was not accepted
-            bool notify = false;
-            if ((LE_OK == packageDownloader_GetFwUpdateInstallPending(&notify)) && (notify))
-            {
-                ResumeFwInstall();
-                return;
-            }
-
             // Check if TPF download should be resumed
             size_t offset = 0;
             if (LE_OK != le_fwupdate_GetResumePosition(&offset))
@@ -1193,13 +1176,35 @@ static void StartBearer
 {
     // Attempt to connect.
     Lwm2mInstanceRef = lwm2mcore_Init(EventHandler);
-
+    bool isEnabled = false;
 #if LE_CONFIG_AVC_FEATURE_EDM
     lwm2mcore_SetEdmEnabled(Lwm2mInstanceRef, true);
     lwm2mcore_SetServer(Lwm2mInstanceRef, ServerId);
 #endif
 
     LE_INFO("Start Bearer");
+
+    if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
+    {
+        LE_INFO("Third party FOTA is activated !");
+
+        // Check FW install result and notification flag
+        bool isFwUpdateToNotify = false;
+        if ((LE_OK == avcServer_CheckFwInstallResult(&isFwUpdateToNotify, NULL, NULL))
+         && isFwUpdateToNotify)
+        {
+            return;
+        }
+        // Check if a TPF FOTA install pending notification should be sent
+        // because it was not accepted
+        bool notify = false;
+        if ((LE_OK == packageDownloader_GetFwUpdateInstallPending(&notify)) && (notify))
+        {
+            ResumeFwInstall();
+            return;
+        }
+    }
+
     // Initialize the bearer and open a data connection.
     le_data_ConnectService();
 
