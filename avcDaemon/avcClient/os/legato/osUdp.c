@@ -117,6 +117,51 @@ static void Lwm2mClientReceive
     }
 }
 
+#ifdef LE_CONFIG_TARGET_GILL
+//--------------------------------------------------------------------------------------------------
+/**
+ * Get the details information of the interface
+ *
+ * @return
+ *      -  LE_OK on success
+ *      -  LE_FAULT on error
+ *
+ */
+//--------------------------------------------------------------------------------------------------
+static le_result_t GetInterfaceDetails(char* iface_name, char* mdc_ipAddressStr)
+{
+    int32_t profileIndex_Cellular = le_data_GetCellularProfileIndex();
+    le_mdc_ProfileRef_t mdc_ProfileRef = le_mdc_GetProfile(profileIndex_Cellular);
+
+    if (mdc_ProfileRef == NULL)
+    {
+        LE_DEBUG("Cannot get profile index");
+        return LE_FAULT;
+    }
+
+    if (le_mdc_GetInterfaceName(mdc_ProfileRef, iface_name, LE_MDC_INTERFACE_NAME_MAX_BYTES)
+        != LE_OK)
+    {
+        LE_DEBUG("Cannot get interface name");
+        return LE_FAULT;
+    }
+
+    if (mdc_ipAddressStr != NULL)
+    {
+
+        if (le_mdc_GetIPv4Address(mdc_ProfileRef, mdc_ipAddressStr, LE_MDC_IPV6_ADDR_MAX_BYTES)
+            != LE_OK)
+        {
+            LE_DEBUG("Cannot get IP address of the iface %s", iface_name);
+            return LE_FAULT;
+        }
+
+        LE_DEBUG("IP address of the iface %s is %s", iface_name, mdc_ipAddressStr);
+    }
+    return LE_OK;
+}
+#endif // LE_CONFIG_TARGET_GILL
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Create a socket
@@ -144,12 +189,32 @@ static int CreateSocket
     hints.ai_socktype = config.proto;
     hints.ai_flags = AI_PASSIVE;
 
+
     LE_DEBUG("Attempt to DNS-resolve service on port %s", portStr);
-    if (0 != getaddrinfo(NULL, portStr, &hints, &res))
+
+#ifdef LE_CONFIG_TARGET_GILL
+    char iface_name[LE_MDC_INTERFACE_NAME_MAX_BYTES] = {0};
+    char mdc_ipAddressStr[LE_MDC_IPV6_ADDR_MAX_BYTES] = {0};
+
+    if (LE_OK != GetInterfaceDetails(iface_name, mdc_ipAddressStr))
     {
+        LE_DEBUG("Cannot get the details information of iface %s ", iface_name);
         return -1;
     }
 
+    if (LE_OK != getaddrinfo_on_iface(NULL, portStr, &hints, &res, iface_name))
+        {
+            LE_DEBUG("Cannot resolve DNS on iface %s ", iface_name);
+            return -1;
+        }
+#else // LE_CONFIG_TARGET_GILL
+    if (0 != getaddrinfo(NULL, portStr, &hints, &res))
+    {
+        LE_DEBUG("Cannot resolve DNS");
+        return -1;
+    }
+
+#endif // LE_CONFIG_TARGET_GILL
     for(p = res ; p != NULL && s == -1 ; p = p->ai_next)
     {
         s = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
@@ -167,11 +232,22 @@ static int CreateSocket
                 close(s);
                 s = -1;
             }
+#ifdef LE_CONFIG_TARGET_GILL
+ //Bind the socket to the specific cellular profile that config in WDSS command
+            struct sockaddr_in clientAddr;
+            memset(&clientAddr, 0, sizeof(clientAddr));
+            clientAddr.sin_family = AF_INET;
+            clientAddr.sin_addr.s_addr = inet_addr(mdc_ipAddressStr);
+            if (bind(s, (struct sockaddr*)&clientAddr, sizeof(clientAddr)) < 0)
+            {
+                close(s);
+                s = -1;
+            }
+#endif // LE_CONFIG_TARGET_GILL
         }
     }
 
     freeaddrinfo(res);
-
     return s;
 }
 
@@ -425,7 +501,24 @@ bool lwm2mcore_UdpConnect
         return false;
     }
 #else
+#ifdef LE_CONFIG_TARGET_GILL
+    char iface[LE_MDC_INTERFACE_NAME_MAX_BYTES] = {0};
+    res = GetInterfaceDetails(iface, NULL);
+
+    if (LE_OK == res)
+    {
+        LE_INFO("Resolve DNS on iface %s", iface);
+        rc = getaddrinfo_on_iface(urlStrPtr, portPtr, &hints, &resultPtr, iface);
+    }
+    else
+    {
+        LE_INFO("Trying to resolve DNS with default interface");
+        rc = getaddrinfo_on_iface(urlStrPtr, portPtr, &hints, &resultPtr, NULL);
+    }
+#else // LE_CONFIG_TARGET_GILL
     rc = getaddrinfo(urlStrPtr, portPtr, &hints, &resultPtr);
+#endif // LE_CONFIG_TARGET_GILL
+
     if (rc)
     {
         LE_ERROR("IP %s not resolved: %s", urlStrPtr, gai_strerror(rc));
