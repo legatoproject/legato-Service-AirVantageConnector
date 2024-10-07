@@ -15,6 +15,7 @@
 #undef LE_MDC_APN_NAME_MAX_BYTES
 #include "interfaces.h"
 #include "osPortCache.h"
+#include "osPortDataChannel.h"
 
 //--------------------------------------------------------------------------------------------------
 // Symbol and Enum definitions
@@ -870,7 +871,11 @@ static le_data_Technology_t GetConnectedTechnology
     void
 )
 {
+#if LE_CONFIG_ENABLE_AVC_FEATURE_ETH
+    return osPortGetConnectedTech(DataConnected);
+#else
     return DataConnected ? le_data_GetTechnology() : LE_DATA_MAX;
+#endif
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -934,6 +939,11 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetNetworkBearer
             sID = LWM2MCORE_ERR_COMPLETED_OK;
             break;
 
+        case LE_DATA_ETHERNET_EXT:
+            *valuePtr = LWM2MCORE_NETWORK_BEARER_ETHERNET;
+            sID = LWM2MCORE_ERR_COMPLETED_OK;
+            break;
+
         case LE_DATA_MAX:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
@@ -964,7 +974,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
     uint16_t* bearersNbPtr                              ///< [INOUT] bearers number
 )
 {
-    lwm2mcore_Sid_t sID;
+    lwm2mcore_Sid_t sID = LWM2MCORE_ERR_COMPLETED_OK;
     le_data_Technology_t technology;
     uint16_t maxBearersNb;
 
@@ -999,7 +1009,9 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
     maxBearersNb = *bearersNbPtr;
     *bearersNbPtr = 0;
 
-    do
+    for (technology = LE_DATA_WIFI;
+         (technology < LE_DATA_MAX) && (LWM2MCORE_ERR_COMPLETED_OK == sID);
+         technology++)
     {
         switch (technology)
         {
@@ -1038,6 +1050,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
             break;
 
             case LE_DATA_WIFI:
+#if LE_CONFIG_ENABLE_WIFI
                 if ((*bearersNbPtr) < maxBearersNb)
                 {
                     bearersListPtr[*bearersNbPtr] = LWM2MCORE_NETWORK_BEARER_WLAN;
@@ -1050,16 +1063,20 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAvailableNetworkBearers
                 }
 
                 sID = LWM2MCORE_ERR_COMPLETED_OK;
+#endif
+                break;
+        case LE_DATA_ETHERNET_EXT:
+                // This logic in not setting sID is to stay consistent with the logic above for
+                // WiFi. Otherwise, LWM2MCORE_ERR_NOT_YET_IMPLEMENTED is the right value for sID
                 break;
 
-            default:
+        default:
                 sID = LWM2MCORE_ERR_GENERAL_ERROR;
                 break;
         }
 
         technology = le_data_GetNextUsedTechnology();
     }
-    while ((LE_DATA_MAX != technology) && (LWM2MCORE_ERR_COMPLETED_OK == sID));
 
 end:
     LE_DEBUG("Result: %d", sID);
@@ -1179,6 +1196,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetSignalStrength
         break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
             break;
 
@@ -1313,6 +1331,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetLinkQuality
         break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
             break;
 
@@ -1370,6 +1389,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetIpAddresses
             break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
             break;
 
@@ -1426,6 +1446,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRouterIpAddresses
             break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
             break;
 
@@ -1509,6 +1530,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetAccessPointNames
             break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             // The SSID could be returned in this case
             sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
             break;
@@ -1571,6 +1593,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetCellId
         break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
@@ -1644,6 +1667,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetMncMcc
         break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
@@ -1697,6 +1721,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetSignalBars
             sID = GetWifiSignalBars(valuePtr);
             break;
 #endif
+        case LE_DATA_ETHERNET_EXT:
         case LE_DATA_MAX:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
@@ -1765,6 +1790,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetCellularTechUsed
         break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
@@ -1843,6 +1869,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRoamingIndicator
         break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
@@ -1947,6 +1974,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetEcIo
         break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
@@ -2048,6 +2076,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRsrp
         break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
@@ -2150,6 +2179,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRsrq
         break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
@@ -2250,6 +2280,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRscp
         break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
@@ -2312,6 +2343,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetLac
         break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
@@ -2374,6 +2406,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetServingCellLteTracAreaCode
         break;
 
         case LE_DATA_WIFI:
+        case LE_DATA_ETHERNET_EXT:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
 
@@ -2512,11 +2545,10 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetTxData
             }
         }
         break;
-#ifdef LE_CONFIG_ENABLE_WIFI
         case LE_DATA_WIFI:
         {
+#ifdef LE_CONFIG_ENABLE_WIFI
             uint64_t txBytes;
-
             if (LE_OK == le_wifiClient_GetTxData(&txBytes))
             {
                 // Amount of data is converted from bytes to kilobytes
@@ -2528,13 +2560,17 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetTxData
             {
                 sID = LWM2MCORE_ERR_GENERAL_ERROR;
             }
-            break;
-        }
+#else
+            sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
 #endif
+        }
+        break;
+        case LE_DATA_ETHERNET_EXT:
+            sID = LWM2MCORE_ERR_NOT_YET_IMPLEMENTED;
+            break;
         case LE_DATA_MAX:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
-
         default:
             sID = LWM2MCORE_ERR_GENERAL_ERROR;
             break;
@@ -2609,6 +2645,7 @@ LWM2MCORE_SHARED lwm2mcore_Sid_t lwm2mcore_GetRxData
             break;
         }
 #endif
+        case LE_DATA_ETHERNET_EXT:
         case LE_DATA_MAX:
             sID = LWM2MCORE_ERR_INVALID_STATE;
             break;
@@ -2727,6 +2764,9 @@ COMPONENT_INIT
     // Initialize the bearer and register for data connection status.
     // We wont be requesting a data connection in this component, but we need to know
     // if data connection is established.
+#if LE_CONFIG_ENABLE_AVC_FEATURE_ETH
+    le_dcs_ConnectService();
+#endif
 
     le_data_ConnectService();
 

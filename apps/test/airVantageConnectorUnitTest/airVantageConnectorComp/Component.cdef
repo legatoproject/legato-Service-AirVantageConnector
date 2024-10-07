@@ -25,6 +25,10 @@ sources:
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient/avcClient.c
     ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/coap/coap.c
 
+#if ${LE_CONFIG_ENABLE_AVC_FEATURE_ETH} = y
+    ${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient/avcDataChannel.c
+#endif
+
     airVantageConnector_stub.c
     lwm2mcore_stub.c
 }

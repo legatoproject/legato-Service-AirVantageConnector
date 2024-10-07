@@ -11,6 +11,9 @@ sources:
     osPortConnectivity.c
     osPortDevice.c
     osPortLocation.c
+#if ${LE_CONFIG_ENABLE_AVC_FEATURE_ETH} = y
+    osPortDataChannel.c
+#endif
 }
 
 requires:
@@ -19,6 +22,10 @@ requires:
     {
         airVantage/le_avc.api [types-only]
         le_data.api
+#if ${LE_CONFIG_ENABLE_AVC_FEATURE_ETH} = y
+        le_dcs.api
+        le_cfg.api
+#endif
 #if ${MK_CONFIG_AVC_DISABLE_MCU_VERSION} = ""
         le_ulpm.api
 #endif

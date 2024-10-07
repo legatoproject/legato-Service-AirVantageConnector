@@ -110,6 +110,11 @@ bindings:
     avcDaemon.avcDaemon.le_mdc  -> modemService.le_mdc
     avcDaemon.avcDaemon.le_mrc  -> modemService.le_mrc
 
+#if ${LE_CONFIG_ENABLE_AVC_FEATURE_ETH} = y
+    avcDaemon.avcDaemon.le_dcs -> dataConnectionService.le_dcs
+    avcDaemon.avcDaemon.le_net -> dataConnectionService.le_net
+#endif
+
     avcDaemon.httpClientLibrary.le_mdc  -> modemService.le_mdc
     avcDaemon.socketLibrary.le_mdc      -> modemService.le_mdc
 
@@ -124,6 +129,10 @@ bindings:
     avcDaemon.deviceManagement.le_temp -> modemService.le_temp
     avcDaemon.deviceManagement.le_pos -> positioningService.le_pos
     avcDaemon.deviceManagement.le_gnss -> positioningService.le_gnss
+
+#if ${LE_CONFIG_ENABLE_AVC_FEATURE_ETH} = y
+    avcDaemon.deviceManagement.le_dcs -> dataConnectionService.le_dcs
+#endif
 #if ${MK_CONFIG_MODEMSERVICE_NO_LPT} = ""
     avcDaemon.deviceManagement.le_lpt -> modemService.le_lpt
 #endif

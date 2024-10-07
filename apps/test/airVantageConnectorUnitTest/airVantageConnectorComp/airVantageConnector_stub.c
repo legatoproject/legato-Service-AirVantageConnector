@@ -930,6 +930,101 @@ void le_data_RemoveConnectionStateHandler
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * le_dcs_ConnectService() stubbed
+ */
+//--------------------------------------------------------------------------------------------------
+void le_dcs_ConnectService
+(
+    void
+)
+{
+   return;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * le_dcs_Start() stubbed
+ */
+//--------------------------------------------------------------------------------------------------
+le_dcs_ReqObjRef_t le_dcs_Start
+(
+    le_dcs_ChannelRef_t channelRef
+)
+{
+    return NULL;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * le_dcs_Stop() stubbed
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_dcs_Stop
+(
+    le_dcs_ReqObjRef_t reqRef
+)
+{
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * le_dcs_GetChannels() stubbed
+ */
+//--------------------------------------------------------------------------------------------------
+void le_dcs_GetChannels
+(
+    le_dcs_GetChannelsHandlerFunc_t handlerPtr,
+    void *contextPtr
+)
+{
+    return;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * le_dcs_GetReference() stubbed
+ */
+//--------------------------------------------------------------------------------------------------
+le_dcs_ChannelRef_t le_dcs_GetReference
+(
+    const char *name,
+    le_dcs_Technology_t technology
+)
+{
+    return NULL;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * le_dcs_AddEventHandler() stubbed
+ */
+//--------------------------------------------------------------------------------------------------
+le_dcs_EventHandlerRef_t le_dcs_AddEventHandler
+(
+    le_dcs_ChannelRef_t channelRef,
+    le_dcs_EventHandlerFunc_t channelHandlerPtr,
+    void *contextPtr
+)
+{
+    return NULL;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * le_dcs_RemoveEventHandler() stubbed
+ */
+//--------------------------------------------------------------------------------------------------
+void le_dcs_RemoveEventHandler
+(
+    le_dcs_EventHandlerRef_t channelHandlerRef   ///< [IN] Channel event handler reference
+)
+{
+    return;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Return the update status, which is either the last status of the systems swap if it failed, or
  * the status of the secondary bootloader (SBL).
  *

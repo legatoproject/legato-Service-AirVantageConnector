@@ -16,6 +16,10 @@ requires:
     api:
     {
         le_data.api
+#if ${LE_CONFIG_ENABLE_AVC_FEATURE_ETH} = y
+        le_dcs.api
+        le_net.api
+#endif
         le_cfg.api
         le_appInfo.api
         le_fwupdate.api
@@ -86,6 +90,10 @@ sources:
     avcSim/avcSim.c
 
     avcClient/avcClient.c
+#if ${LE_CONFIG_ENABLE_AVC_FEATURE_ETH} = y
+    avcClient/avcDataChannel.c
+#endif
+
 #if ${LE_CONFIG_SOCKET_LIB_USE_OPENSSL} = y
     avcClient/osPortSecurityOpenSSL.c
 #elif ${LE_CONFIG_SOCKET_LIB_USE_MBEDTLS} = y
@@ -199,6 +207,7 @@ cflags:
     -I${LEGATO_ROOT}/components/watchdogChain
     -I${LEGATO_ROOT}/framework/liblegato
     -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon
+    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/sessionManager
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/objectManager
@@ -222,7 +231,6 @@ cflags:
         -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient/security
     #endif
 #else
-    -I${LEGATO_ROOT}/apps/platformServices/airVantageConnector/avcDaemon/avcClient
     -I${LEGATO_ROOT}/framework/liblegato/rtos
     -I${LEGATO_ROOT}/3rdParty/Lwm2mCore/include/platform-specific/rtos
     -I${LEGATO_BUILD}/3rdParty/inc

@@ -22,6 +22,11 @@
 #include "avcServer/avcServer.h"
 #include "packageDownloader/packageDownloader.h"
 #include "workspace.h"
+#if LE_CONFIG_ENABLE_AVC_FEATURE_ETH
+#include "avcDataChannel.h"
+#endif
+
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Initialize memory areas for Lwm2m
@@ -130,6 +135,26 @@ static bool DataConnected = false;
  */
 //--------------------------------------------------------------------------------------------------
 static le_data_RequestObjRef_t DataRef = NULL;
+#if LE_CONFIG_ENABLE_AVC_FEATURE_ETH
+static le_dcs_ReqObjRef_t ChannelEventReq = NULL;
+#endif
+
+#if LE_CONFIG_ENABLE_AVC_FEATURE_ETH
+//--------------------------------------------------------------------------------------------------
+/**
+ * Static reference of the dedicated data channel managed by le_dcs
+ */
+//--------------------------------------------------------------------------------------------------
+static le_dcs_ChannelRef_t DedicatedChannelRef = 0;
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Static data connection handler reference for le_data and channel event handler reference for
+ * le_dcs
+ */
+//--------------------------------------------------------------------------------------------------
+static le_dcs_EventHandlerRef_t ChannelEventHandlerRef;
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -509,6 +534,31 @@ static void TpfBearerEventCb
         }
     }
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Function for sending event callbacks to client app
+ */
+//--------------------------------------------------------------------------------------------------
+static void SendEventCallbacks
+(
+    void *contextPtr
+)
+{
+    bool isEnabled = false;
+    if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
+    {
+        LE_INFO("Third party FOTA is activated !");
+        // Call the TPF callback.
+        TpfBearerEventCb(DataConnected, contextPtr);
+    }
+    else
+    {
+        // Call the callback.
+        BearerEventCb(DataConnected, contextPtr);
+    }
+}
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Callback for the connection state.
@@ -521,7 +571,6 @@ static void ConnectionStateHandler
     void* contextPtr            ///< [IN] User data.
 )
 {
-    bool isEnabled = false;
     if (connected)
     {
         LE_DEBUG("Connected through interface '%s'", intfNamePtr);
@@ -529,17 +578,7 @@ static void ConnectionStateHandler
 
         // Check if date/time is valid when connected.
         CheckDateTimeValidity();
-        if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
-        {
-            LE_INFO("Third party FOTA is activated !");
-            // Call the TPF callback.
-            TpfBearerEventCb(connected, contextPtr);
-        }
-        else
-        {
-            // Call the callback.
-            BearerEventCb(connected, contextPtr);
-        }
+        SendEventCallbacks(contextPtr);
     }
     else
     {
@@ -547,17 +586,8 @@ static void ConnectionStateHandler
         if (DataConnected)
         {
             DataConnected = false;
-            if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
-            {
-                LE_INFO("Third party FOTA is activated !");
-                // Call the TPF callback.
-                TpfBearerEventCb(connected, contextPtr);
-            }
-            else
-            {
-                // Call the callback.
-                BearerEventCb(connected, contextPtr);
-            }
+            SendEventCallbacks(contextPtr);
+
 #if LE_CONFIG_AVC_FEATURE_EDM
             ResetSessionStarted();
 #else
@@ -569,7 +599,7 @@ static void ConnectionStateHandler
         {
             // This can happen if initial connection made for sending notification to avms
             // fails after boot up
-           LE_WARN("AVC: Disconnected even though we are not connected\n");
+            LE_WARN("AVC: Disconnected even though we are not connected\n");
         }
     }
 }
@@ -826,15 +856,32 @@ static void StopBearer
 )
 {
     LE_INFO("Stop bearer %p", DataRef);
-    if (DataRef)
+#if LE_CONFIG_ENABLE_AVC_FEATURE_ETH
+    if (DedicatedChannelRef)
     {
+        if (!ChannelEventReq)
+        {
+            return;
+        }
         // Close the data connection.
-        le_data_Release(DataRef);
-
+        le_dcs_Stop(ChannelEventReq);
         // Remove the data handler.
-        le_data_RemoveConnectionStateHandler(DataHandler);
-        DataRef = NULL;
-        DataHandler = NULL;
+        ChannelEventReq = NULL;
+        ChannelEventHandlerRef = NULL;
+    }
+    else
+#endif
+    {
+        if (DataRef)
+        {
+            // Close the data connection.
+            le_data_Release(DataRef);
+
+            // Remove the data handler.
+            le_data_RemoveConnectionStateHandler(DataHandler);
+            DataRef = NULL;
+            DataHandler = NULL;
+        }
     }
 }
 
@@ -1064,6 +1111,73 @@ static int EventHandler
     return result;
 }
 
+#if LE_CONFIG_ENABLE_AVC_FEATURE_ETH
+//--------------------------------------------------------------------------------------------------
+/**
+ * This is the le_dcs channel event handler used for managing AVC's configured dedicated data
+ * channel
+ */
+//--------------------------------------------------------------------------------------------------
+static void ChannelEventHandlerFunc
+(
+    le_dcs_ChannelRef_t channelRef, ///< [IN] The channel for which the event is
+    le_dcs_Event_t event,           ///< [IN] Event up or down
+    int32_t code,                   ///< [IN] Additional event code, like error code
+    void *contextPtr                ///< [IN] Associated user context pointer
+)
+{
+    if (DedicatedChannelRef != channelRef)
+    {
+        LE_ERROR("Reference of dedicated channel became NULL");
+        return;
+    }
+
+    switch (event)
+    {
+        case LE_DCS_EVENT_UP:
+            LE_DEBUG("Dedicated channel with reference %p connected", channelRef);
+            DataConnected = true;
+            le_net_BackupDefaultGW();
+            le_net_SetDefaultGW(channelRef);
+            le_net_SetDNS(channelRef);
+
+            // Check if date/time is valid when connected.
+            CheckDateTimeValidity();
+            SendEventCallbacks(contextPtr);
+            break;
+
+        case LE_DCS_EVENT_DOWN:
+            LE_DEBUG("Dedicated channel with reference %p disconnected when in state %d",
+                     channelRef, DataConnected);
+            if (DataConnected)
+            {
+                DataConnected = false;
+                le_net_RestoreDefaultGW();
+                le_net_RestoreDNS();
+                le_dcs_RemoveEventHandler(ChannelEventHandlerRef);
+                SendEventCallbacks(contextPtr);
+
+            #if LE_CONFIG_AVC_FEATURE_EDM
+                SessionStarted[GetServerIdx(ServerId)] = 0;
+            #else
+                SessionStarted = false;
+            #endif
+                AuthenticationPhase = false;
+            }
+            else
+            {
+                // This can happen if initial connection made for sending notification to avms
+                // fails after boot up
+                LE_WARN("AVC: Disconnected even though we are not connected\n");
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+#endif
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Start the bearer.
@@ -1083,13 +1197,41 @@ static void StartBearer
     lwm2mcore_SetServer(Lwm2mInstanceRef, ServerId);
 
     LE_INFO("Start Bearer");
-    // Initialize the bearer and open a data connection.
-    le_data_ConnectService();
 
-    DataHandler = le_data_AddConnectionStateHandler(ConnectionStateHandler, NULL);
-    // Request data connection.
-    DataRef = le_data_Request();
-    LE_ASSERT(NULL != DataRef);
+#if LE_CONFIG_ENABLE_AVC_FEATURE_ETH
+    // Initialize the bearer and open a data connection.
+    le_dcs_Technology_t channelTech;
+    char channelName[LE_CFG_STR_LEN_BYTES];
+
+    //Check if "config set Ethernet"
+    if (avcDataChannelGetDedicatedConfig(&channelTech, channelName) == LE_OK)
+    {
+        // Set DedicatedChannelRef
+        DedicatedChannelRef = le_dcs_GetReference(channelName, LE_DCS_TECH_ETHERNET);
+        if (!DedicatedChannelRef)
+        {
+            LE_ERROR("Failed to get %s's channel reference", channelName);
+            return;
+        }
+        else
+        {
+            LE_INFO("%s's channel reference %p", channelName, DedicatedChannelRef);
+        }
+        ChannelEventHandlerRef = le_dcs_AddEventHandler(DedicatedChannelRef,
+                                                        ChannelEventHandlerFunc, NULL);
+        // Request data connection.
+        ChannelEventReq = le_dcs_Start(DedicatedChannelRef);
+        LE_ASSERT(NULL != ChannelEventReq);
+    }
+    else
+#endif
+    {
+        le_data_ConnectService();
+        DataHandler = le_data_AddConnectionStateHandler(ConnectionStateHandler, NULL);
+        // Request data connection.
+        DataRef = le_data_Request();
+        LE_ASSERT(NULL != DataRef);
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1672,6 +1814,25 @@ void avcClient_ResetRetryTimer
     ResetRetryTimers();
 }
 
+#if LE_CONFIG_ENABLE_AVC_FEATURE_ETH
+//--------------------------------------------------------------------------------------------------
+/**
+ * This is the le_dcs handler for handling the result of AVC's initial data channel scan. As AVC
+ * needs no result out of it right away, except DCS to have its channel list up-to-date, there's no
+ * necessary logic in this AVC handler here.
+ */
+//--------------------------------------------------------------------------------------------------
+static void ClientChannelQueryHandler
+(
+    le_result_t result,                       ///< [IN] Result of the query
+    const le_dcs_ChannelInfo_t *channelList,  ///< [IN] Channel list returned
+    size_t channelListSize,                   ///< [IN] Channel list's size
+    void *contextPtr                          ///< [IN] Associated user context pointer
+)
+{
+    LE_DEBUG("Initial data channel scan completed");
+}
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -1719,4 +1880,10 @@ void avcClient_Init
     // Migration is not required on FreeRTOS platform.
     MigrateAVMSCredentialIKS();
 #endif
+
+#if LE_CONFIG_ENABLE_AVC_FEATURE_ETH
+    le_dcs_ConnectService();
+    le_dcs_GetChannels(ClientChannelQueryHandler, NULL);
+#endif
 }
+
