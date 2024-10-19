@@ -626,6 +626,7 @@ static char* AvcSessionStateToStr
         case LE_AVC_DOWNLOAD_COMPLETE:      result = "Download complete";       break;
         case LE_AVC_DOWNLOAD_TIMEOUT:       result = "Download timeout";        break;
         case LE_AVC_DOWNLOAD_FAILED:        result = "Download Failed";         break;
+        case LE_AVC_DOWNLOAD_ABORTED:       result = "Download aborted";        break;
         case LE_AVC_INSTALL_PENDING:        result = "Install Pending";         break;
         case LE_AVC_INSTALL_IN_PROGRESS:    result = "Install in progress";     break;
         case LE_AVC_INSTALL_COMPLETE:       result = "Install completed";       break;
@@ -2393,7 +2394,18 @@ static void ProcessUpdateStatus
 
             LE_DEBUG("Package not certified");
             break;
-
+#if MK_CONFIG_TPF_TERMINATE_DOWNLOAD
+        case LE_AVC_DOWNLOAD_ABORTED:
+            if (IsTpfOngoing())
+            {
+                le_fwupdate_InitDownload(); //Delete resume context
+                tpfServer_SetTpfState(false);
+                le_avc_StopSession();
+                UpdateCurrentAvcState(AVC_IDLE);
+            }
+            LE_DEBUG("Download aborted");
+            break;
+#endif
         default:
             LE_WARN("Unhandled updateStatus %d", data->updateStatus);
             return;

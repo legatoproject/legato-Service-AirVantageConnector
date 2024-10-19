@@ -358,6 +358,35 @@ le_result_t le_tpf_Start
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Abort fota package download from a 3rd party server
+ *
+ * This will terminate download session to stop download job.
+ *
+ * @return
+ *      - LE_OK on success.
+ *      - LE_FAULT on failure
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t le_tpf_Abort
+(
+    void
+)
+{
+#if MK_CONFIG_TPF_TERMINATE_DOWNLOAD
+    le_result_t res = LE_OK;
+    res = avcClient_AbortTPFDownload();
+    if (res != LE_OK)
+    {
+        return LE_FAULT;
+    }
+    return res;
+#else
+    return LE_NOT_IMPLEMENTED;
+#endif
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Set package URI for download from 3rd party server.
  *
  * @return

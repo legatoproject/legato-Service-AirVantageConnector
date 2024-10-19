@@ -1480,10 +1480,10 @@ le_result_t avcClient_Disconnect
 )
 {
     LE_DEBUG("Disconnect");
-    
+
     bool isTpfEnabled = false;
     le_result_t result = LE_OK;
-    
+
     // Prevent closing third party FOTA session by +WDSS=1,0.
     if ((LE_OK == tpfServer_GetTpfState(&isTpfEnabled)) && (isTpfEnabled))
     {
@@ -1529,6 +1529,46 @@ le_result_t avcClient_Disconnect
 
     return result;
 }
+
+#if MK_CONFIG_TPF_TERMINATE_DOWNLOAD
+//--------------------------------------------------------------------------------------------------
+/**
+ * This function aborts fota download.
+ *
+ * @return
+ *      - LE_OK in case of success.
+ *      - LE_FAULT in case of failure.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcClient_AbortTPFDownload
+(
+    void
+)
+{
+    bool isEnabled = false;
+    LE_DEBUG("Aborting Download package.");
+
+    if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
+    {
+        if (LE_OK != packageDownloader_AbortDownload(LWM2MCORE_FW_UPDATE_TYPE))
+        {
+            LE_ERROR("packageDownloader abort Download failed.");
+            return LE_FAULT;
+        }
+        if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_AbortDownload())
+        {
+            LE_ERROR("lwm2mcore abort Download failed.");
+            return LE_FAULT;
+        }
+        avcServer_UpdateStatus(LE_AVC_DOWNLOAD_ABORTED,
+                               LE_AVC_FIRMWARE_UPDATE,
+                               -1,
+                               -1,
+                               LE_AVC_ERR_NONE);
+    }
+    return LE_OK;
+}
+#endif
 
 //--------------------------------------------------------------------------------------------------
 /**

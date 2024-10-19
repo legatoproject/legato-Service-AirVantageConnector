@@ -1289,8 +1289,17 @@ void downloader_AbortDownload
 {
     LE_INFO("Abort download, download status was %d", downloader_GetDownloadStatus());
 
-    // Suspend ongoing download
+    // Abort ongoing download
     SetDownloadStatus(DWL_ABORTED);
+#if MK_CONFIG_TPF_TERMINATE_DOWNLOAD
+    if (HttpClientRef)
+    {
+        le_httpClient_Stop(HttpClientRef);
+        le_httpClient_Delete(HttpClientRef);
+        HttpClientRef = NULL;
+    }
+    FinalizeDownload(LE_TERMINATED);
+#endif
 }
 
 //--------------------------------------------------------------------------------------------------

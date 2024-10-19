@@ -1081,7 +1081,15 @@ void packageDownloader_FinalizeDownload
                                            NULL);
            goto end;
         }
-
+#if MK_CONFIG_TPF_TERMINATE_DOWNLOAD
+        // Download is terminated by user
+        if ((LE_TERMINATED == ret)
+         && (downloader_CheckDownloadToAbort()))
+        {
+            LE_DEBUG("Download is terminated: change status to idle");
+            goto end;
+        }
+#endif
         // Check the download result
         if (LE_OK != ret)
         {
@@ -1927,6 +1935,13 @@ le_result_t packageDownloader_AbortDownload
 
     LE_DEBUG("Download abort requested");
 
+    // Check downloader status
+    if (GetDownloadStatus() != DOWNLOAD_STATUS_ACTIVE)
+    {
+        LE_ERROR("Download does not active");
+        return LE_FAULT;
+    }
+
     // Abort active download
     AbortDownload();
 
@@ -1942,7 +1957,7 @@ le_result_t packageDownloader_AbortDownload
     switch (type)
     {
         case LWM2MCORE_FW_UPDATE_TYPE:
-            return LE_FAULT;
+            break;
 
         case LWM2MCORE_SW_UPDATE_TYPE:
             dwlResult = packageDownloader_SetSwUpdateState(LWM2MCORE_SW_UPDATE_STATE_INITIAL);
