@@ -1293,6 +1293,12 @@ static void avcClient_RetryTimer
     le_timer_Ref_t timerRef    ///< [IN] Expired timer reference
 )
 {
+    bool isTpfEnabled = false;
+    if ((LE_OK == tpfServer_GetTpfState(&isTpfEnabled)) && (isTpfEnabled))
+    {
+        LE_ERROR("Ignore retry timer when TPF running.");
+        return;
+    }
 #if LE_CONFIG_AVC_FEATURE_EDM
     le_result_t rc = avcClient_Connect(ServerId);
 #else

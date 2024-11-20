@@ -2677,6 +2677,12 @@ static void PollingTimerExpiryHandler
 {
     LE_INFO("Polling timer expired");
 
+    if (IsTpfOngoing())
+    {
+        LE_ERROR("Ignore polling timer when TPF running.");
+        return;
+    }
+
     avcServer_SaveCurrentEpochTime();
 
     // Connect to AirVantage server only.
