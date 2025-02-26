@@ -903,10 +903,16 @@ static void GetNamespacedPath
 
         le_result_t result = le_appInfo_GetName(pid, appName, sizeof(appName));
         LE_FATAL_IF(result == LE_OVERFLOW, "Buffer too small to contain the application name.");
-
         if (result != LE_OK)
         {
-            LE_KILL_CLIENT("Could not get app name");
+            if (strlen(appName) == 0)
+            {
+                LE_ERROR("The application was stopped or remove");
+            }
+            else
+            {
+                LE_KILL_CLIENT("Could not get app name");
+            }
         }
 
         char namespacedPath[LE_AVDATA_PATH_NAME_BYTES];
