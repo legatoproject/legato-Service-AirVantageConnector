@@ -750,6 +750,16 @@ lwm2mcore_Sid_t lwm2mcore_LaunchSwUpdateUninstall
         return LWM2MCORE_ERR_INVALID_ARG;
     }
 
+    if ((len == 1) && (bufferPtr[0] == 1))
+    {
+        // OMA-TS-LWM2M_SwMgmt-V1_0-20180301-A:
+        // If the argument is 1 (“ForUpdate”), the Client MUST prepare itself for receiving a Package used to upgrade
+        // the Software already in place.
+        // Reset le_update
+        LE_INFO("Reset le_update");
+        avcApp_Reset(instanceId);
+    }
+
     // Save the uninstall request in SW update workspace
     avcApp_SetSwUpdateInstanceId(instanceId);
 

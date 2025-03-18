@@ -460,4 +460,20 @@ le_result_t avcApp_GetResumePosition
     size_t* positionPtr
 );
 
+//--------------------------------------------------------------------------------------------------
+/**
+ * Reset update
+ *
+ * @return
+ *     - LE_OK if successful
+ *     - LE_BUSY if system busy.
+ *     - LE_NOT_FOUND if given instance not found or given app is not installed.
+ *     - LE_FAULT for any other failure.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_Reset
+(
+    uint16_t instanceId            ///< [IN] object 9 instance id
+);
+
 #endif

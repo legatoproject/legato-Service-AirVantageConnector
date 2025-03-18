@@ -3406,6 +3406,54 @@ le_result_t avcApp_CheckNotificationToSend
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Reset update
+ *
+ * @return
+ *     - LE_OK if successful
+ *     - LE_BUSY if system busy.
+ *     - LE_NOT_FOUND if given instance not found or given app is not installed.
+ *     - LE_FAULT for any other failure.
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t avcApp_Reset
+(
+    uint16_t instanceId            ///< [IN] object 9 instance id
+)
+{
+    assetData_InstanceDataRef_t instanceRef = NULL;
+    le_result_t result = assetData_GetInstanceRefById(LWM2M_NAME,
+                                                      LWM2M_OBJ9,
+                                                      instanceId,
+                                                      &instanceRef);
+
+    if (result != LE_OK)
+    {
+        LE_ERROR("Error on avcApp_Reset for instance %d -> %s", instanceId, LE_RESULT_TXT(result));
+        return result;
+    }
+
+    uint8_t updateState;
+    if (avcApp_GetSwUpdateState(instanceId, &updateState) != LE_OK)
+    {
+        return LE_FAULT;
+    }
+
+    // Do not call le_update_End if the application package linked to the instance ID is not under
+    // treatment, else a crash will happen
+    if( ((lwm2mcore_SwUpdateState_t)updateState == LWM2MCORE_SW_UPDATE_STATE_DELIVERED)
+     || ((lwm2mcore_SwUpdateState_t)updateState == LWM2MCORE_SW_UPDATE_STATE_DOWNLOADED))
+    {
+        le_update_End();
+    }
+    else
+    {
+        LE_DEBUG("Skip le_update_End: update state %d", updateState);
+    }
+    return LE_OK;
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Initialization function avcApp. Should be called only once.
  */
 //--------------------------------------------------------------------------------------------------
