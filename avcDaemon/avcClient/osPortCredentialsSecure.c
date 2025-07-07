@@ -28,6 +28,13 @@
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Prefix to retrieve files from secStore service.
+ */
+//--------------------------------------------------------------------------------------------------
+#define SECURE_STORAGE_PREFIX   "/avms"
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Bootstrap PSK maximum size in bytes
  */
 //--------------------------------------------------------------------------------------------------
@@ -994,4 +1001,27 @@ void avcClient_FixBootstrapCredentials
     bool isBsAuthFailure        ///< [IN] Was authentication failed with the bootstrap server ?
 )
 {
+    char credsPathStr[LE_SECSTORE_MAX_NAME_BYTES] = SECURE_STORAGE_PREFIX;
+    lwm2mcore_Credentials_t credId = LWM2MCORE_CREDENTIAL_BS_PUBLIC_KEY;
+    le_result_t result;
+    LE_UNUSED(isBsAuthFailure);
+
+    LE_INFO("Fix Bootstrap Credentials");
+
+    LE_FATAL_IF(LE_OK != le_path_Concat("/",
+                                        credsPathStr,
+                                        sizeof(credsPathStr),
+                                        CredentialLocations[credId],
+                                        (void*)0), "Buffer is not long enough");
+
+    // Due to invalid BS keys , BS Session is failing. Hence, Deleting the BS keys so that correct
+    // keys will be restored and BS Session will be established Successfully.
+    result = le_secStore_Delete(credsPathStr);
+    if (LE_OK != result)
+    {
+        LE_ERROR("Unable to delete credentials :%d",credId);
+        return ;
+    }
+
+    LE_DEBUG("credId %d deleted", credId);
 }
