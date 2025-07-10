@@ -544,7 +544,7 @@ static void ConnectionStateHandler
     void* contextPtr            ///< [IN] User data.
 )
 {
-    bool isEnabled = false;
+    bool isTpfEnabled = false;
     if (connected)
     {
         LE_DEBUG("Connected through interface '%s'", intfNamePtr);
@@ -552,7 +552,7 @@ static void ConnectionStateHandler
 
         // Check if date/time is valid when connected.
         CheckDateTimeValidity();
-        if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
+        if ((LE_OK == tpfServer_GetTpfState(&isTpfEnabled)) && (isTpfEnabled))
         {
             LE_INFO("Third party FOTA is activated !");
             // Call the TPF callback.
@@ -570,7 +570,7 @@ static void ConnectionStateHandler
         if (DataConnected)
         {
             DataConnected = false;
-            if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
+            if ((LE_OK == tpfServer_GetTpfState(&isTpfEnabled)) && (isTpfEnabled))
             {
                 LE_INFO("Third party FOTA is activated !");
                 // Call the TPF callback.
@@ -915,6 +915,94 @@ static void ResetRetryTimers
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Timer handler to periodically perform a connection attempt.
+ */
+//--------------------------------------------------------------------------------------------------
+static void avcClient_RetryTimer
+(
+    le_timer_Ref_t timerRef    ///< [IN] Expired timer reference
+)
+{
+    bool isTpfEnabled = false;
+    if ((LE_OK == tpfServer_GetTpfState(&isTpfEnabled)) && (isTpfEnabled))
+    {
+        LE_ERROR("Ignore retry timer when TPF running.");
+        return;
+    }
+#if LE_CONFIG_AVC_FEATURE_EDM
+    le_result_t rc = avcClient_Connect(ServerId);
+#else
+    le_result_t rc = avcClient_Connect(LE_AVC_SERVER_ID_AIRVANTAGE);
+#endif
+    if (rc != LE_OK)
+    {
+        LE_ERROR("Unable to request a connection to the server");
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Init retry timers
+ */
+//--------------------------------------------------------------------------------------------------
+static void InitRetryTimers
+(
+    void
+)
+{
+    LE_DEBUG("Init retry timer");
+
+    if (0 > RetryTimersIndex)
+    {
+        size_t numTimers = NUM_ARRAY_MEMBERS(RetryTimers);
+
+        if (LE_OK != le_avc_GetRetryTimers(RetryTimers, &numTimers))
+        {
+            LE_WARN("Failed to retrieve retry timers config. Failed session start is not retried.");
+            return;
+        }
+
+        LE_ASSERT(LE_AVC_NUM_RETRY_TIMERS == numTimers);
+
+        RetryTimersIndex = 0;
+    }
+    else
+    {
+        RetryTimersIndex++;
+    }
+
+    // Get the next valid retry timer.
+    // See which timer we are at by looking at RetryTimersIndex:
+    // - if the timer is 0, get the next one. (0 means disabled / not used)
+    // - if we run out of timers, do nothing. Perform reset/cleanup.
+    while (   (RetryTimersIndex < LE_AVC_NUM_RETRY_TIMERS)
+           && (0 == RetryTimers[RetryTimersIndex]))
+    {
+        RetryTimersIndex++;
+    }
+
+    // This is the case when we've run out of timers. Reset/cleanup, and don't start the next
+    // retry timer (since there aren't any left).
+    if ((RetryTimersIndex >= LE_AVC_NUM_RETRY_TIMERS) || (RetryTimersIndex < 0))
+    {
+        ResetRetryTimers();
+    }
+    // Start the next retry timer.
+    else
+    {
+        LE_INFO("Starting retry timer of %d min at index %d",
+                RetryTimers[RetryTimersIndex], RetryTimersIndex);
+
+        le_clk_Time_t interval = {RetryTimers[RetryTimersIndex] * 60, 0};
+
+        LE_ASSERT_OK(le_timer_SetInterval(RetryTimerRef, interval));
+        LE_ASSERT_OK(le_timer_SetHandler(RetryTimerRef, avcClient_RetryTimer));
+        LE_ASSERT_OK(le_timer_Start(RetryTimerRef));
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Stop the bearer - undo what StartBearer does.
  */
 //--------------------------------------------------------------------------------------------------
@@ -1176,7 +1264,7 @@ static void StartBearer
 {
     // Attempt to connect.
     Lwm2mInstanceRef = lwm2mcore_Init(EventHandler);
-    bool isEnabled = false;
+    bool isTpfEnabled = false;
 #if LE_CONFIG_AVC_FEATURE_EDM
     lwm2mcore_SetEdmEnabled(Lwm2mInstanceRef, true);
     lwm2mcore_SetServer(Lwm2mInstanceRef, ServerId);
@@ -1184,7 +1272,7 @@ static void StartBearer
 
     LE_INFO("Start Bearer");
 
-    if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
+    if ((LE_OK == tpfServer_GetTpfState(&isTpfEnabled)) && (isTpfEnabled))
     {
         LE_INFO("Third party FOTA is activated !");
 
@@ -1207,11 +1295,14 @@ static void StartBearer
 
     // Initialize the bearer and open a data connection.
     le_data_ConnectService();
-
     DataHandler = le_data_AddConnectionStateHandler(ConnectionStateHandler, NULL);
+
     // Request data connection.
     DataRef = le_data_Request();
     LE_ASSERT(NULL != DataRef);
+
+    // Initialize retry timers.
+    InitRetryTimers();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1281,33 +1372,6 @@ static void BsFailureHandler
     BootstrapAuthFailed = false; // Reset flag
 #endif
     avcClient_Disconnect(true);
-}
-
-//--------------------------------------------------------------------------------------------------
-/**
- * Timer handler to periodically perform a connection attempt.
- */
-//--------------------------------------------------------------------------------------------------
-static void avcClient_RetryTimer
-(
-    le_timer_Ref_t timerRef    ///< [IN] Expired timer reference
-)
-{
-    bool isTpfEnabled = false;
-    if ((LE_OK == tpfServer_GetTpfState(&isTpfEnabled)) && (isTpfEnabled))
-    {
-        LE_ERROR("Ignore retry timer when TPF running.");
-        return;
-    }
-#if LE_CONFIG_AVC_FEATURE_EDM
-    le_result_t rc = avcClient_Connect(ServerId);
-#else
-    le_result_t rc = avcClient_Connect(LE_AVC_SERVER_ID_AIRVANTAGE);
-#endif
-    if (rc != LE_OK)
-    {
-        LE_ERROR("Unable to request a connection to the server");
-    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1390,60 +1454,7 @@ le_result_t avcClient_Connect
         lwm2mcore_Free(Lwm2mInstanceRef);
         Lwm2mInstanceRef = NULL;
     }
-
     StartBearer();
-
-    // Attempt to start a retry timer.
-    // if index is less than 0, then get the retry timers config. The implication is that while
-    // a retry timer is running, changes to retry timers aren't applied. They are applied when
-    // retry timers are being reset.
-    if (0 > RetryTimersIndex)
-    {
-        size_t numTimers = NUM_ARRAY_MEMBERS(RetryTimers);
-
-        if (LE_OK != le_avc_GetRetryTimers(RetryTimers, &numTimers))
-        {
-            LE_WARN("Failed to retrieve retry timers config. Failed session start is not retried.");
-            return LE_OK;
-        }
-
-        LE_ASSERT(LE_AVC_NUM_RETRY_TIMERS == numTimers);
-
-        RetryTimersIndex = 0;
-    }
-    else
-    {
-        RetryTimersIndex++;
-    }
-
-    // Get the next valid retry timer.
-    // See which timer we are at by looking at RetryTimersIndex:
-    // - if the timer is 0, get the next one. (0 means disabled / not used)
-    // - if we run out of timers, do nothing. Perform reset/cleanup.
-    while (   (RetryTimersIndex < LE_AVC_NUM_RETRY_TIMERS)
-           && (0 == RetryTimers[RetryTimersIndex]))
-    {
-        RetryTimersIndex++;
-    }
-
-    // This is the case when we've run out of timers. Reset/cleanup, and don't start the next
-    // retry timer (since there aren't any left).
-    if ((RetryTimersIndex >= LE_AVC_NUM_RETRY_TIMERS) || (RetryTimersIndex < 0))
-    {
-        ResetRetryTimers();
-    }
-    // Start the next retry timer.
-    else
-    {
-        LE_INFO("Starting retry timer of %d min at index %d",
-                RetryTimers[RetryTimersIndex], RetryTimersIndex);
-
-        le_clk_Time_t interval = {RetryTimers[RetryTimersIndex] * 60, 0};
-
-        LE_ASSERT_OK(le_timer_SetInterval(RetryTimerRef, interval));
-        LE_ASSERT_OK(le_timer_SetHandler(RetryTimerRef, avcClient_RetryTimer));
-        LE_ASSERT_OK(le_timer_Start(RetryTimerRef));
-    }
 
     return LE_OK;
 }
@@ -1545,10 +1556,10 @@ le_result_t avcClient_AbortTPFDownload
     void
 )
 {
-    bool isEnabled = false;
+    bool isTpfEnabled = false;
     LE_DEBUG("Aborting Download package.");
 
-    if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
+    if ((LE_OK == tpfServer_GetTpfState(&isTpfEnabled)) && (isTpfEnabled))
     {
         if (LE_OK != packageDownloader_AbortDownload(LWM2MCORE_FW_UPDATE_TYPE))
         {
@@ -1608,7 +1619,7 @@ le_result_t avcClient_Update
     void
 )
 {
-    bool isEnabled = false;
+    bool isTpfEnabled = false;
     LE_DEBUG("Registration update");
 
     if (NULL == Lwm2mInstanceRef)
@@ -1617,7 +1628,7 @@ le_result_t avcClient_Update
         return LE_UNAVAILABLE;
     }
 
-    if ((LE_OK == tpfServer_GetTpfState(&isEnabled)) && (isEnabled))
+    if ((LE_OK == tpfServer_GetTpfState(&isTpfEnabled)) && (isTpfEnabled))
     {
         return LE_OK ;
     }
