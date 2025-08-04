@@ -132,7 +132,12 @@ static le_result_t GetInterfaceDetails(char* iface_name, char* mdc_ipAddressStr)
 {
     int32_t profileIndex_Cellular = le_data_GetCellularProfileIndex();
     le_mdc_ProfileRef_t mdc_ProfileRef = le_mdc_GetProfile(profileIndex_Cellular);
-
+    le_result_t ret;
+    if (mdc_ipAddressStr == NULL)
+    {
+        LE_ERROR("Invalid IP address buffer for iface %s", iface_name);
+        return LE_FAULT;
+    }
     if (mdc_ProfileRef == NULL)
     {
         LE_DEBUG("Cannot get profile index");
@@ -146,18 +151,27 @@ static le_result_t GetInterfaceDetails(char* iface_name, char* mdc_ipAddressStr)
         return LE_FAULT;
     }
 
-    if (mdc_ipAddressStr != NULL)
+    if (le_mdc_IsIPv4(mdc_ProfileRef))
     {
-
-        if (le_mdc_GetIPv4Address(mdc_ProfileRef, mdc_ipAddressStr, LE_MDC_IPV6_ADDR_MAX_BYTES)
-            != LE_OK)
-        {
-            LE_DEBUG("Cannot get IP address of the iface %s", iface_name);
-            return LE_FAULT;
-        }
-
-        LE_DEBUG("IP address of the iface %s is %s", iface_name, mdc_ipAddressStr);
+        ret = le_mdc_GetIPv4Address(mdc_ProfileRef, mdc_ipAddressStr, LE_MDC_IPV6_ADDR_MAX_BYTES);
     }
+    else if (le_mdc_IsIPv6(mdc_ProfileRef))
+    {
+        ret = le_mdc_GetIPv6Address(mdc_ProfileRef, mdc_ipAddressStr, LE_MDC_IPV6_ADDR_MAX_BYTES);
+    }
+    else
+    {
+        LE_ERROR("Cannot get IP address of the iface %s", iface_name);
+        return LE_FAULT;
+    }
+
+    if (ret != LE_OK)
+    {
+        LE_ERROR("Failed to get IP address of the iface %s", iface_name);
+        return LE_FAULT;
+    }
+
+    LE_INFO("IP address of the iface %s is %s", iface_name, mdc_ipAddressStr);
     return LE_OK;
 }
 #endif // LE_CONFIG_TARGET_GILL
