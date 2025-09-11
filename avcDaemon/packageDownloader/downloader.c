@@ -1292,13 +1292,13 @@ void downloader_AbortDownload
     // Abort ongoing download
     SetDownloadStatus(DWL_ABORTED);
 #if MK_CONFIG_TPF_TERMINATE_DOWNLOAD
+    // Stop and Delete httpClient
     if (HttpClientRef)
     {
         le_httpClient_Stop(HttpClientRef);
         le_httpClient_Delete(HttpClientRef);
         HttpClientRef = NULL;
     }
-    FinalizeDownload(LE_TERMINATED);
 #endif
 }
 

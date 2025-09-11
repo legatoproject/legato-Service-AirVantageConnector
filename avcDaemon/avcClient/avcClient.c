@@ -1561,16 +1561,17 @@ le_result_t avcClient_AbortTPFDownload
 
     if ((LE_OK == tpfServer_GetTpfState(&isTpfEnabled)) && (isTpfEnabled))
     {
-        if (LE_OK != packageDownloader_AbortDownload(LWM2MCORE_FW_UPDATE_TYPE))
-        {
-            LE_ERROR("packageDownloader abort Download failed.");
-            return LE_FAULT;
-        }
         if (LWM2MCORE_ERR_COMPLETED_OK != lwm2mcore_AbortDownload())
         {
             LE_ERROR("lwm2mcore abort Download failed.");
             return LE_FAULT;
         }
+        if (LE_OK != packageDownloader_AbortDownload(LWM2MCORE_FW_UPDATE_TYPE))
+        {
+            LE_ERROR("packageDownloader abort Download failed.");
+            return LE_FAULT;
+        }
+
         avcServer_UpdateStatus(LE_AVC_DOWNLOAD_ABORTED,
                                LE_AVC_FIRMWARE_UPDATE,
                                -1,

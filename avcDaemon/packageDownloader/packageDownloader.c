@@ -182,6 +182,9 @@ static void AbortDownload
 
     // Suspend ongoing download
     SetDownloadStatus(DOWNLOAD_STATUS_ABORT);
+#if MK_CONFIG_TPF_TERMINATE_DOWNLOAD
+    packageDownloader_FinalizeDownload(LE_TERMINATED);
+#endif
 }
 
 //--------------------------------------------------------------------------------------------------
