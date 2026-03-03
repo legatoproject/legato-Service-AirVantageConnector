@@ -121,7 +121,7 @@ static void Lwm2mClientReceive
 //--------------------------------------------------------------------------------------------------
 /**
  * Get the details information of the interface
- *
+ * mdc_ipAddressStr could be NULL to query only iface_name
  * @return
  *      -  LE_OK on success
  *      -  LE_FAULT on error
@@ -133,11 +133,6 @@ static le_result_t GetInterfaceDetails(char* iface_name, char* mdc_ipAddressStr)
     int32_t profileIndex_Cellular = le_data_GetCellularProfileIndex();
     le_mdc_ProfileRef_t mdc_ProfileRef = le_mdc_GetProfile(profileIndex_Cellular);
     le_result_t ret;
-    if (mdc_ipAddressStr == NULL)
-    {
-        LE_ERROR("Invalid IP address buffer for iface %s", iface_name);
-        return LE_FAULT;
-    }
     if (mdc_ProfileRef == NULL)
     {
         LE_DEBUG("Cannot get profile index");
@@ -148,6 +143,12 @@ static le_result_t GetInterfaceDetails(char* iface_name, char* mdc_ipAddressStr)
         != LE_OK)
     {
         LE_DEBUG("Cannot get interface name");
+        return LE_FAULT;
+    }
+
+    if (mdc_ipAddressStr == NULL)
+    {
+        LE_ERROR("Invalid IP address buffer for iface %s", iface_name);
         return LE_FAULT;
     }
 
