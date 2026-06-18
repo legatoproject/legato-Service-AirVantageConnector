@@ -75,6 +75,14 @@ le_result_t ReadFs
 
 //--------------------------------------------------------------------------------------------------
 /**
+ * Payload size (in bytes) above which the read-before-write check in WriteFs() will
+ * be warned.
+ */
+//--------------------------------------------------------------------------------------------------
+#define WRITEFS_LARGE_PAYLOAD_WARN_THRESHOLD   (10 * 1024)
+
+//--------------------------------------------------------------------------------------------------
+/**
  * Write to file using Legato le_fs API
  *
  * @return
@@ -96,6 +104,57 @@ le_result_t WriteFs
 
     LE_FATAL_IF(!pathPtr, "Invalid parameter");
     LE_FATAL_IF(!bufPtr, "Invalid parameter");
+
+#if LE_CONFIG_AVCFS_WRITE_IF_CHANGED
+    // Read-before-write to improve memory life cycle.
+    // Skipe write if value is the same.
+    do
+    {
+        // Warn large payloads since it would cause slow-performance.
+        if (size > WRITEFS_LARGE_PAYLOAD_WARN_THRESHOLD)
+        {
+            LE_WARN("WriteFs: large payload %zu bytes (> %d) for %s",
+                    size, WRITEFS_LARGE_PAYLOAD_WARN_THRESHOLD, pathPtr);
+        }
+
+        size_t currentDataFileSize = 0;
+        result = le_fs_GetSize(pathPtr, &currentDataFileSize);
+        if ((LE_OK != result) || (currentDataFileSize != size))
+        {
+            // File missing, unreadable, or different length: must write.
+            LE_ERROR("WriteFs: Must write");
+            break;
+        }
+
+        uint8_t *currentDataBuf = malloc(size);
+        if (NULL == currentDataBuf)
+        {
+            // malloc failure: skip optimisation and proceed with write
+            LE_WARN("WriteFs: malloc failed for read-before-write buffer");
+            break;
+        }
+
+        size_t currentDataBufSize = size;
+        le_result_t readResult = ReadFs(pathPtr, currentDataBuf, &currentDataBufSize);
+
+        if (LE_OK == readResult)
+        {
+            if ((currentDataBufSize == size) &&
+                (0 == memcmp(currentDataBuf, bufPtr, size)))
+            {
+                // Data unchanged — skip the flash write
+                LE_INFO("WriteFs: skipping unchanged write to %s (%zu bytes)",
+                         pathPtr, size);
+                free(currentDataBuf);
+                return LE_OK;
+            }
+        }
+        // Read fail, fall through to normal write. First write will get LE_NOT_FOUND
+        LE_ERROR("WriteFs: Read fail, fall through write");
+        free(currentDataBuf);
+    }
+    while (0);
+#endif // LE_CONFIG_AVCFS_WRITE_IF_CHANGED
 
     // Don't use LE_FS_TRUNC as it will remove the old data of the file.
     result = le_fs_Open(pathPtr, LE_FS_WRONLY | LE_FS_CREAT | LE_FS_SYNC, &fileRef);
