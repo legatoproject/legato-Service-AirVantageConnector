@@ -1398,11 +1398,18 @@ le_result_t avcClient_Connect
     uint16_t    serverId    ///< [IN] Server ID. Can be LE_AVC_SERVER_ID_ALL_SERVERS.
 )
 {
+    // If TPF is enabled, this Connect is on the le_tpf_Start() path. Skip the
+    // LE_BUSY / LE_DUPLICATE guards below and fall through to the reconnect logic
+    // further down -- otherwise a stale AVMS session (retry timer running, or
+    // bootstrap authenticating) blocks TPF from ever taking over. See HYB-1456/HYB-1407.
+    bool isTpfEnabled = false;
+    bool forceForTpf  = (LE_OK == tpfServer_GetTpfState(&isTpfEnabled)) && isTpfEnabled;
+
     // Check if a session is already started.
 #if LE_CONFIG_AVC_FEATURE_EDM
-    if (SessionStarted[GetServerIdx(serverId)])
+    if (SessionStarted[GetServerIdx(serverId)] && !forceForTpf)
 #else
-    if (SessionStarted)
+    if (SessionStarted && !forceForTpf)
 #endif
     {
         // No need to start a retry timer. Perform reset/cleanup.
@@ -1413,17 +1420,23 @@ le_result_t avcClient_Connect
     }
 
     // Check if a retry is in progress.
-    if (le_timer_IsRunning(RetryTimerRef))
+    if (le_timer_IsRunning(RetryTimerRef) && !forceForTpf)
     {
         LE_INFO("Retry timer already running");
         return LE_BUSY;
     }
 
     // Check if the device is currently authenticating.
-    if (AuthenticationPhase)
+    if (AuthenticationPhase && !forceForTpf)
     {
         LE_INFO("Authentication is ongoing");
         return LE_BUSY;
+    }
+
+    if (forceForTpf)
+    {
+        LE_INFO("TPF enabled - forcing reconnect");
+        ResetRetryTimers();
     }
 
     // Set the Server ID global (assuming only one session can happen at a time)
