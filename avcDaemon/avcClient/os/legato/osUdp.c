@@ -146,10 +146,11 @@ static le_result_t GetInterfaceDetails(char* iface_name, char* mdc_ipAddressStr)
         return LE_FAULT;
     }
 
+    // Only the interface name is requested (e.g. DNS resolution in lwm2mcore_UdpConnect())
     if (mdc_ipAddressStr == NULL)
     {
-        LE_ERROR("Invalid IP address buffer for iface %s", iface_name);
-        return LE_FAULT;
+        LE_INFO("NULL IP address, query for interface name %s", iface_name);
+        return LE_OK;
     }
 
     if (le_mdc_IsIPv4(mdc_ProfileRef))
